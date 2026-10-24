@@ -23,6 +23,10 @@ function compatible(bytes: Uint8Array, offset: number, sampleRateBits: number): 
  * Find the unique plausible fixed length, confirmed by several consecutive
  * headers. Ignore single payload syncs; ties fail closed instead of guessing.
  * Tiny streams with fewer than three identifiable headers are ambiguous.
+ *
+ * Each chain runs to the end of the probe window. Without padding variation,
+ * multiples of the true span also land on frame boundaries, but they visit
+ * fewer headers; capping chains would turn them into false ties.
  */
 export async function inferFreeFormatBaseLength(reader: AsyncByteReader): Promise<number> {
   const start = reader.offset;
@@ -39,7 +43,7 @@ export async function inferFreeFormatBaseLength(reader: AsyncByteReader): Promis
     if (base < MIN_FREE_FORMAT_FRAME_BYTES || base > MAX_FREE_FORMAT_FRAME_BYTES - 1) continue;
     let matches = 1;
     let position = 0;
-    while (matches < 6) {
+    for (;;) {
       const next = position + base + ((window[position + 2]! >>> 1) & 1);
       if (!compatible(window, next, rateBits)) break;
       position = next;

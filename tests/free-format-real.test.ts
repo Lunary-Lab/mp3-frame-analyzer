@@ -8,7 +8,8 @@ import { chunks } from './helpers/mp3-fixtures.js';
 
 /** Self-contained PCM sine fixture: production code never invokes an encoder. */
 function pcmWave(rate: number, channels: number): Buffer {
-  const samples = Math.floor(rate / 10);
+  // Half a second yields enough frames for multiples of a constant span to align.
+  const samples = Math.floor(rate / 2);
   const dataBytes = samples * channels * 2;
   const wav = Buffer.alloc(44 + dataBytes);
   wav.write('RIFF', 0, 'ascii');
@@ -43,6 +44,9 @@ it.skipIf(!available)(
         { rate: 44_100, channels: 1, bitrate: 400, crc: false },
         { rate: 48_000, channels: 2, bitrate: 320, crc: false },
         { rate: 32_000, channels: 1, bitrate: 400, crc: true },
+        // Constant spans without padding variation, where multiples also align.
+        { rate: 48_000, channels: 2, bitrate: 128, crc: false },
+        { rate: 32_000, channels: 2, bitrate: 192, crc: false },
       ];
       for (const { rate, channels, bitrate, crc } of configurations) {
         const name = `${rate}-${channels}-${bitrate}-${crc}`;

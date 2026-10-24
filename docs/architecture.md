@@ -25,7 +25,7 @@ Every frame is parsed individually. This supports constant and variable bitrate 
 - The stream must start at a frame or an ID3v2 tag; arbitrary leading garbage is not scanned away. Invalid bytes at expected frame boundaries are rejected rather than silently resynchronized.
 - A truncated final frame, leftover partial header, or unrecognized trailing metadata is rejected.
 
-Free-format MPEG-1 Layer III uses bitrate index zero and a fixed base frame span plus the padding bit. The parser infers a unique span using at least three consecutive compatible headers within an 8.7 KiB probe, then advances without rescanning payload. Ambiguous streams (including very short streams) return `unsupported-format`. It supports inferred frame lengths up to 2,881 bytes (640 kbps at 32 kHz); the standard MPEG-1 bitrate table does not apply.
+Free-format MPEG-1 Layer III uses bitrate index zero and a fixed base frame span plus the padding bit. The parser infers a unique span using at least three consecutive compatible headers within an 8.7 KiB probe, then advances without rescanning payload. Each candidate chain runs to the end of the probe, so multiples of a constant span, which also land on frame boundaries, visit fewer headers and never tie with the true span. Ambiguous streams (including very short streams) return `unsupported-format`. It supports inferred frame lengths up to 2,881 bytes (640 kbps at 32 kHz); the standard MPEG-1 bitrate table does not apply.
 
 This is a **structural parser**. Full validation would additionally examine side information, bit reservoir usage, Huffman data, optional CRC, appended APEv2 tags, and MPEG variants beyond the stated assessment scope.
 

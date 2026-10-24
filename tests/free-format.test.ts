@@ -20,6 +20,19 @@ describe('free-format MPEG-1 Layer III', () => {
     }
   });
 
+  it.each([
+    { rateIndex: 1, base: 384, label: '48 kHz at 128 kbps' },
+    { rateIndex: 2, base: 576, label: '32 kHz at 128 kbps' },
+    { rateIndex: 1, base: 864, label: '48 kHz at 288 kbps' },
+  ])('infers a constant span without padding ($label)', async ({ rateIndex, base }) => {
+    // Without padding variation, multiples of the true span also land on frame
+    // boundaries. They visit fewer headers and must not count as a tie.
+    const bytes = mp3(Array.from({ length: 24 }, () => freeFrame(base, 0, rateIndex, false)));
+    for (const chunkSize of [7, 4096]) {
+      await expect(count(bytes, chunkSize)).resolves.toBe(24);
+    }
+  });
+
   it('recognizes a real-sized 400 kbps free-format frame sequence', async () => {
     const bytes = mp3(Array.from({ length: 7 }, (_, i) => freeFrame(1306, i % 3 === 0 ? 1 : 0)));
     await expect(count(bytes, 127)).resolves.toBe(7);
