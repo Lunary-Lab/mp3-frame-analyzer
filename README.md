@@ -142,6 +142,18 @@ npm run test:artifact      # fresh production install, real upload, graceful shu
 
 See [Releasing and repository settings](docs/releasing.md) for the verified GitHub settings, what the current plan cannot enforce, permissions, artifact verification, provenance availability, and recovery of an interrupted release.
 
+## Authoritative format specifications and AI agent context
+
+- [Assessment-only requirements and default-count acceptance risk](docs/specifications/assessment-scope.md)
+- [AI-agent entry point](AGENTS.md) (also discoverable by [Claude Code](CLAUDE.md) and [GitHub Copilot](.github/copilot-instructions.md))
+- [Verified standards and primary-source registry](docs/specifications/README.md)
+- [MPEG-1 Layer III header, bitrate table and free-format](docs/specifications/mpeg-1-layer-iii.md)
+- [ID3v1/v2 and Xing/Info/LAME/VBRI semantics](docs/specifications/tags-and-encoder-headers.md)
+- [HTTP media types and the upload contract](docs/specifications/http-api.md)
+- [Supported, limited and out-of-scope conformance matrix](docs/specifications/conformance.md)
+
+The documents distinguish actual ISO/IETF requirements, ID3 informal standards, de facto encoder conventions and deliberate assessment implementation limits. They are concise original summaries with links to original publishers, **not** a copy of a paid ISO standard or a claim of full MPEG audio-decoder conformance.
+
 ## More detail
 
 - [Original assessment brief](docs/assessment-brief.md)
