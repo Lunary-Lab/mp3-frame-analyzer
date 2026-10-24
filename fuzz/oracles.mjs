@@ -11,7 +11,9 @@ export async function* chunks(bytes, size) {
 export async function outcome(bytes, chunkSize) {
   try {
     const count = await countMp3Frames(chunks(bytes, chunkSize));
-    if (!Number.isSafeInteger(count) || count < 1 || count * 96 > bytes.length) {
+    // Indexed frames are at least 96 bytes, but a free-format frame can be as
+    // small as 24 bytes (8 kbps at 48 kHz), the parser's minimum inferred span.
+    if (!Number.isSafeInteger(count) || count < 1 || count * 24 > bytes.length) {
       throw new Error(`Impossible physical frame count: ${count} for ${bytes.length} bytes`);
     }
     return { kind: 'success', count };

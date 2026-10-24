@@ -18,6 +18,18 @@ it.each([
   }
 });
 
+it('counts a fuzzer-found free-format stream of three 55-byte frames', async () => {
+  // Coverage-guided fuzzing found this valid stream after free-format support
+  // landed; the oracle then wrongly assumed every frame spans at least 96 bytes.
+  const bytes = await readFile(
+    new URL('../fuzz/regressions/raw/free-format-three-short-frames.bin', import.meta.url),
+  );
+  expect(bytes).toHaveLength(165);
+  for (const size of [1, 17, 4096]) {
+    await expect(countMp3Frames(chunks(bytes, [size]))).resolves.toBe(3);
+  }
+});
+
 it('preserves the rejection type when a stored regression is parsed in small chunks', async () => {
   const bytes = await readFile(
     new URL('../fuzz/regressions/raw/reserved-emphasis.bin', import.meta.url),
