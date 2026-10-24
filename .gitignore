@@ -14,3 +14,5 @@ fuzz/tmp/
 tests/fixtures/assessment_sample.mp3
 .stryker-tmp/
 reports/mutation/
+release/
+reports/performance/

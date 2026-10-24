@@ -1,3 +1,4 @@
 * text=auto
 *.mp3 binary
 *.zip binary
+*.bin binary

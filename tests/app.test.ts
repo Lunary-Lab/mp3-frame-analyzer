@@ -74,6 +74,55 @@ describe('POST /file-upload', () => {
     expect(response.statusCode).toBe(415);
   });
 
+  it('classifies a missing multipart boundary as a client error', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/file-upload',
+      headers: { 'content-type': 'multipart/form-data' },
+      payload: 'incomplete form',
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.headers['content-type']).toContain('application/json');
+    expect(response.json()).toEqual({
+      error: 'invalid-upload',
+      message: 'Invalid or incomplete multipart request',
+    });
+  });
+
+  it.each(['audio/mpeg', 'audio/mp3', 'application/octet-stream'])(
+    'accepts the documented %s MIME type',
+    async (mime) => {
+      const response = await upload(frame(), { mime });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ frameCount: 1 });
+    },
+  );
+
+  it('keeps unexpected failures as sanitized HTTP 500 responses', async () => {
+    const failingApp = await buildApp();
+    // A failed request hook is a real framework boundary, independent of parser details.
+    failingApp.addHook('preHandler', async () => {
+      throw new Error('Internal diagnostic detail must remain private');
+    });
+    try {
+      const { payload, contentType } = multipartBody(frame());
+      const response = await failingApp.inject({
+        method: 'POST',
+        url: '/file-upload',
+        headers: { 'content-type': contentType },
+        payload,
+      });
+      expect(response.statusCode).toBe(500);
+      expect(response.headers['content-type']).toContain('application/json');
+      expect(response.json()).toEqual({
+        error: 'internal-error',
+        message: 'Unable to process upload',
+      });
+    } finally {
+      await failingApp.close();
+    }
+  });
+
   it('returns 404 for unrelated routes', async () => {
     expect((await app.inject({ method: 'GET', url: '/unknown' })).statusCode).toBe(404);
   });

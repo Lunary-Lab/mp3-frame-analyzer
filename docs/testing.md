@@ -19,11 +19,15 @@ To reproduce a failing mutation input use `FUZZ_CASES` with the deterministic PR
 
 ## Performance measurements
 
-- `npm run bench`: Vitest Bench compares CBR and VBR parsing for inputs of ~2 MiB.
-- `npm run test:memory`: streams exactly 100,000 synthetic frames (41,700,000 bytes), reporting elapsed seconds, MiB/s, peak RSS growth, and Node version. The source reuses a constant-size frame rather than creating a file-sized Buffer.
-- `k6 run bench/upload.k6.js`: optional HTTP benchmark with five concurrent clients uploading a bundled fixture. Reports request latency percentiles and response correctness. Run against a **local** server, not public services.
+- `npm run bench` reports Vitest CBR/VBR microbenchmarks; speed is informational.
+- `npm run test:memory` runs independent processes at approximately **8, 32, and 128 MiB**. The source produces distinct owned 64 KiB chunks of a real MP3 fixture. No file-sized source buffer or aliased repeated chunk can hide retaining the entire input. Each run reports exact frame count, RSS/OS high-water mark, heap, external memory, array buffers, throughput, and delay of a pending event-loop callback.
+- The memory gate checks both absolute peak growth and additional growth between the smallest and largest inputs. Limits allow normal GC/JIT and runner variation while making retained 128 MiB inputs exceed the bounds. This measures input-size scaling at a fixed upstream chunk size; it does not establish a universal process-memory ceiling.
+- `npm run test:performance` owns a local server in a separate process, sends two concurrent valid uploads of approximately 32 MiB, and issues small valid uploads while they run. Correct counts, JSON content type, completion, and clean server exit are required. Upload/probe latencies and server event-loop delays are reported without a timing pass/fail threshold.
+- `k6 run bench/upload.k6.js` is optional for longer local experiments. It requires zero incorrect/failed responses. Use the default loopback address or an environment you explicitly operate.
 
-CI validates a _generous_ upper RSS growth bound (64 MiB) for deterministic stream processing. Raw speed is informational, not a gating assertion on shared virtualized runners. Benchmark results should always be associated with Node version, CPU/machine, and environment.
+The parser-memory source has no artificial scheduling sleeps: an immediately ready source can defer other callbacks until parsing completes. The HTTP experiment measures actual socket/backpressure behavior separately. Neither result justifies calling performance optimal or treating a few requests as a statistical capacity estimate. Associate results with Node version, hardware, runtime load, input size, and chunk size. The parser's linear traversal and bounded buffering remain appropriate for this task.
+
+CI saves JSON performance measurements as workflow artifacts. Investigate a sustained regression on a controlled runner before introducing a latency SLA or a microbenchmark speed gate.
 
 ## Manual tool cross-check
 
@@ -36,7 +40,7 @@ ffmpeg -f lavfi -i 'sine=frequency=440:sample_rate=44100:duration=0.8' \
   -ac 1 -c:a libmp3lame -b:a 128k -id3v2_version 4 new-fixture.mp3
 ```
 
-Inspect the provided exercise sample if available. It is **not** included here because it was not attached in the assignment text.
+The actual assessment sample has been independently checked. It is not redistributed because it contains third-party music; use `ASSESSMENT_SAMPLE_PATH` for the optional identity-and-count test described below.
 
 ## Independent format cross-check (2026-10-24)
 
@@ -47,8 +51,7 @@ compared CBR, VBR and a CBR encoding with `-write_xing 0`. FFprobe decoded
 one additional physical MPEG frame; files without Xing matched the decoder
 count. Every structural count matched, including across 127-byte chunks.
 
-This independent check does not replace the assessment's supplied MP3, which
-was not provided with the assignment excerpt.
+These generated fixtures complement the actual assessment MP3. The supplied sample was subsequently verified as described below.
 
 ## Native coverage-guided fuzzing (Jazzer.js 4)
 
@@ -87,7 +90,7 @@ failure marker. These runs establish bounded verification, **not** proof that
 all malformed inputs have been explored. The project's Node.js 24 build/test
 suite was validated separately.
 
-## Coverage and mutation testing (October 24, 2026)
+## Coverage and mutation baseline before release hardening (October 24, 2026)
 
 With additional boundary tests, **the four core parser modules have 100%
 statement/branch/function/line coverage**; total `src/mp3/**` + `src/app.ts`
@@ -106,7 +109,7 @@ the score.
 
 The measured Stryker score rose from **76.92% to 97.90%**, after tests for
 invalid MPEG sync patterns, ID3 signature and revision handling, and reserved
-flag boundaries. The latest run killed 138 mutants, timed out on 2, and left
+flag boundaries. That baseline run killed 138 mutants, timed out on 2, and left
 3 provably equivalent survivors in ID3 validation. CI now enforces a 95%
 minimum for the deliberately limited two-decoder mutation scope. See
 [the mutation audit](mutation-review.md) and [the passing GitHub run](https://github.com/Lunary-Lab/mp3-frame-analyzer/actions/runs/40102747242).
@@ -117,3 +120,15 @@ contains third-party music. SHA-256
 `97707a18a58ba75122b1668f5ed738f090121343432d9172a6409ddfa4fc5ab3`
 identifies the specific 1,458,172-byte file. Structural frame count: **6090**;
 FFprobe decoded-frame count: **6089** (Xing metadata frame).
+
+## Upload lifecycle and release verification
+
+HTTP tests cover the accepted MIME types, malformed multipart classification, rejected text/additional file parts, exact file-limit boundaries, sanitized application failures, cancellation, continued service after rejection, and demonstrated keep-alive connection reuse, including pipelined requests behind a large upload that the parser rejected early. Shutdown tests exercise successful close hooks, rejected hooks, the drain deadline, invalid startup configuration, and a real child process receiving SIGTERM on POSIX. A transport abort is not asserted to produce an application JSON response.
+
+`npm run check` includes helper-tool tests and builds the application. `npm run package:release` packages that existing build, verifies version agreement, and generates checksums and a production CycloneDX SBOM. `npm run test:artifact` verifies the digests, installs production dependencies in a temporary unpacked directory, starts `dist/server.js`, checks a real HTTP upload, and observes graceful shutdown. This guards against source-only npm tarballs that omit `dist/`. The GitHub Release workflow reuses the complete CI gates for the exact tagged commit and uploads the same tested artifact bytes.
+
+## Release-hardening verification (October 24, 2026)
+
+On Node 24.15.0 with npm 11.19.0, the complete local check passed **107 application tests** (including the external assessment sample and two pipelined-connection regressions) and **12 helper-tool tests**. Statements: **99.57%**, branches: **99.47%**, functions: **100%**, lines: **99.54%** across the configured parser, HTTP adapter, and shutdown scope. The four core parser modules retain **100%** in every coverage dimension. The HTTP adapter retains its defensive extra-field check. Server bootstrap is exercised by subprocess tests and the packaged runtime smoke; it is not included in the instrumented coverage denominator.
+
+The current focused mutation score is **98.27%**: 164 assertion kills, 6 timeouts, and 3 reviewed equivalent survivors across 173 mutants. The 95% gate is unchanged. See [the detailed mutation review](mutation-review.md) for scope and survivor reasoning. Full and production dependency audits report zero known advisories for the locked tree at this check. These are dated measurements, not permanent guarantees; current CI and scheduled audits are authoritative for subsequent changes.

@@ -55,6 +55,55 @@ describe('incremental byte reader', () => {
     expect(returnCount).toBe(1);
     expect(await reader.has(1)).toBe(false);
   });
+
+  it('releases buffered bytes without requesting more input on close', async () => {
+    let reads = 0;
+    let releases = 0;
+    const source: AsyncIterable<Uint8Array> = {
+      [Symbol.asyncIterator]() {
+        return {
+          async next() {
+            reads++;
+            return { done: false as const, value: Uint8Array.of(1, 2, 3, 4) };
+          },
+          async return() {
+            releases++;
+            return { done: true as const, value: undefined };
+          },
+        };
+      },
+    };
+    const reader = new AsyncByteReader(source);
+    expect(await reader.has(3)).toBe(true);
+    await reader.skipExactly(1);
+    await reader.close();
+    expect(() => reader.peek(1)).toThrow(RangeError);
+    expect(await reader.has(1)).toBe(false);
+    await reader.close();
+    expect(reads).toBe(1);
+    expect(releases).toBe(1);
+  });
+
+  it('does not invoke return on an iterator that has naturally completed', async () => {
+    let releases = 0;
+    const source: AsyncIterable<Uint8Array> = {
+      [Symbol.asyncIterator]() {
+        return {
+          async next() {
+            return { done: true as const, value: undefined };
+          },
+          async return() {
+            releases++;
+            return { done: true as const, value: undefined };
+          },
+        };
+      },
+    };
+    const reader = new AsyncByteReader(source);
+    expect(await reader.has(1)).toBe(false);
+    await reader.close();
+    expect(releases).toBe(0);
+  });
   it('rejects malformed byte chunks and invalid cursor arguments', async () => {
     const source: AsyncIterable<Uint8Array> = {
       [Symbol.asyncIterator]() {

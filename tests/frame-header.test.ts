@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { parseFrameHeader, looksLikeUnsupportedMpeg } from '../src/mp3/frame-header.js';
+import {
+  parseFrameHeader,
+  looksLikeUnsupportedMpeg,
+  isFreeFormatHeader,
+} from '../src/mp3/frame-header.js';
 import { frame } from './helpers/mp3-fixtures.js';
 
 describe('MPEG-1 Layer III headers', () => {
@@ -92,5 +96,26 @@ describe('MPEG-1 Layer III headers', () => {
   it('requires four bytes and both sync bytes before classifying unsupported MPEG', () => {
     expect(looksLikeUnsupportedMpeg(Buffer.from([0xff, 0xf3]))).toBe(false);
     expect(looksLikeUnsupportedMpeg(Buffer.from([0xff, 0x00, 0x90, 0x00]))).toBe(false);
+  });
+
+  it('recognizes the free-format subtype separately from malformed headers', () => {
+    for (const protection of [0xfa, 0xfb]) {
+      for (const rateAndPadding of [0x00, 0x04, 0x08, 0x02]) {
+        expect(isFreeFormatHeader(Uint8Array.of(0xff, protection, rateAndPadding, 0))).toBe(true);
+      }
+    }
+    for (const bytes of [
+      [],
+      [0xff, 0xfb, 0],
+      [0x7f, 0xfb, 0, 0],
+      [0xff, 0xf3, 0, 0],
+      [0xff, 0xfd, 0, 0],
+      [0xff, 0xfb, 0x90, 0],
+      [0xff, 0xfb, 0xf0, 0],
+      [0xff, 0xfb, 0x0c, 0],
+      [0xff, 0xfb, 0, 2],
+    ]) {
+      expect(isFreeFormatHeader(Uint8Array.from(bytes))).toBe(false);
+    }
   });
 });

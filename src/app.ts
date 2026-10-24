@@ -7,6 +7,16 @@ import { Mp3ParseError } from './mp3/errors.js';
 
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
+// Busboy currently reports these protocol failures without a typed statusCode.
+// Keep this list specific so unrelated application errors still become HTTP 500.
+const multipartParseErrors = new Set([
+  'Multipart: Boundary not found',
+  'Unexpected end of multipart data',
+  'Unexpected end of form',
+  'Part terminated early due to unexpected end of multipart data',
+  'Preamble terminated early due to unexpected end of multipart data',
+]);
+
 class UploadError extends Error {
   readonly status: number;
   readonly code: string;
@@ -21,9 +31,19 @@ class UploadError extends Error {
 
 /** Discard an unwanted file part so multipart parsing can finish normally. */
 async function discardFile(file: Readable): Promise<void> {
-  const completion = finished(file);
+  const completion = finished(file, { cleanup: true });
   file.resume();
   await completion;
+}
+
+/**
+ * The parser can reject a file long before its upload ends. Keep reading the
+ * rest in the background so the error responds immediately, Busboy completes,
+ * and the connection can serve its next request or close during shutdown.
+ */
+function drainRejectedFile(file: Readable): void {
+  // A malformed or interrupted remainder cannot change the response already sent.
+  discardFile(file).catch(() => {});
 }
 
 const errorSchema = {
@@ -49,16 +69,19 @@ export async function buildApp({
     connectionTimeout: 10_000,
   });
 
+  const multipartLimits = {
+    files: 1,
+    fields: 0,
+    parts: 1,
+    fileSize: maxUploadBytes,
+    // The plugin forwards headerSize to Busboy although its limits type omits
+    // that option. Busboy bounds header buffering; exact field validation is below.
+    headerSize: 8 * 1024,
+    headerPairs: 32,
+  };
   await app.register(multipart, {
     throwFileSizeLimit: true,
-    limits: {
-      files: 1,
-      fields: 0,
-      parts: 1,
-      fileSize: maxUploadBytes,
-      fieldNameSize: 64,
-      headerPairs: 32,
-    },
+    limits: multipartLimits,
   });
 
   app.post(
@@ -102,13 +125,16 @@ export async function buildApp({
         }
 
         try {
-          frameCount = await countMp3Frames(part.file);
+          // Destroying an unfinished Busboy file stream stalls the request
+          // body, so an early parser rejection must leave it drainable.
+          frameCount = await countMp3Frames(part.file.iterator({ destroyOnReturn: false }));
         } catch (error) {
           // A file truncated at the multipart limit is a transport error,
           // not a malformed-MP3 parser error.
           if (part.file.truncated) {
             throw new UploadError(413, 'file-too-large', 'File exceeds configured upload limit');
           }
+          if (error instanceof Mp3ParseError) drainRejectedFile(part.file);
           throw error;
         }
         if (part.file.truncated) {
@@ -141,15 +167,15 @@ export async function buildApp({
       return reply.status(status).send({ error: code, message });
     }
 
-    // Truncated multipart data can surface as a raw Busboy error with no statusCode.
+    // A malformed multipart boundary/body is a client error, not an MP3 error.
     if (
       request.isMultipart() &&
       error instanceof Error &&
-      ['Unexpected end of multipart data', 'Unexpected end of form'].includes(error.message)
+      multipartParseErrors.has(error.message)
     ) {
       return reply.status(400).send({
         error: 'invalid-upload',
-        message: 'Incomplete multipart request',
+        message: 'Invalid or incomplete multipart request',
       });
     }
 

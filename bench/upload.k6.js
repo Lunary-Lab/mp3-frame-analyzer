@@ -16,8 +16,8 @@ export const options = {
     },
   },
   thresholds: {
-    incorrect_response: ['rate<0.01'],
-    http_req_failed: ['rate<0.01'],
+    incorrect_response: ['rate==0'],
+    http_req_failed: ['rate==0'],
   },
 };
 
@@ -27,6 +27,7 @@ export default function () {
   });
   const valid = check(response, {
     'status 200': (r) => r.status === 200,
+    'JSON content type': (r) => String(r.headers['Content-Type']).includes('application/json'),
     'valid frame count': (r) => r.json('frameCount') === 33,
   });
   failed.add(!valid);

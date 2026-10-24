@@ -2,9 +2,11 @@
 
 A small, streaming TypeScript API that **logically counts MPEG-1 Audio Layer III frames**, without invoking an audio decoder or third-party MP3 parsing package.
 
+Downloaded a release archive? Start with its **RUNTIME.md**, also available in the [runtime guide](docs/runtime.md). The steps below are for a source checkout.
+
 ## Quick start
 
-Requirements: Node.js **24 LTS** and npm. Dependencies are locked in the committed `package-lock.json`; use `npm ci` for reproducible installation.
+Requirements: **Node.js 24 LTS** (Node.js 26 is also tested) and **npm 11.9 or later within major 11**. Development and release CI use **npm 11.19.0**, recorded in `packageManager`; install it with `npm install --global npm@11.19.0` when matching CI exactly. Dependencies are locked in `package-lock.json`; use `npm ci` for reproducible installation.
 
 ```bash
 npm ci
@@ -40,7 +42,7 @@ The response uses `Content-Type: application/json`. The `file` field must be a *
 | Malformed / truncated MP3            | 422    | `{ "error": "invalid-mp3", "message": "..." }`        |
 | Unexpected application failure       | 500    | `{ "error": "internal-error", "message": "..." }`     |
 
-Exact error codes vary with validation failure. Error bodies are always JSON. Upload size is limited to **50 MiB** with one file part and no text fields; only a syntactically valid file yields a frame count.
+Exact error codes vary with validation failure. Application-generated error bodies use JSON; a connection abort or low-level HTTP timeout can terminate before an application response is possible. Upload size is limited to **50 MiB** with one file part and no text fields; only a syntactically valid file yields a frame count.
 
 ## Why the frame count can differ from FFprobe
 
@@ -59,7 +61,7 @@ This counting convention is explicit because the task asks for the number of fra
 
 Complexity: **O(n)** time and **O(max upstream chunk size)** additional memory. Frame headers require only four bytes of lookahead, and metadata content is streamed past rather than accumulated.
 
-The parser rejects invalid data at the next required frame boundary. It does not resynchronize after corrupt frames or arbitrarily skip noise before the first header: doing so can silently turn a malformed upload into a plausible but wrong count. It supports leading ID3v2 and trailing ID3v1 metadata. Unsupported scope includes MPEG-2/2.5, Layers I/II, APE/Lyrics3 trailers, compressed audio decoding, and CRC validation.
+The parser rejects invalid data at the next required frame boundary. It does not resynchronize after corrupt frames or arbitrarily skip noise before the first header: doing so can silently turn a malformed upload into a plausible but wrong count. It supports up to eight leading ID3v2 tags, one appended ID3v2.4 tag with a matching footer, then an optional final ID3v1 tag. **Free-format MPEG-1 Layer III** (bitrate index zero) is a valid but unsupported subtype and returns 415; table-defined bitrates 32–320 kbps are supported. Other unsupported scope includes MPEG-2/2.5, Layers I/II, APE/Lyrics3 trailers, audio decoding, and CRC validation.
 
 ## Verification
 
@@ -72,7 +74,8 @@ FUZZ_CASES=10000 npm run test:fuzz
 npm run fuzz:regression    # replay tracked and generated Jazzer cases
 npm run fuzz:coverage      # 8 seconds per target, coverage-guided
 npm run fuzz:extended      # 120 seconds per target, on-demand
-npm run test:memory        # builds first, then streams 100k frames (~40 MiB)
+npm run test:memory        # distinct chunks, independent 8/32/128 MiB processes
+npm run test:performance   # two local 32 MiB uploads plus small-upload probes
 npm run bench              # Vitest Bench microbenchmark
 npm run mutation           # Stryker decoder mutations, CI minimum 95%
 ```
@@ -100,13 +103,27 @@ k6 run bench/upload.k6.js
 ## Developer workflow / security
 
 - Node 24, native TypeScript 7 with the TypeScript 6 API compatibility alias, `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, ESM.
-- ESLint + type-aware `typescript-eslint`, cyclomatic complexity warnings, Prettier.
+- ESLint + type-aware `typescript-eslint`, maintained Node security rules for application code, JS/MJS linting for build/fuzz/benchmark scripts, cyclomatic complexity warnings, and Prettier.
 - Vitest/V8 coverage with enforced thresholds; fast-check properties; mutation smoke, Jazzer.js coverage-guided fuzzing, and replayable crash regressions.
 - [Lefthook](https://lefthook.dev/) optional local hooks: `npm run hooks:install`. Pre-commit checks staged formatting and [Betterleaks](https://github.com/betterleaks/betterleaks) staged secrets (v1.9.0). Pre-push runs `npm run check`.
-- GitHub Actions CI runs build/test/type/lint, mutation smoke, bounded coverage-guided fuzzing, memory benchmark, production-dependency audit, actionlint workflow validation, Betterleaks Git-history scan, and focused Semgrep CE rules in `.semgrep.yml`.
-- GitHub Actions are pinned to immutable commit SHAs; CI uses read-only repository permissions. Dependabot monitors npm and Actions dependencies.
+- GitHub Actions CI checks Node 24 and 26, a clean npm 11.9 installation, build/test/type/lint, focused mutation testing, bounded fuzzing, memory scaling, local HTTP measurements, complete and production dependency audits, workflow validation, Git-history secret scanning, focused Semgrep rules, and an unpacked release artifact. Weekly dependency audits catch newly published advisories.
+- GitHub Actions are pinned to commit SHAs; validation jobs have read-only repository permissions and checkouts do not persist credentials. Dependabot monitors npm and Actions dependencies. Release automation has separate, narrowly scoped write permissions.
 
 The staged secrets hook needs Betterleaks installed locally; the hook fails closed if Betterleaks is unavailable **after you opt in**. Before submission, run `npm ci`, `npm run format:check`, and `npm run check` from a clean checkout. The application itself has no credentials, database, cloud dependencies, or deployment secrets. See [Security model](docs/security.md).
+
+## Versions and releases
+
+[Release Please](https://github.com/googleapis/release-please) derives version bumps and a changelog from **Conventional Commit PR titles**, preserved with **Squash and merge**. `fix:` / `perf:` increment the patch version, `feat:` increments the minor version, and `!` marks a breaking change. Labels do not decide versions. The generated release PR updates the package, lockfile, version manifest, and changelog; a maintainer reviews and merges it to approve a release.
+
+Release CI validates the exact tagged commit and publishes a runtime archive containing compiled JavaScript, a lockfile for production dependency installation, checksums, release metadata, and a production SBOM. It installs and runs the **unpacked archive** before those same bytes can be attached to the GitHub Release. No npm registry publication or production deployment is configured.
+
+```bash
+npm run check
+npm run package:release    # packages the existing dist/ build; also creates SBOM/checksums
+npm run test:artifact      # fresh production install, real upload, graceful shutdown
+```
+
+See [Releasing and repository settings](docs/releasing.md) for initial GitHub settings, required checks, permissions, provenance availability, and recovery of an interrupted draft release.
 
 ## More detail
 
@@ -114,6 +131,7 @@ The staged secrets hook needs Betterleaks installed locally; the hook fails clos
 - [Testing, fuzzing, performance and reproduction](docs/testing.md)
 - [Mutation review and equivalent mutants](docs/mutation-review.md)
 - [Security assumptions and scope](docs/security.md)
+- [Release process and repository settings](docs/releasing.md)
 
 ## Native TypeScript 7 and API compatibility
 

@@ -44,13 +44,19 @@ it('property: VBR frame counts are invariant across chunk boundaries', async () 
 it('property: arbitrary payload bytes including sync markers never introduce extra frames', async () => {
   await fc.assert(
     fc.asyncProperty(
-      fc.array(fc.integer({ min: 0, max: 255 }), {
+      fc.array(fc.uint8Array({ minLength: 1, maxLength: 256 }), {
         minLength: 1,
-        maxLength: 100,
+        maxLength: 40,
       }),
-      async (seeds) => {
-        const bytes = mp3(seeds.map((seed) => frame({ seed })));
-        expect(await countMp3Frames(chunks(bytes, [4, 3, 7, 99]))).toBe(seeds.length);
+      async (payloads) => {
+        const bytes = mp3(
+          payloads.map((payload) => {
+            const bytes = frame();
+            bytes.set(payload, 4);
+            return bytes;
+          }),
+        );
+        expect(await countMp3Frames(chunks(bytes, [4, 3, 7, 99]))).toBe(payloads.length);
       },
     ),
     options(120),
@@ -72,7 +78,7 @@ it('property: concatenating independently generated frame sequences adds their c
   );
 });
 
-it('property: ID3 tag lengths, footers, and trailing ID3v1 never change counts', async () => {
+it('property: leading and appended ID3 metadata never change counts', async () => {
   await fc.assert(
     fc.asyncProperty(
       fc.array(frameOptions, { minLength: 1, maxLength: 20 }),
@@ -80,13 +86,18 @@ it('property: ID3 tag lengths, footers, and trailing ID3v1 never change counts',
       fc.constantFrom(2 as const, 3 as const, 4 as const),
       fc.boolean(),
       fc.boolean(),
+      fc.boolean(),
       partition,
-      async (frames, body, version, withFooter, withV1, sizes) => {
+      async (frames, body, version, withFooter, withV1, withAppendedTag, sizes) => {
         const tag = id3v2(body, version, version === 4 && withFooter);
+        const tail = Buffer.concat([
+          ...(withAppendedTag ? [id3v2(body, 4, true)] : []),
+          ...(withV1 ? [id3v1()] : []),
+        ]);
         const bytes = mp3(
           frames.map((spec) => frame(spec)),
           tag,
-          withV1 ? id3v1() : undefined,
+          tail,
         );
         expect(await countMp3Frames(chunks(bytes, sizes))).toBe(frames.length);
       },
@@ -115,7 +126,7 @@ it('property: truncating a final frame always yields a typed truncation error', 
   );
 });
 
-it('property: every forbidden MPEG header bit pattern is rejected', async () => {
+it('property: representative invalid MPEG header fields are rejected', async () => {
   const modeArb = fc.constantFrom(
     'unsupported-version',
     'unsupported-layer',

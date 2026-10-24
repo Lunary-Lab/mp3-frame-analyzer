@@ -1,48 +1,66 @@
-import { performance } from 'node:perf_hooks';
-import { countMp3Frames } from '../dist/mp3/count-frames.js';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-// Stream ~40 MiB without ever allocating a file-sized buffer.
-const frame = new Uint8Array(417);
-frame.set([0xff, 0xfb, 0x90, 0x00]);
-const totalFrames = 100_000;
+const MIB = 1024 * 1024;
+const worker = fileURLToPath(new URL('./memory-benchmark-worker.mjs', import.meta.url));
+// Separate processes prevent a small run's GC state from biasing the large run.
+const sizesMiB = [8, 32, 128];
+const results = sizesMiB.map((targetMiB) => {
+  const child = spawnSync(process.execPath, ['--expose-gc', worker, String(targetMiB)], {
+    encoding: 'utf8',
+    timeout: 60_000,
+    maxBuffer: MIB,
+  });
+  if (child.error) throw child.error;
+  assert.equal(child.status, 0, `Memory worker failed: ${child.stderr || child.stdout}`);
+  return JSON.parse(child.stdout);
+});
 
-if (global.gc) global.gc();
-const initial = process.memoryUsage().rss;
-let peak = initial;
-async function* source() {
-  for (let i = 0; i < totalFrames; i++) {
-    if (i % 1024 === 0) {
-      peak = Math.max(peak, process.memoryUsage().rss);
-      // Give the event loop a chance to process normal operational work.
-      await new Promise((resolve) => setImmediate(resolve));
-    }
-    yield frame;
-  }
-}
-
-const started = performance.now();
-const counted = await countMp3Frames(source());
-const seconds = (performance.now() - started) / 1000;
-peak = Math.max(peak, process.memoryUsage().rss);
-const mib = (totalFrames * frame.length) / (1024 * 1024);
-const growth = (peak - initial) / (1024 * 1024);
+// These tolerate GC/JIT and shared-runner variation. A retained 128 MiB input
+// still exceeds them. Throughput and event-loop measurements are informational.
+const limitsMiB = { rss: 80, heapUsed: 32, external: 48, arrayBuffers: 48 };
+const scalingLimitsMiB = { rss: 48, heapUsed: 24, external: 40, arrayBuffers: 40 };
+const smallest = results[0];
+const largest = results[results.length - 1];
+const additionalGrowthBytes = Object.fromEntries(
+  Object.keys(scalingLimitsMiB).map((metric) => [
+    metric,
+    largest.peakGrowthBytes[metric] - smallest.peakGrowthBytes[metric],
+  ]),
+);
 
 console.log(
   JSON.stringify(
     {
-      bytesProcessed: totalFrames * frame.length,
-      frames: counted,
-      seconds: Number(seconds.toFixed(3)),
-      throughputMiBps: Number((mib / seconds).toFixed(1)),
-      peakRssGrowthMiB: Number(growth.toFixed(1)),
+      kind: 'parser-memory-scaling',
       node: process.version,
+      platform: process.platform,
+      architecture: process.arch,
+      source: 'Distinct 64 KiB chunks of repeated real MPEG-1 Layer III audio frames',
+      limitsMiB,
+      scalingLimitsMiB,
+      inputSizeRatio: largest.bytesProcessed / smallest.bytesProcessed,
+      additionalGrowthBytes,
+      results,
     },
     null,
     2,
   ),
 );
 
-if (counted !== totalFrames || growth > 64) {
-  console.error('Frame count mismatch or excessive RSS growth');
-  process.exitCode = 1;
+for (const result of results) {
+  assert.equal(result.frames, result.expectedFrames, 'Frame count changed during memory test');
+  for (const [metric, limitMiB] of Object.entries(limitsMiB)) {
+    assert.ok(
+      result.peakGrowthBytes[metric] <= limitMiB * MIB,
+      `${metric} grew more than ${limitMiB} MiB for ${result.bytesProcessed} bytes`,
+    );
+  }
+}
+for (const [metric, limitMiB] of Object.entries(scalingLimitsMiB)) {
+  assert.ok(
+    additionalGrowthBytes[metric] <= limitMiB * MIB,
+    `${metric} growth scales with total input size`,
+  );
 }

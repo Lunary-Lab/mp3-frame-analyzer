@@ -1,0 +1,57 @@
+name: PR title
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Release PR whose head is the dispatched workflow ref
+        required: true
+        type: string
+
+permissions:
+  pull-requests: read
+
+jobs:
+  title:
+    name: Conventional Commit PR title
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      # Only inspect PR metadata. Never check out or execute pull-request code here.
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          types: |
+            feat
+            fix
+            perf
+            docs
+            style
+            refactor
+            test
+            build
+            ci
+            chore
+            revert
+      - name: Validate a dispatched release PR using metadata only
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          const { GH_REPO: repo, PR_NUMBER: number } = process.env;
+          assert.match(number, /^[1-9]\d*$/);
+          const pr = JSON.parse(execFileSync('gh', ['api', `repos/${repo}/pulls/${number}`], { encoding: 'utf8' }));
+          assert.equal(pr.base.ref, 'main');
+          assert.equal(pr.head.repo.full_name, repo);
+          assert.equal(pr.head.sha, process.env.GITHUB_SHA, 'Dispatch must validate the current PR head');
+          assert.match(pr.title, /^(feat|fix|perf|docs|style|refactor|test|build|ci|chore|revert)(?:\([^\r\n()]+\))?!?: \S[^\r\n]*$/, 'PR title must use an accepted Conventional Commit type and nonempty subject');
+          JS

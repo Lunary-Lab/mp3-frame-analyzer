@@ -12,7 +12,7 @@ const BITRATES_KBPS = [
 ] as const;
 const SAMPLE_RATES_HZ = [44_100, 48_000, 32_000, 0] as const;
 
-/** Returns null for any header outside the supported MPEG-1 Layer III subset. */
+/** Returns null outside MPEG-1 Layer III with a table-defined bitrate. */
 export function parseFrameHeader(bytes: Uint8Array): FrameHeader | null {
   if (bytes.length < 4) return null;
 
@@ -36,6 +36,18 @@ export function parseFrameHeader(bytes: Uint8Array): FrameHeader | null {
     padding,
     hasCrc: ((word >>> 16) & 1) === 0,
   };
+}
+
+/** Free-format is a valid MPEG-1 Layer III subtype whose frame span is not in the table. */
+export function isFreeFormatHeader(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 4 &&
+    bytes[0] === 0xff &&
+    (bytes[1]! & 0xfe) === 0xfa &&
+    (bytes[2]! & 0xf0) === 0 &&
+    (bytes[2]! & 0x0c) !== 0x0c &&
+    (bytes[3]! & 0x03) !== 0x02
+  );
 }
 
 /** Distinguish an unsupported MPEG version/layer from arbitrary invalid data. */

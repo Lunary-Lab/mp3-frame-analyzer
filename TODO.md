@@ -17,6 +17,15 @@
       security scanning, and CI. **Do not remove the alias if tooling is still
       incompatible, regardless of date.**
 
+**Status (checked 2026-10-24):** still required. Stable `typescript` is 7.0.2
+and 7.1 is in beta; `typescript-eslint@8.72.0` still declares the peer range
+`typescript >=4.8.4 <6.1.0`. Upstream tracking:
+[typescript-eslint#10940](https://github.com/typescript-eslint/typescript-eslint/issues/10940).
+
+**Automatic trigger:** `scripts/temporary-dependencies.test.mjs` fails as soon
+as a dependency update changes that peer range, so the Dependabot PR that could
+make the alias obsolete cannot pass CI until this item is reassessed.
+
 **Official references:**
 
 - [Microsoft — TypeScript 7 side-by-side setup](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-60)
@@ -26,11 +35,36 @@
 
 ## Quality follow-ups
 
-- [x] Classify and test the 16 surviving Stryker mutants; the latest score is
-      97.90%, with only 3 equivalent survivors and a 95% CI minimum.
+- [x] Classify and test the 16 surviving Stryker mutants; the latest local score is
+      98.27%, with only 3 equivalent survivors and a 95% CI minimum.
 - [ ] Reassess surviving mutants after parser/tooling changes; retain defensive
       checks and do not suppress mutants for cosmetic improvements.
-- [ ] Resolve the parser's advisory complexity warning only if extracting
-      smaller functions makes the implementation clearer.
+- [x] Extract shared ID3 traversal and header-error classification to make
+      the counting loop easier to follow and remove its complexity warning.
 - [ ] If the evaluator specifies whether Xing metadata frames count,
       reconcile the API contract and sample expectations accordingly.
+
+## Repository settings and supported format
+
+- [ ] Enable required checks (`All checks` and `Conventional Commit PR title`)
+      and protected release tags when the private-repository plan supports
+      them. This repository currently cannot enforce rulesets on its plan.
+- [ ] Confirm Actions is allowed to create release PRs; configure squash
+      commits to use the PR title. See [release setup](docs/releasing.md).
+- [ ] Enable immutable GitHub Releases after checking repository availability.
+- [ ] Enable build attestations when private-repository plan support is
+      available; checksums and SBOMs work without it.
+- [ ] Remove the scoped `typed-rest-client` / `qs` override (review by
+      2026-12-15). `@stryker-mutator/core@10.1.1` (latest, 2026-10-23) still
+      requires `typed-rest-client ~2.3.0`, whose 2.3.1 pins `qs@6.15.1`
+      ([GHSA-q8mj-m7cp-5q26](https://github.com/advisories/GHSA-q8mj-m7cp-5q26),
+      [GHSA-4mjr-xmp4-gh2g](https://github.com/advisories/GHSA-4mjr-xmp4-gh2g),
+      [GHSA-x5fp-wj9c-mxmx](https://github.com/advisories/GHSA-x5fp-wj9c-mxmx)).
+      Fixed `typed-rest-client` 3.x is not yet adopted upstream:
+      [stryker-js#6177](https://github.com/stryker-mutator/stryker-js/pull/6177).
+      **Remove when** the locked `typed-rest-client` no longer pins a vulnerable
+      `qs`; `scripts/temporary-dependencies.test.mjs` fails on that dependency
+      update. Then delete the override, regenerate the lockfile, and rerun
+      mutation testing and both audits.
+- [ ] Only add free-format MPEG-1 Layer III if the assessment or a real user
+      requires it; implement and independently verify frame-spacing inference.

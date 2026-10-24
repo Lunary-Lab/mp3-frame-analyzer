@@ -6,10 +6,13 @@ export interface Id3Header {
   readonly hasFooter: boolean;
 }
 
+export function isId3v2Tag(bytes: Uint8Array): boolean {
+  return bytes.length >= 3 && bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33;
+}
+
 /** ID3v2.2/2.3/2.4 tag size is a 28-bit synchsafe integer. */
 export function parseId3Header(bytes: Uint8Array, offset: number): Id3Header | null {
-  if (bytes.length < 3) return null;
-  if (bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) return null;
+  if (!isId3v2Tag(bytes)) return null;
   if (bytes.length < 10) {
     throw new Mp3ParseError('truncated-mp3', offset, 'Incomplete ID3v2 header');
   }

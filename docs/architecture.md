@@ -18,19 +18,24 @@ Every frame is parsed individually. This supports constant and variable bitrate 
 
 ## Metadata and semantics
 
-- ID3v2 tags at the beginning are detected through `ID3` and skipped by their **28-bit synchsafe size** (plus a 10-byte footer when present in v2.4). Tag contents and album art are never accumulated into a whole-tag buffer.
+- Up to eight ID3v2 tags at the beginning are detected through `ID3` and skipped by their **28-bit synchsafe size** (plus a 10-byte footer when present in v2.4). Tag contents and album art are never accumulated into a whole-tag buffer.
+- One appended ID3v2.4 tag is accepted after the audio only when its required footer matches the header. Only a final ID3v1 tag may follow it; later audio or another appended tag is rejected.
 - ID3v1 at the end is recognized by the `TAG` prefix and excluded from the count (the trailing tag must be exactly 128 bytes).
 - The returned count includes all physically present MPEG-1 Layer III frames, including metadata-bearing Xing/Info/VBRI frames. The count is obtained by traversal, not copied from any encoder metadata. Decoder tools may report one fewer _decoded audio_ frame than physical frame count.
 - The stream must start at a frame or an ID3v2 tag; arbitrary leading garbage is not scanned away. Invalid bytes at expected frame boundaries are rejected rather than silently resynchronized.
 - A truncated final frame, leftover partial header, or unrecognized trailing metadata is rejected.
 
-This is intentionally a **structural parser**, not an MP3 decoder. Full validation would additionally examine side information, bit reservoir usage, Huffman data, optional CRC, appended APEv2 tags, and MPEG variants beyond the stated assessment scope.
+Free-format MPEG-1 Layer III uses bitrate index zero and requires discovering a frame spacing rather than using the bitrate table. It is explicitly rejected as `unsupported-format`, not described as corrupt. Supporting it would require a separate frame-spacing design and independent real free-format fixtures.
+
+This is a **structural parser**. Full validation would additionally examine side information, bit reservoir usage, Huffman data, optional CRC, appended APEv2 tags, and MPEG variants beyond the stated assessment scope.
 
 ## Resource model
 
 The byte cursor queues incoming stream chunks only as required to read a four-byte header or ten-byte metadata header, then consumes frame/tag bytes incrementally. The cursor does not ask for more than 1,500 bytes of lookahead (actual parser maximum: 10). Time is linear in bytes consumed; memory is proportional to the largest chunk delivered by the upstream stream, **not** the total upload size.
 
-Fastify's multipart implementation provides stream backpressure, a 50 MiB per-file cap, one file / one part limit, and dedicated error handling. Parsing terminates immediately on invalid headers. Request timeouts defend against slow or abandoned clients.
+Fastify's multipart implementation provides stream backpressure, a 50 MiB per-file cap, one file / one part limit, an 8 KiB multipart-header buffering bound, and dedicated error handling. Parsing terminates immediately on invalid headers. Request and idle-connection timeouts bound slow or abandoned uploads. They do not impose an aggregate body cap or global concurrency limit. A 50 MiB upload has a 30-second receive deadline, so filling the maximum requires about 1.67 MiB/s before protocol overhead.
+
+An immediately ready in-memory async source can keep the parser busy until its input is consumed. The benchmark reports this delay honestly. Network backpressure and I/O provide natural scheduling points in the HTTP path; performance measurements include small requests alongside valid large uploads. If measurements under a real deployment show unfair scheduling, profile and add a bounded cooperative-yield policy before claiming a latency guarantee.
 
 ## Why no MPEG parser package or FFmpeg dependency?
 

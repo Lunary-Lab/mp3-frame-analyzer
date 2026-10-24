@@ -5,59 +5,162 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact commit to validate for a release
+        type: string
+        default: ''
+      release_tag:
+        description: Expected stable vX.Y.Z tag, when validating a release
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ inputs.ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   quality:
-    name: Types, lint, tests, build
+    name: Quality (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['24', '26']
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version-file: .nvmrc
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: Use the documented package manager
+        run: npm install --global npm@11.19.0 --ignore-scripts --no-audit --no-fund
       - name: Install locked dependencies
-        run: npm ci --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run check
-      - run: npm run test:fuzz
-      - run: npm run fuzz:regression
-      - run: npm run fuzz:coverage
-      - run: npm run test:memory
+      - name: Verify release version agreement
+        run: npm run verify:version
+        env:
+          SOURCE_COMMIT: ${{ inputs.ref || github.sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+      - name: Deterministic mutation smoke and fuzz-tooling tests
+        run: node scripts/fuzz-parser.mjs && npm run test:fuzz-tooling
+        if: matrix.node == '24'
+      - name: Replay the fuzz regression corpus
+        run: node scripts/run-jazzer.mjs --regression
+        if: matrix.node == '24'
+      - name: Bounded coverage-guided fuzzing
+        run: node scripts/run-jazzer.mjs
+        if: matrix.node == '24'
+      - name: Verify bounded memory growth
+        if: matrix.node == '24'
+        shell: bash
+        run: |
+          mkdir -p reports/performance
+          node --expose-gc scripts/memory-benchmark.mjs | tee reports/performance/memory.json
+      - name: Measure valid HTTP uploads and responsiveness
+        if: matrix.node == '24'
+        shell: bash
+        run: |
+          mkdir -p reports/performance
+          node scripts/http-performance.mjs | tee reports/performance/http.json
+      - name: Audit production dependencies
+        if: matrix.node == '24'
+        run: npm run audit:production
+      - name: Audit the complete build and test dependency tree
+        if: matrix.node == '24'
+        run: npm run audit:dependencies
+      - name: Package the existing compiled application
+        if: matrix.node == '24'
+        run: npm run package:release
+        env:
+          SOURCE_COMMIT: ${{ inputs.ref || github.sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+      - name: Install and test the unpacked runtime artifact
+        if: matrix.node == '24'
+        run: npm run test:artifact
+        env:
+          SOURCE_COMMIT: ${{ inputs.ref || github.sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+      - name: Preserve the tested bytes for release publication
+        if: matrix.node == '24'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-assets
+          path: release/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload performance measurements
+        if: always() && matrix.node == '24'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: performance-measurements
+          path: reports/performance/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Upload coverage report
+        if: always() && matrix.node == '24'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-report
+          path: coverage/
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Upload fuzz crashes when tests fail
-        if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure() && matrix.node == '24'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-crashes
           path: fuzz/crashes/
           if-no-files-found: ignore
           retention-days: 14
-      - name: Audit production dependency tree
-        run: npm audit --omit=dev --audit-level=high
+
+  npm-compatibility:
+    name: Clean install (npm 11.9)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm install --global npm@11.9.0 --ignore-scripts --no-audit --no-fund
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run build
+      - run: npm test
 
   mutation:
     name: Focused MPEG mutation testing
     needs: quality
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci --no-audit --no-fund
+      - run: npm install --global npm@11.19.0 --ignore-scripts --no-audit --no-fund
+      - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run mutation
       - name: Upload mutation report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: stryker-mutation-report
           path: reports/mutation/mutation.json
@@ -69,10 +172,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
-      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.3'
       - name: Install and run actionlint
@@ -82,12 +187,27 @@ jobs:
       - name: Install pinned Betterleaks
         run: go install github.com/betterleaks/betterleaks@v1.9.0
       - name: Scan entire Git history for secrets
-        run: |
-          "$(go env GOPATH)/bin/betterleaks" git . --no-banner
+        run: '"$(go env GOPATH)/bin/betterleaks" git . --no-banner'
       - name: Install pinned Semgrep CE in an isolated environment
         run: |
           python3 -m venv "${RUNNER_TEMP}/semgrep-venv"
           "${RUNNER_TEMP}/semgrep-venv/bin/python" -m pip install 'semgrep==1.182.1'
-      - name: Targeted security static analysis
+      - name: Application architecture security rules
+        run: '"${RUNNER_TEMP}/semgrep-venv/bin/semgrep" scan --config .semgrep.yml --error --metrics=off src'
+
+  all-checks:
+    name: All checks
+    if: always()
+    needs: [quality, npm-compatibility, mutation, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every validation job to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
         run: |
-          "${RUNNER_TEMP}/semgrep-venv/bin/semgrep" scan --config .semgrep.yml --error --metrics=off src
+          node --input-type=module <<'JS'
+          const jobs = JSON.parse(process.env.RESULTS);
+          const failed = Object.entries(jobs).filter(([, job]) => job.result !== 'success');
+          if (failed.length) throw new Error(`Required jobs did not pass: ${failed.map(([name]) => name).join(', ')}`);
+          JS

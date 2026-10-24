@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { Readable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import { countMp3Frames } from '../src/mp3/count-frames.js';
 import { Mp3ParseError } from '../src/mp3/errors.js';
@@ -21,6 +22,70 @@ describe('streaming MP3 frame counting', () => {
   it('skips ID3v2, recognizes trailing ID3v1, and counts every physical MPEG frame', async () => {
     const bytes = mp3([frame(), frame()], id3v2(Buffer.alloc(202), 4, true), id3v1());
     expect(await count(bytes, 1)).toBe(2);
+  });
+
+  it.each([false, true])('excludes an appended ID3v2.4 tag (with ID3v1: %s)', async (withV1) => {
+    // A complete TIT2 frame with a UTF-8 one-character title, without padding.
+    const title = Buffer.from([0x54, 0x49, 0x54, 0x32, 0, 0, 0, 2, 0, 0, 3, 0x41]);
+    const tail = Buffer.concat([id3v2(title, 4, true), ...(withV1 ? [id3v1()] : [])]);
+    const bytes = mp3([frame(), frame({ padding: 1 })], id3v2(title, 3), tail);
+    for (const size of [1, 4, 17, 4096]) {
+      expect(await count(bytes, size)).toBe(2);
+    }
+  });
+
+  it.each([2, 3, 4] as const)(
+    'requires a footer on appended ID3v2.%i metadata',
+    async (version) => {
+      const audio = frame();
+      await expect(
+        count(mp3([audio], undefined, id3v2(Buffer.alloc(12), version))),
+      ).rejects.toMatchObject({
+        kind: 'invalid-mp3',
+        offset: audio.length,
+        message: 'Appended ID3v2 tags must use version 2.4 with a footer',
+      });
+    },
+  );
+
+  it('requires appended metadata to follow all audio and precede final ID3v1', async () => {
+    const tag = id3v2(Buffer.alloc(12), 4, true);
+    for (const tail of [
+      Buffer.concat([tag, frame()]),
+      Buffer.concat([tag, tag]),
+      Buffer.concat([tag, Buffer.from([1, 2])]),
+      Buffer.concat([id3v1(), tag]),
+    ]) {
+      await expect(count(mp3([frame()], undefined, tail), 3)).rejects.toMatchObject({
+        kind: 'invalid-mp3',
+        message: 'Unexpected bytes after trailing metadata',
+      });
+    }
+  });
+
+  it('rejects incomplete appended headers, bodies, footers and final ID3v1', async () => {
+    const tag = id3v2(Buffer.alloc(12), 4, true);
+    for (const tail of [
+      tag.subarray(0, 5),
+      tag.subarray(0, 13),
+      tag.subarray(0, tag.length - 1),
+      Buffer.concat([tag, id3v1().subarray(0, 17)]),
+    ]) {
+      await expect(count(mp3([frame()], undefined, tail), 7)).rejects.toMatchObject({
+        kind: 'truncated-mp3',
+      });
+    }
+  });
+
+  it('verifies every byte of an appended footer against its tag header', async () => {
+    for (let index = 0; index < 10; index++) {
+      const tag = id3v2(Buffer.alloc(12), 4, true);
+      tag[tag.length - 10 + index] = tag[tag.length - 10 + index]! ^ 1;
+      await expect(count(mp3([frame()], undefined, tag), 1)).rejects.toMatchObject({
+        kind: 'invalid-mp3',
+        message: 'Invalid ID3v2 footer',
+      });
+    }
   });
 
   it('does not confuse fake sync markers inside MPEG payload with real frames', async () => {
@@ -89,6 +154,52 @@ describe('streaming MP3 frame counting', () => {
     await expect(countMp3Frames(source)).rejects.toMatchObject({ kind: 'invalid-mp3' });
   });
 
+  it('preserves an upstream read error and releases the iterator without pulling again', async () => {
+    const failure = new Error('Input stream was interrupted');
+    let reads = 0;
+    let releases = 0;
+    const source: AsyncIterable<Uint8Array> = {
+      [Symbol.asyncIterator]() {
+        return {
+          async next() {
+            if (++reads === 1) return { done: false as const, value: frame() };
+            throw failure;
+          },
+          async return() {
+            releases++;
+            throw new Error('Cleanup also failed');
+          },
+        };
+      },
+    };
+    await expect(countMp3Frames(source)).rejects.toBe(failure);
+    expect(reads).toBe(2);
+    expect(releases).toBe(1);
+  });
+
+  it('propagates cancellation of a Node stream while waiting for further audio', async () => {
+    const controller = new AbortController();
+    let emitted = false;
+    const source = new Readable({
+      signal: controller.signal,
+      read() {
+        if (emitted) return;
+        emitted = true;
+        this.push(frame());
+        setImmediate(() => controller.abort());
+      },
+    });
+    try {
+      await expect(countMp3Frames(source)).rejects.toMatchObject({
+        name: 'AbortError',
+        code: 'ABORT_ERR',
+      });
+      expect(source.destroyed).toBe(true);
+    } finally {
+      source.destroy();
+    }
+  });
+
   it('rejects empty input, noise, and metadata-only input', async () => {
     await expect(count(Buffer.alloc(0))).rejects.toBeInstanceOf(Mp3ParseError);
     await expect(count(Buffer.from('Not an MP3 file'))).rejects.toMatchObject({
@@ -114,6 +225,17 @@ describe('streaming MP3 frame counting', () => {
     const unsupported = frame();
     unsupported[1] = 0xf3;
     await expect(count(unsupported)).rejects.toMatchObject({ kind: 'unsupported-format' });
+  });
+
+  it('reports free-format MPEG-1 Layer III as unsupported instead of corrupt', async () => {
+    const freeFormatHeader = Buffer.from([0xff, 0xfb, 0, 0]);
+    for (const prefix of [Buffer.alloc(0), frame()]) {
+      await expect(count(Buffer.concat([prefix, freeFormatHeader]), 1)).rejects.toMatchObject({
+        kind: 'unsupported-format',
+        offset: prefix.length,
+        message: 'Free-format MPEG-1 Layer III is not supported; use a table-defined bitrate',
+      });
+    }
   });
 
   it('rejects incomplete leading ID3 headers and ID3v2.4 footers', async () => {
@@ -157,6 +279,11 @@ describe('streaming MP3 frame counting', () => {
     await expect(count(mp3([frame()], tooManyTags))).rejects.toMatchObject({
       kind: 'invalid-mp3',
     });
+  });
+
+  it('accepts exactly the documented limit of eight leading ID3v2 tags', async () => {
+    const tags = Buffer.concat(Array.from({ length: 8 }, () => id3v2(Buffer.alloc(12))));
+    expect(await count(mp3([frame()], tags), 3)).toBe(1);
   });
 
   it.each([

@@ -7,14 +7,14 @@ The endpoint processes **untrusted binary files**. The primary risks are malform
 Controls:
 
 - Single streamed multipart `file`; fields and extra parts are not supported.
-- Explicit per-file 50 MiB production limit, maximum 1 file, zero text fields, one part, bounded multipart header pairs. The limit is injectable for small boundary tests.
+- Explicit per-file 50 MiB production limit, maximum 1 file, zero text fields, one part, 32 multipart header pairs and an 8 KiB header-buffer bound. The file limit is injectable for small boundary tests. `headerSize` bounds retained multipart header data; it is not a promise of HTTP 413 for every oversized header. Busboy supports this option at runtime even though the multipart plugin declaration omits it. The formerly configured `fieldNameSize` did not apply to multipart input.
 - Multipart limit errors take precedence over parser truncation errors (HTTP 413 rather than HTTP 422). Rejected MIME/field-name uploads are consumed without buffering to avoid stalling multipart parsing.
 - Early MIME filtering followed by actual MPEG header validation. Filename is never used as a path.
 - Bounded lookahead, integer-safe offsets, per-frame range validation, deterministic termination and strict EOF handling.
 - Structured typed parser failures; generic JSON for unexpected exceptions. No upload contents or secrets are logged.
 - Listener binds only to `127.0.0.1` by default. Configurable bind address for intentional external deployment.
 - No spawning external binaries, decoding audio, disk writes, database, shell, or credentials.
-- CI includes production dependency audit, full-Git-history Betterleaks secret scanning, and local Semgrep rules prohibiting dynamic code execution / shell execution in `src/`.
+- CI audits both the production tree and the complete development/build tree, failing on moderate-or-higher advisories. A weekly workflow repeats these audits. It also runs full-Git-history Betterleaks secret scanning, maintained `eslint-plugin-security` rules in `src/`, and local Semgrep architecture rules prohibiting dynamic code and process execution. JavaScript build, fuzz, and benchmark tools are covered by ordinary ESLint rules.
 
 ## Limitations
 
@@ -24,7 +24,19 @@ Fastify's multipart `fileSize` limit is **not** an aggregate HTTP-body limit. Th
 
 Lefthook checks staged secret content when explicitly installed by the developer. A missing Betterleaks binary fails the hook; GitHub Actions runs the history scan independently so bypassing local hooks does not bypass CI.
 
-The focused Semgrep rules are supplemental rather than a claim of comprehensive SAST coverage. A production deployment would additionally conduct threat modeling, host/container hardening, wider SAST rules, periodic dependency review, load testing, and incident monitoring.
+The static checks complement behavioral tests; they do not establish comprehensive vulnerability coverage. The security lint rule `detect-object-injection` is disabled because this binary parser deliberately indexes validated byte arrays and fixed tables; the rule cannot establish whether an index is safely bounded. The remaining recommended security rules stay enabled. A public deployment still needs host/container hardening, deployment-specific threat modeling, sustained load testing, and incident monitoring.
+
+When the parser rejects a file before its upload ends, the error responds immediately and the remaining file bytes are read and discarded in the background. Abandoning the unfinished multipart stream would leave the request body unread, wedging that connection until the request timeout and preventing graceful shutdown.
+
+The runtime observes shutdown failures and allows up to 10 seconds for requests and close hooks to drain. A failed close or expired deadline is logged and ends the process with a failure status. Connection-level failures and aborted requests cannot always receive JSON.
+
+## Build dependencies and release credentials
+
+`@stryker-mutator/core@10.1.1` depends on `typed-rest-client@2.3.1`, which pins a vulnerable `qs@6.15.1`. The package override is scoped to **that parent's `qs` dependency**, selecting patched `6.16.1`; it does not force a major update of the parent client. Full mutation testing verifies the resulting toolchain. Remove the override when a compatible upstream Stryker dependency chain includes the fix ([stryker-js#6177](https://github.com/stryker-mutator/stryker-js/pull/6177)), then regenerate the lockfile and rerun mutation and audit checks. A tooling test fails when the locked parent stops pinning the vulnerable version, so the override cannot silently outlive its purpose.
+
+There is no advisory exception list today. If a future finding cannot immediately be fixed, record the advisory, reachability analysis, owner, expiry date, and compensating controls in a reviewed change. Do not lower the audit threshold or use `npm audit fix --force` merely to make CI green.
+
+Validation uses read-only tokens and nonpersistent checkout credentials. Release Please's write token only runs a pinned action; workflow dispatch has separate `actions: write` jobs. Artifact validation runs with read permissions. Only the provenance job receives OIDC/attestation permissions, and only publication can attach assets and publish a draft. PR-title validation uses `pull_request_target` solely to inspect metadata, with read-only permission and no checkout or PR-code execution. See [release operation details](releasing.md).
 
 ### Hostile async iterators
 

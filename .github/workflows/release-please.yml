@@ -1,0 +1,95 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-please-main
+  cancel-in-progress: false
+
+jobs:
+  version:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      prs: ${{ steps.release.outputs.prs }}
+      prs_created: ${{ steps.release.outputs.prs_created }}
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+      sha: ${{ steps.release.outputs.sha }}
+    steps:
+      # No checkout or repository code runs in this write-enabled job.
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          target-branch: main
+
+  check-release-pr:
+    needs: version
+    if: needs.version.outputs.prs_created == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      # GITHUB_TOKEN-generated PR runs may require approval.
+      # Explicit workflow_dispatch validates the generated head without a PAT.
+      - name: Dispatch CI and title validation for every created or updated release PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_PRS: ${{ needs.version.outputs.prs }}
+        run: |
+          node --input-type=module <<'JS'
+          import { execFileSync } from 'node:child_process';
+          const prs = JSON.parse(process.env.RELEASE_PRS);
+          if (!Array.isArray(prs) || prs.length === 0) throw new Error('Release PR output is empty');
+          for (const pr of prs) {
+            if (pr.baseBranchName !== 'main' || !/^release-please--branches--main(?:--.*)?$/.test(pr.headBranchName)) {
+              throw new Error('Unexpected release PR branch');
+            }
+            if (!Number.isSafeInteger(pr.number) || pr.number < 1) throw new Error('Invalid release PR number');
+            execFileSync('gh', ['workflow', 'run', 'ci.yml', '--repo', process.env.GH_REPO, '--ref', pr.headBranchName], { stdio: 'inherit' });
+            execFileSync('gh', ['workflow', 'run', 'pr-title.yml', '--repo', process.env.GH_REPO, '--ref', pr.headBranchName, '-f', `pr_number=${pr.number}`], { stdio: 'inherit' });
+          }
+          JS
+
+  release:
+    needs: version
+    if: needs.version.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      # Dispatch at the tag itself: the invocation SHA then identifies the
+      # actual source used by the build and standard provenance attestation.
+      - name: Validate and publish the created draft from its exact tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.version.outputs.tag }}
+          RELEASE_SHA: ${{ needs.version.outputs.sha }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          const { GH_REPO: repo, RELEASE_TAG: tag, RELEASE_SHA: sha } = process.env;
+          assert.match(tag, /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+          assert.match(sha, /^[0-9a-f]{40}$/);
+          execFileSync('gh', ['workflow', 'run', 'publish-release.yml', '--repo', repo, '--ref', tag, '-f', `tag=${tag}`, '-f', `sha=${sha}`], { stdio: 'inherit' });
+          JS

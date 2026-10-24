@@ -1,0 +1,150 @@
+name: Validate and publish release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing draft release tag (vX.Y.Z); dispatch this workflow at that same tag
+        required: true
+        type: string
+      sha:
+        description: Exact 40-character commit SHA for that tag
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    # Draft releases are only visible to push-capable credentials. This job
+    # reads metadata only; no repository code or dependency is checked out.
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.check.outputs.release_id }}
+    steps:
+      - name: Require a draft release of a tagged commit already on main
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_SHA: ${{ inputs.sha }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { appendFileSync } from 'node:fs';
+          const { GH_REPO: repo, RELEASE_TAG: tag, RELEASE_SHA: sha } = process.env;
+          assert.match(tag, /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+          assert.match(sha, /^[0-9a-f]{40}$/);
+          assert.equal(process.env.GITHUB_REF, `refs/tags/${tag}`, 'Dispatch this workflow at the release tag');
+          assert.equal(process.env.GITHUB_SHA, sha, 'Invocation must identify the actual build source');
+          const api = (path) => JSON.parse(execFileSync('gh', ['api', path], { encoding: 'utf8' }));
+          const pages = JSON.parse(execFileSync('gh', ['api', '--paginate', '--slurp', `repos/${repo}/releases?per_page=100`], { encoding: 'utf8' }));
+          const release = pages.flat().find((candidate) => candidate.tag_name === tag);
+          assert.ok(release, 'The release tag has no draft release');
+          assert.equal(release.draft, true, 'Only an unpublished draft may be completed');
+          assert.equal(api(`repos/${repo}/commits/${tag}`).sha, sha, 'Tag points to a different commit');
+          const ancestry = api(`repos/${repo}/compare/${sha}...main`);
+          assert.ok(['ahead', 'identical'].includes(ancestry.status), 'Release commit is not on main');
+          assert.ok(Number.isSafeInteger(release.id) && release.id > 0);
+          appendFileSync(process.env.GITHUB_OUTPUT, `release_id=${release.id}\n`);
+          JS
+
+  verify:
+    needs: preflight
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+    with:
+      ref: ${{ inputs.sha }}
+      release_tag: ${{ inputs.tag }}
+
+  provenance:
+    needs: verify
+    if: github.event.repository.private == false || vars.ENABLE_ARTIFACT_ATTESTATIONS == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-assets
+          path: release
+      - name: Verify downloaded bytes
+        working-directory: release
+        run: sha256sum --check SHA256SUMS
+      # Without SBOM or predicate inputs, actions/attest emits SLSA build provenance.
+      - name: Attest the tested runtime archive, production SBOM, and manifest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-checksums: release/SHA256SUMS
+
+  publish:
+    needs: [preflight, verify, provenance]
+    if: always() && needs.preflight.result == 'success' && needs.verify.result == 'success' && (needs.provenance.result == 'success' || needs.provenance.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: release-publication-${{ github.repository }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      # Download the exact tested bytes. Do not rebuild in this privileged job.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-assets
+          path: release
+      - name: Verify checksums before attaching assets
+        working-directory: release
+        run: sha256sum --check SHA256SUMS
+      - name: Attach artifacts and publish the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_SHA: ${{ inputs.sha }}
+          DRAFT_RELEASE_ID: ${{ needs.preflight.outputs.release_id }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { readdirSync } from 'node:fs';
+          const { GH_REPO: repo, RELEASE_TAG: tag, RELEASE_SHA: sha, DRAFT_RELEASE_ID: id } = process.env;
+          assert.match(tag, /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+          assert.match(id, /^[1-9]\d*$/);
+          const api = (path) => JSON.parse(execFileSync('gh', ['api', path], { encoding: 'utf8' }));
+          const release = api(`repos/${repo}/releases/${id}`);
+          assert.equal(release.tag_name, tag);
+          assert.equal(release.draft, true);
+          assert.equal(api(`repos/${repo}/commits/${tag}`).sha, sha);
+          const files = readdirSync('release').map((file) => `release/${file}`);
+          // Replacing assets is only allowed while the release is still a draft,
+          // so a failed upload can be retried. Published versions are never overwritten.
+          execFileSync('gh', ['release', 'upload', tag, ...files, '--repo', repo, '--clobber'], { stdio: 'inherit' });
+          // Retrying an older draft must not move "latest" backwards. Serialize
+          // publication and compare all published stable tags at the final step.
+          const pages = JSON.parse(execFileSync('gh', ['api', '--paginate', '--slurp', `repos/${repo}/releases?per_page=100`], { encoding: 'utf8' }));
+          const target = tag.slice(1).split('.').map(BigInt);
+          const newer = pages.flat().some((candidate) => {
+            if (candidate.draft || candidate.prerelease || !/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(candidate.tag_name)) return false;
+            const parts = candidate.tag_name.slice(1).split('.').map(BigInt);
+            for (let i = 0; i < 3; i++) {
+              if (parts[i] !== target[i]) return parts[i] > target[i];
+            }
+            return false;
+          });
+          execFileSync('gh', ['release', 'edit', tag, '--repo', repo, '--draft=false', `--latest=${!newer}`], { stdio: 'inherit' });
+          JS
