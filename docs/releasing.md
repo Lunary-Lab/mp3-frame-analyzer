@@ -57,20 +57,20 @@ Workflow actions are pinned by commit. Ordinary PR title validation uses `pull_r
 
 Values below were read back from the GitHub API after being saved on **2026-10-24**. The repository stays private.
 
-| Setting                                | Value                                                                                                                                           | Status                                 |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| Merge methods                          | Squash only; merge commits and rebase merges disabled                                                                                           | Enabled                                |
-| Squash commit                          | Title = PR title (`PR_TITLE`), body = blank (`BLANK`)                                                                                           | Enabled; used for PR #8                |
-| Delete merged branches                 | On                                                                                                                                              | Enabled; verified on PR #8             |
-| Auto-merge                             | Off (nothing would wait for checks)                                                                                                             | Unchanged                              |
-| Default `GITHUB_TOKEN` permissions     | Read-only, at both the organization and the repository                                                                                          | Unchanged                              |
-| Actions may create and approve PRs     | On, at both levels; GitHub offers one combined switch                                                                                           | Verified: Release Please opened PR #10 |
-| Allowed Actions                        | GitHub-owned, plus `googleapis/release-please-action@*` and `amannn/action-semantic-pull-request@*`; SHA pinning required (organization policy) | Enabled; previously "all actions"      |
-| Fork PR workflows (private)            | Not run; no write tokens or secrets                                                                                                             | Unchanged                              |
-| Dependabot alerts and security updates | On                                                                                                                                              | Enabled; previously off                |
-| Immutable releases                     | On                                                                                                                                              | Enabled; previously off                |
-| Branch protection and rulesets         | Return **403**: "Upgrade to GitHub Pro or make this repository public" (organization rulesets: "Upgrade to GitHub Team")                        | **Blocked by plan**                    |
-| Build provenance attestations          | Private repositories require GitHub Enterprise Cloud; `ENABLE_ARTIFACT_ATTESTATIONS` is unset                                                   | **Blocked by plan**                    |
+| Setting                                | Value                                                                                                                                           | Status                                                                                              |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Merge methods                          | Squash only; merge commits and rebase merges disabled                                                                                           | Enabled                                                                                             |
+| Squash commit                          | Title = PR title (`PR_TITLE`), body = blank (`BLANK`)                                                                                           | Enabled; used for PR #8                                                                             |
+| Delete merged branches                 | On                                                                                                                                              | Enabled; verified on PR #8                                                                          |
+| Auto-merge                             | Off (nothing would wait for checks)                                                                                                             | Unchanged                                                                                           |
+| Default `GITHUB_TOKEN` permissions     | Read-only, at both the organization and the repository                                                                                          | Unchanged                                                                                           |
+| Actions may create and approve PRs     | On, at both levels; GitHub offers one combined switch                                                                                           | Verified: Release Please opened PR #10                                                              |
+| Allowed Actions                        | GitHub-owned, plus `googleapis/release-please-action@*` and `amannn/action-semantic-pull-request@*`; SHA pinning required (organization policy) | Enabled; previously "all actions"                                                                   |
+| Fork PR workflows (private)            | Not run; no write tokens or secrets                                                                                                             | Unchanged                                                                                           |
+| Dependabot alerts and security updates | On                                                                                                                                              | Enabled; previously off                                                                             |
+| Immutable releases                     | On                                                                                                                                              | Enabled; verified on v1.1.0: adding an asset returns HTTP 422 and `gh release verify v1.1.0` passes |
+| Branch protection and rulesets         | Return **403**: "Upgrade to GitHub Pro or make this repository public" (organization rulesets: "Upgrade to GitHub Team")                        | **Blocked by plan**                                                                                 |
+| Build provenance attestations          | Private repositories require GitHub Enterprise Cloud; `ENABLE_ARTIFACT_ATTESTATIONS` is unset                                                   | **Blocked by plan**; the provenance job was skipped for v1.1.0                                      |
 
 **Nothing enforces review or required checks.** Passing workflow files do not establish a merge policy. Treat `All checks`, `Conventional Commit PR title`, and an approval from someone other than the author as the merge standard. The [merge-policy audit](#merge-policy-audit) reports departures after they happen. When the plan allows it, add a ruleset for `main` that requires a PR, one approval with stale approvals dismissed, resolved conversations, and both checks; blocks force pushes and deletion; and grants no bypass except a documented emergency role. Add a tag ruleset protecting `v*` from updates and deletion.
 
@@ -102,6 +102,29 @@ npm run test:artifact
 ```
 
 `npm run check` produces `dist/`. Packaging reuses it; the artifact test extracts the archive into an isolated temporary directory, installs only locked runtime dependencies, and checks the compiled application. The full reusable CI adds the security, fuzzing, mutation, and performance gates described above.
+
+## Release record
+
+| Version                                                                                    | Tag commit                                                                                                   | Publication run                                                                                                | Validation                                        | Provenance     | Immutable                         |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | -------------- | --------------------------------- |
+| [v1.1.0](https://github.com/Lunary-Lab/mp3-frame-analyzer/releases/tag/v1.1.0), 2026-10-24 | `82a59e5e50c1361b7dcd8e5463bfee662a01c4bb` ([#10](https://github.com/Lunary-Lab/mp3-frame-analyzer/pull/10)) | [40115887988](https://github.com/Lunary-Lab/mp3-frame-analyzer/actions/runs/40115887988) at `refs/tags/v1.1.0` | All six reusable CI jobs passed at the tag commit | Skipped (plan) | Yes; release attestation verified |
+
+v1.1.0 was the first full exercise of the lifecycle. Release Please opened release PR #10 with `GITHUB_TOKEN` and dispatched CI and title checks for its head. After the squash merge, it created the draft and lightweight tag and dispatched publication at that tag. Publication validated the tag commit and attached the tested files. SHA-256 digests:
+
+```text
+39ea8747daa9635de8cc2e16299db07315ae9ecb556e02a1994331c4a3cda188  mp3-frame-analyzer-1.1.0.tar.gz
+4be821cce6b36b4347e7c21f65ede92763fa3e277c5cbd6f7bb8141ed349a485  mp3-frame-analyzer-1.1.0.cdx.json
+7dae839d8e0b6850ed003f2062d95b6c5a7f52daff6bb87ce03182644e9668e1  mp3-frame-analyzer-1.1.0.manifest.json
+e6f80d97044bcc6c2cfcddfd72f860cf7ca6145202ea94ca514ee4b76d4a7161  SHA256SUMS
+```
+
+Independent checks after publication:
+
+- The downloaded files pass `sha256sum --check`, equal GitHub's asset digests, and are byte-identical to the run's tested `release-assets` artifact.
+- The manifest's `sourceCommit` equals the tag commit, and the archive contains only the runtime inventory.
+- A fresh extract with production-only dependencies returned 6090 for the assessment sample and 33 for `cbr.mp3`. After a rejected 16 MiB upload it still served a pipelined request on the same connection, and it exited 0 on `SIGTERM`.
+
+The 1.1.0 changelog heading links to the release because the 1.0.0 baseline was never tagged.
 
 ## Verify a published release
 

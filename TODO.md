@@ -59,7 +59,10 @@ Verified on 2026-10-24; details in [release setup](docs/releasing.md).
       `googleapis/release-please-action` and
       `amannn/action-semantic-pull-request`; SHA pinning is required.
 - [x] Dependabot alerts and security updates enabled.
-- [x] Immutable releases enabled.
+- [x] Immutable releases enabled; v1.1.0 rejects added assets (HTTP 422) and
+      passes `gh release verify`.
+- [x] Full release lifecycle exercised: release PR #10 → tag `v1.1.0` at
+      `82a59e5` → validated, published, independently smoke-tested assets.
 - [ ] **Blocked by plan:** require `All checks`, `Conventional Commit PR title`,
       an independent approval, and protected release tags. Branch protection
       and rulesets return 403 for this private repository on the organization's

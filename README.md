@@ -115,7 +115,7 @@ The staged secrets hook needs Betterleaks installed locally; the hook fails clos
 
 [Release Please](https://github.com/googleapis/release-please) derives version bumps and a changelog from **Conventional Commit PR titles**, preserved with **Squash and merge**. `fix:` / `perf:` increment the patch version, `feat:` increments the minor version, and `!` marks a breaking change. Labels do not decide versions. The generated release PR updates the package, lockfile, version manifest, and changelog; a maintainer reviews and merges it to approve a release.
 
-Release CI validates the exact tagged commit and publishes a runtime archive containing compiled JavaScript, a lockfile for production dependency installation, checksums, release metadata, and a production SBOM. It installs and runs the **unpacked archive** before those same bytes can be attached to the GitHub Release. No npm registry publication or production deployment is configured.
+[v1.1.0](https://github.com/Lunary-Lab/mp3-frame-analyzer/releases/tag/v1.1.0) was the first release published through this pipeline; see the [release record](docs/releasing.md#release-record). Release CI validates the exact tagged commit and publishes a runtime archive containing compiled JavaScript, a lockfile for production dependency installation, checksums, release metadata, and a production SBOM. It installs and runs the **unpacked archive** before those same bytes can be attached to the GitHub Release. No npm registry publication or production deployment is configured.
 
 ```bash
 npm run check
