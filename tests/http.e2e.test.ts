@@ -16,7 +16,11 @@ afterAll(async () => {
 
 it('accepts multipart/form-data over a real TCP server using native fetch', async () => {
   const form = new FormData();
-  form.set('file', new Blob([new Uint8Array(mp3([frame(), frame()]))], { type: 'audio/mpeg' }), 'sound.mp3');
+  form.set(
+    'file',
+    new Blob([new Uint8Array(mp3([frame(), frame()]))], { type: 'audio/mpeg' }),
+    'sound.mp3',
+  );
   const response = await fetch(`${baseUrl}/file-upload`, { method: 'POST', body: form });
   expect(response.status).toBe(200);
   expect(response.headers.get('content-type')).toContain('application/json');

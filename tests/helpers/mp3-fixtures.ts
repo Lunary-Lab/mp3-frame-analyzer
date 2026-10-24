@@ -68,7 +68,10 @@ export function mp3(frames: readonly Buffer[], intro?: Buffer, tail?: Buffer): B
   return Buffer.concat([intro ?? Buffer.alloc(0), ...frames, tail ?? Buffer.alloc(0)]);
 }
 
-export async function* chunks(bytes: Uint8Array, sizes: readonly number[]): AsyncGenerator<Uint8Array> {
+export async function* chunks(
+  bytes: Uint8Array,
+  sizes: readonly number[],
+): AsyncGenerator<Uint8Array> {
   let offset = 0;
   let index = 0;
   while (offset < bytes.length) {

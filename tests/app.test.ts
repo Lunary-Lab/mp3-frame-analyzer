@@ -44,11 +44,13 @@ describe('POST /file-upload', () => {
 
     const wrongField = await upload(frame(), { field: 'wrong' });
     expect(wrongField.statusCode).toBe(400);
+    expect(wrongField.json()).toHaveProperty('error', 'invalid-upload');
   });
 
   it('rejects unsupported MIME and corrupt audio contents', async () => {
     const wrongMime = await upload(frame(), { mime: 'text/plain' });
     expect(wrongMime.statusCode).toBe(415);
+    expect(wrongMime.json()).toHaveProperty('error', 'unsupported-media-type');
     const corrupt = await upload(Buffer.from('not mp3'));
     expect(corrupt.statusCode).toBe(422);
     expect(corrupt.json()).toMatchObject({ error: 'invalid-mp3' });

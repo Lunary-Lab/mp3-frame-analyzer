@@ -6,7 +6,7 @@
 2. **Property-based**: fast-check generates valid VBR sequences, random payloads, and arbitrary chunk boundaries. The invariant is that every generated frame is counted exactly once regardless of chunk partitioning. Reproducible seeds and minimized counterexamples come from fast-check.
 3. **Integration**: Fastify `inject()` exercises multipart parsing, content type, limits, validation, JSON response and status codes.
 4. **Real HTTP**: a listening server receives multipart `FormData` via Node's native `fetch`.
-5. **Regression**: two real FFmpeg/libmp3lame fixtures (CBR and VBR) with an explicit structural count of 33 frames each.
+5. **Regression**: three real FFmpeg/libmp3lame fixtures: CBR and VBR with Xing/Info metadata (33 physical frames each), plus CBR without Xing metadata (51 physical frames).
 6. **Security**: oversized upload, malformed multipart, forged filename, invalid frame/header and metadata corruption.
 
 ## Mutation smoke versus coverage-guided fuzzing
@@ -37,3 +37,15 @@ ffmpeg -f lavfi -i 'sine=frequency=440:sample_rate=44100:duration=0.8' \
 ```
 
 Inspect the provided exercise sample if available. It is **not** included here because it was not attached in the assignment text.
+
+## Independent format cross-check (2026-10-24)
+
+The core TypeScript parser was compiled independently and checked against nine
+FFmpeg/libmp3lame files at 32 kHz, 44.1 kHz, and 48 kHz. At each rate we
+compared CBR, VBR and a CBR encoding with `-write_xing 0`. FFprobe decoded
+38, 51 and 56 audio frames respectively. Files with Xing/Info each contained
+one additional physical MPEG frame; files without Xing matched the decoder
+count. Every structural count matched, including across 127-byte chunks.
+
+This independent check does not replace the assessment's supplied MP3, which
+was not provided with the assignment excerpt.

@@ -23,9 +23,16 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
-      # npm install creates the lockfile on the first run. Once committed,
-      # switch back to npm ci and restore setup-node cache: npm.
-      - run: npm install --no-audit --no-fund
+      # Use immutable, lockfile-backed installs once the initial npm lockfile
+      # has been committed. Bootstrap only on repositories without a lockfile.
+      - name: Install dependencies
+        run: |
+          if test -f package-lock.json; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+            echo '::warning::No committed npm lockfile; commit package-lock.json for reproducible CI'
+          fi
       - run: npm run check
       - run: npm run test:fuzz
       - run: npm run test:memory
@@ -47,7 +54,9 @@ jobs:
         run: go install github.com/betterleaks/betterleaks@v1.9.0
       - name: Scan entire Git history for secrets
         run: "$(go env GOPATH)/bin/betterleaks" git . --no-banner
-      - name: Install Semgrep CE
-        run: python3 -m pip install --user 'semgrep>=1,<2'
+      - name: Install pinned Semgrep CE in an isolated environment
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/semgrep-venv"
+          "${RUNNER_TEMP}/semgrep-venv/bin/python" -m pip install 'semgrep==1.182.1'
       - name: Targeted security static analysis
-        run: "$HOME/.local/bin/semgrep" scan --config .semgrep.yml --error --metrics=off src
+        run: "${RUNNER_TEMP}/semgrep-venv/bin/semgrep" scan --config .semgrep.yml --error --metrics=off src

@@ -4,7 +4,9 @@ import { chunks, frame, mp3 } from '../tests/helpers/mp3-fixtures.js';
 
 const cbr = mp3(Array.from({ length: 5_000 }, () => frame()));
 const vbr = mp3(
-  Array.from({ length: 5_000 }, (_, i) => frame({ bitrateIndex: 1 + (i % 14), padding: (i % 2) as 0 | 1 })),
+  Array.from({ length: 5_000 }, (_, i) =>
+    frame({ bitrateIndex: 1 + (i % 14), padding: (i % 2) as 0 | 1 }),
+  ),
 );
 
 describe('MP3 parser throughput (~2 MiB samples)', () => {

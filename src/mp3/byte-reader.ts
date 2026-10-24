@@ -20,6 +20,17 @@ export class AsyncByteReader {
     return this.absoluteOffset;
   }
 
+  /** Stop consuming on early rejection and release any retained stream chunk. */
+  async close(): Promise<void> {
+    this.queued.length = 0;
+    this.available = 0;
+    this.headOffset = 0;
+    if (!this.ended) {
+      this.ended = true;
+      await this.iterator.return?.();
+    }
+  }
+
   async has(length: number): Promise<boolean> {
     if (!Number.isSafeInteger(length) || length < 0 || length > 1_500) {
       throw new RangeError('Lookahead must be between 0 and 1500 bytes');

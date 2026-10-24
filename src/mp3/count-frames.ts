@@ -15,7 +15,14 @@ import { isId3v1Tag, parseId3Header } from './id3.js';
  */
 export async function countMp3Frames(input: AsyncIterable<Uint8Array>): Promise<number> {
   const reader = new AsyncByteReader(input);
+  try {
+    return await countFrames(reader);
+  } finally {
+    await reader.close();
+  }
+}
 
+async function countFrames(reader: AsyncByteReader): Promise<number> {
   // ID3v2 tags appear before MPEG audio data. Their body can be large; skip
   // incrementally instead of buffering even a single album-art image.
   let tagCount = 0;
@@ -29,14 +36,23 @@ export async function countMp3Frames(input: AsyncIterable<Uint8Array>): Promise<
     if (!(await reader.has(10))) {
       throw new Mp3ParseError('truncated-mp3', position, 'Incomplete ID3v2 tag header');
     }
-    const id3 = parseId3Header(reader.peek(10), position)!;
+    // Preserve the small header for ID3v2.4 footer verification. Its footer
+    // must be a byte-for-byte copy of header bytes 3..9, with "3DI" instead
+    // of "ID3". Merely recognizing the footer marker accepts corrupt tags.
+    const header = Uint8Array.from(reader.peek(10));
+    const id3 = parseId3Header(header, position)!;
     await reader.skipExactly(10 + id3.bodyLength);
     if (id3.hasFooter) {
       if (!(await reader.has(10))) {
         throw new Mp3ParseError('truncated-mp3', reader.offset, 'Incomplete ID3v2 footer');
       }
       const footer = reader.peek(10);
-      if (footer[0] !== 0x33 || footer[1] !== 0x44 || footer[2] !== 0x49) {
+      if (
+        footer[0] !== 0x33 ||
+        footer[1] !== 0x44 ||
+        footer[2] !== 0x49 ||
+        header.subarray(3).some((byte, index) => footer[index + 3] !== byte)
+      ) {
         throw new Mp3ParseError('invalid-mp3', reader.offset, 'Invalid ID3v2 footer');
       }
       await reader.skipExactly(10);
@@ -69,7 +85,11 @@ export async function countMp3Frames(input: AsyncIterable<Uint8Array>): Promise<
     const frame = parseFrameHeader(bytes);
     if (frame === null) {
       if (looksLikeUnsupportedMpeg(bytes)) {
-        throw new Mp3ParseError('unsupported-format', position, 'Only MPEG-1 Layer III is supported');
+        throw new Mp3ParseError(
+          'unsupported-format',
+          position,
+          'Only MPEG-1 Layer III is supported',
+        );
       }
       throw new Mp3ParseError('invalid-mp3', position, 'Invalid MPEG-1 Layer III frame header');
     }

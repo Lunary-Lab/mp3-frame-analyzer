@@ -35,6 +35,22 @@ describe('streaming MP3 frame counting', () => {
     expect(await count(bytes, 7)).toBe(2);
   });
 
+  it('closes the upstream stream after early rejection', async () => {
+    let closed = false;
+    async function* input(): AsyncGenerator<Uint8Array> {
+      try {
+        yield Buffer.from('INVALID-MP3');
+        // A real multipart file could still have megabytes left to transmit.
+        yield Buffer.alloc(1024);
+      } finally {
+        closed = true;
+      }
+    }
+
+    await expect(countMp3Frames(input())).rejects.toMatchObject({ kind: 'invalid-mp3' });
+    expect(closed).toBe(true);
+  });
+
   it('rejects empty input, noise, and metadata-only input', async () => {
     await expect(count(Buffer.alloc(0))).rejects.toBeInstanceOf(Mp3ParseError);
     await expect(count(Buffer.from('Not an MP3 file'))).rejects.toMatchObject({
@@ -74,18 +90,32 @@ describe('streaming MP3 frame counting', () => {
     });
   });
 
-  it('rejects unexpected bytes after ID3v1 and too many initial ID3v2 tags', async () => {
-    await expect(count(mp3([frame()], undefined, Buffer.concat([id3v1(), frame()])))).rejects.toMatchObject({
-      kind: 'invalid-mp3',
-    });
-    await expect(count(mp3([frame()], Buffer.concat(Array.from({ length: 9 }, () => id3v2(Buffer.alloc(0))))))).rejects.toMatchObject({
-      kind: 'invalid-mp3',
-    });
+  it('requires an ID3v2.4 footer to match the original tag header', async () => {
+    for (const footerByte of [3, 4, 5, 6, 7, 8, 9]) {
+      const tag = id3v2(Buffer.alloc(8), 4, true);
+      tag[tag.length - 10 + footerByte] ^= 1;
+      await expect(count(mp3([frame()], tag))).rejects.toMatchObject({
+        kind: 'invalid-mp3',
+      });
+    }
   });
 
-  it.each(['cbr.mp3', 'vbr.mp3'])('accepts a real LAME-encoded %s fixture', async (name) => {
+  it('rejects unexpected bytes after ID3v1 and too many initial ID3v2 tags', async () => {
+    await expect(
+      count(mp3([frame()], undefined, Buffer.concat([id3v1(), frame()]))),
+    ).rejects.toMatchObject({ kind: 'invalid-mp3' });
+    await expect(
+      count(mp3([frame()], Buffer.concat(Array.from({ length: 9 }, () => id3v2(Buffer.alloc(0))))),
+    ).rejects.toMatchObject({ kind: 'invalid-mp3' });
+  });
+
+  it.each([
+    ['cbr.mp3', 33],
+    ['vbr.mp3', 33],
+    ['no-xing.mp3', 51],
+  ])('counts a real LAME-encoded %s fixture', async (name, expectedCount) => {
     const bytes = await readFile(new URL(`./fixtures/${name}`, import.meta.url));
-    expect(await count(bytes, 17)).toBe(33);
+    expect(await count(bytes, 17)).toBe(expectedCount);
     expect(await count(bytes, 4096)).toBe(await count(bytes, 1));
   });
 });

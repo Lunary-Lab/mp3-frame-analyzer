@@ -7,7 +7,8 @@ The endpoint processes **untrusted binary files**. The primary risks are malform
 Controls:
 
 - Single streamed multipart `file`; fields and extra parts are not supported.
-- Explicit per-file 50 MiB limit, maximum 1 file, zero text fields, one part, bounded multipart header pairs.
+- Explicit per-file 50 MiB production limit, maximum 1 file, zero text fields, one part, bounded multipart header pairs. The limit is injectable for small boundary tests.
+- Multipart limit errors take precedence over parser truncation errors (HTTP 413 rather than HTTP 422). Rejected MIME/field-name uploads are consumed without buffering to avoid stalling multipart parsing.
 - Early MIME filtering followed by actual MPEG header validation. Filename is never used as a path.
 - Bounded lookahead, integer-safe offsets, per-frame range validation, deterministic termination and strict EOF handling.
 - Structured typed parser failures; generic JSON for unexpected exceptions. No upload contents or secrets are logged.

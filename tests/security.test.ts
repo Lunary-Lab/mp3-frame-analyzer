@@ -11,24 +11,34 @@ afterAll(async () => {
   await app.close();
 });
 
-it('rejects a multipart file larger than the configured 50 MiB limit', async () => {
-  // A large ID3 tag forces the parser to consume the upload rather than
-  // short-circuiting early on malformed audio.
-  const tag = Buffer.concat([
-    Buffer.from('ID3'),
-    Buffer.from([4, 0, 0]),
-    synchsafe(MAX_UPLOAD_BYTES),
-    Buffer.alloc(MAX_UPLOAD_BYTES + 1),
-  ]);
-  const { contentType, payload } = multipartBody(tag);
-  const result = await app.inject({
-    method: 'POST',
-    url: '/file-upload',
-    headers: { 'content-type': contentType },
-    payload,
-  });
-  expect(result.statusCode).toBe(413);
-  expect(result.json()).toHaveProperty('error', 'file-too-large');
+it('rejects a multipart file larger than the configured limit with HTTP 413', async () => {
+  // Exercise the exact same Fastify limit and parser-error interaction without
+  // allocating 50+ MiB in the test process or relying on timeout-sensitive CI.
+  const limitedApp = await buildApp({ maxUploadBytes: 256 });
+  try {
+    const tag = Buffer.concat([
+      Buffer.from('ID3'),
+      Buffer.from([4, 0, 0]),
+      synchsafe(1_024),
+      Buffer.alloc(300),
+    ]);
+    const { contentType, payload } = multipartBody(tag);
+    const result = await limitedApp.inject({
+      method: 'POST',
+      url: '/file-upload',
+      headers: { 'content-type': contentType },
+      payload,
+    });
+    expect(result.statusCode).toBe(413);
+    expect(result.json()).toHaveProperty('error', 'file-too-large');
+  } finally {
+    await limitedApp.close();
+  }
+});
+
+it('rejects invalid upload limits rather than running with an unbounded buffer', async () => {
+  await expect(buildApp({ maxUploadBytes: 0 })).rejects.toThrow(RangeError);
+  expect(MAX_UPLOAD_BYTES).toBe(50 * 1024 * 1024);
 });
 
 it('does not trust the file extension or the client-provided MIME alone', async () => {

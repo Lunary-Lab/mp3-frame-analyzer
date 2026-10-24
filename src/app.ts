@@ -1,3 +1,5 @@
+import { finished } from 'node:stream/promises';
+import type { Readable } from 'node:stream';
 import Fastify, { type FastifyInstance } from 'fastify';
 import multipart from '@fastify/multipart';
 import { countMp3Frames } from './mp3/count-frames.js';
@@ -16,6 +18,13 @@ class UploadError extends Error {
   }
 }
 
+/** Discard an unwanted file part so multipart parsing can finish normally. */
+async function discardFile(file: Readable): Promise<void> {
+  const completion = finished(file);
+  file.resume();
+  await completion;
+}
+
 const errorSchema = {
   type: 'object',
   additionalProperties: false,
@@ -26,7 +35,13 @@ const errorSchema = {
   },
 } as const;
 
-export async function buildApp(): Promise<FastifyInstance> {
+/** A smaller limit can be supplied by tests without changing the production default. */
+export async function buildApp(
+  { maxUploadBytes = MAX_UPLOAD_BYTES }: { maxUploadBytes?: number } = {},
+): Promise<FastifyInstance> {
+  if (!Number.isSafeInteger(maxUploadBytes) || maxUploadBytes < 1) {
+    throw new RangeError('maxUploadBytes must be a positive safe integer');
+  }
   const app = Fastify({
     logger: process.env.NODE_ENV !== 'test',
     requestTimeout: 30_000,
@@ -39,7 +54,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       files: 1,
       fields: 0,
       parts: 1,
-      fileSize: MAX_UPLOAD_BYTES,
+      fileSize: maxUploadBytes,
       fieldNameSize: 64,
       headerPairs: 32,
     },
@@ -75,15 +90,28 @@ export async function buildApp(): Promise<FastifyInstance> {
           throw new UploadError(400, 'invalid-upload', 'Only one file field is accepted');
         }
         if (part.fieldname !== 'file') {
+          // Busboy expects a yielded file part to be consumed. Drain rejected
+          // uploads without buffering rather than abandoning a live stream.
+          await discardFile(part.file);
           throw new UploadError(400, 'invalid-upload', 'Upload field must be named "file"');
         }
         if (!['audio/mpeg', 'audio/mp3', 'application/octet-stream'].includes(part.mimetype)) {
+          await discardFile(part.file);
           throw new UploadError(415, 'unsupported-media-type', 'Expected an MP3 file');
         }
 
-        frameCount = await countMp3Frames(part.file);
+        try {
+          frameCount = await countMp3Frames(part.file);
+        } catch (error) {
+          // A file truncated at the multipart limit is a transport error,
+          // not a malformed-MP3 parser error.
+          if (part.file.truncated) {
+            throw new UploadError(413, 'file-too-large', 'File exceeds configured upload limit');
+          }
+          throw error;
+        }
         if (part.file.truncated) {
-          throw new UploadError(413, 'file-too-large', 'File exceeds the 50 MiB upload limit');
+          throw new UploadError(413, 'file-too-large', 'File exceeds configured upload limit');
         }
       }
 
@@ -107,7 +135,8 @@ export async function buildApp(): Promise<FastifyInstance> {
     const status = error.statusCode;
     if (status !== undefined && status >= 400 && status < 500) {
       const code = status === 413 ? 'file-too-large' : 'invalid-upload';
-      const message = status === 413 ? 'Multipart upload exceeds configured limits' : 'Invalid multipart upload';
+      const message =
+        status === 413 ? 'Multipart upload exceeds configured limits' : 'Invalid multipart upload';
       return reply.status(status).send({ error: code, message });
     }
 

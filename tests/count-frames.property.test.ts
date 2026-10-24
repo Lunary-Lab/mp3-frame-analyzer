@@ -3,7 +3,7 @@ import { expect, it } from 'vitest';
 import { countMp3Frames } from '../src/mp3/count-frames.js';
 import { chunks, frame, mp3 } from './helpers/mp3-fixtures.js';
 
-it('property: arbitrary valid VBR frames count identically across arbitrary stream chunking', async () => {
+it('property: VBR frame counts are invariant across chunk boundaries', async () => {
   const caseArb = fc.record({
     frames: fc.array(
       fc.record({

@@ -67,9 +67,9 @@ The parser rejects invalid data at the next required frame boundary. It does not
 npm run check              # format + ESLint + strict typecheck + coverage tests + build
 npm test                   # unit / property / integration / real HTTP E2E
 npm run test:coverage
-npm run test:fuzz          # deterministic mutation smoke (2,000 inputs)
+npm run test:fuzz          # builds first, then deterministic mutation smoke (2,000 inputs)
 FUZZ_CASES=10000 npm run test:fuzz
-npm run test:memory        # 100k frames (~40 MiB) streamed without full buffering
+npm run test:memory        # builds first, then streams 100k frames (~40 MiB)
 npm run bench              # Vitest Bench microbenchmark
 ```
 
