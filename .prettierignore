@@ -1,0 +1,6 @@
+node_modules/
+dist/
+coverage/
+*.mp3
+*.zip
+package-lock.json
