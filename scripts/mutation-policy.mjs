@@ -1,0 +1,217 @@
+import { createHash } from 'node:crypto';
+
+export const PARSER_GLOB = 'src/mp3/**/*.ts';
+export const TEST_COMMAND = 'npm run test:mutation:unit';
+export const sha256 = (text) => createHash('sha256').update(text).digest('hex');
+
+export const sourceContext = (sources) =>
+  sha256(
+    JSON.stringify([...sources.keys()].sort().map((file) => [file, sha256(sources.get(file))])),
+  );
+
+function requireThat(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+/** Convert Stryker's 1-based UTF-16 coordinates into an exact source slice. */
+export function originalAt(source, location) {
+  const lines = source.split('\n');
+  function offset(point) {
+    requireThat(
+      point &&
+        Number.isInteger(point.line) &&
+        point.line >= 1 &&
+        point.line <= lines.length &&
+        Number.isInteger(point.column) &&
+        point.column >= 1 &&
+        point.column <= lines[point.line - 1].length + 1,
+      'Invalid mutation coordinates',
+    );
+    return (
+      lines.slice(0, point.line - 1).reduce((n, line) => n + line.length + 1, 0) + point.column - 1
+    );
+  }
+  const start = offset(location?.start);
+  const end = offset(location?.end);
+  requireThat(end > start, 'Empty or inverted mutation range');
+  return source.slice(start, end);
+}
+
+/** IDs are deliberately excluded: generated mutant numbers change between runs. */
+function identity(file, source, mutant) {
+  return JSON.stringify([
+    file,
+    sha256(source),
+    mutant.mutatorName,
+    originalAt(source, mutant.location),
+    mutant.replacement,
+    mutant.location.start.line,
+    mutant.location.start.column,
+    mutant.location.end.line,
+    mutant.location.end.column,
+  ]);
+}
+
+function exceptionKey(entry) {
+  return JSON.stringify([
+    entry.file,
+    entry.sourceSha256,
+    entry.mutatorName,
+    entry.original,
+    entry.replacement,
+    entry.location?.start?.line,
+    entry.location?.start?.column,
+    entry.location?.end?.line,
+    entry.location?.end?.column,
+  ]);
+}
+
+/**
+ * Audit the unmodified raw report. No source mutation is skipped: exceptions
+ * affect only the separately reported adjusted score, after every mutant ran.
+ * `sources` must contain every current runtime TypeScript file under src/mp3.
+ */
+export function auditMutations(report, policy, sources) {
+  requireThat(policy?.schemaVersion === 1, 'Unsupported equivalence-policy schema');
+  requireThat(policy.target === 100, 'The adjusted mutation gate must remain 100%');
+  requireThat(report?.schemaVersion === '1.0', 'Unsupported Stryker report schema');
+  requireThat(
+    report.framework?.name === 'StrykerJS' && report.framework.version === policy.strykerVersion,
+    'Stryker version changed: review the mutation policy',
+  );
+  const config = report.config;
+  requireThat(
+    JSON.stringify(config?.mutate) === JSON.stringify([PARSER_GLOB]),
+    'Mutation scope must include the entire parser',
+  );
+  requireThat(
+    config.testRunner === 'command' &&
+      config.commandRunner?.command === TEST_COMMAND &&
+      config.coverageAnalysis === 'off' &&
+      !config.incremental,
+    'Unexpected or incremental mutation execution configuration',
+  );
+  requireThat(
+    !config.mutator?.excludedMutations?.length && !config.ignorers?.length,
+    'Broad mutation exclusions are forbidden',
+  );
+  requireThat(sources instanceof Map && sources.size > 0, 'Empty parser source inventory');
+  const paths = [...sources.keys()].sort();
+  requireThat(
+    report.files && JSON.stringify(Object.keys(report.files).sort()) === JSON.stringify(paths),
+    'Mutation report does not contain every current parser source',
+  );
+  requireThat(
+    policy.contextSha256 === sourceContext(sources),
+    'Parser context changed: re-review equivalence proofs before updating the context hash',
+  );
+  requireThat(Array.isArray(policy.equivalents), 'Missing reviewed equivalent-mutant list');
+  const exceptions = new Map();
+  const ids = new Set();
+  for (const entry of policy.equivalents) {
+    requireThat(
+      typeof entry.id === 'string' && entry.id.length > 0 && !ids.has(entry.id),
+      'Duplicate or invalid equivalence ID',
+    );
+    ids.add(entry.id);
+    const source = sources.get(entry.file);
+    requireThat(
+      typeof source === 'string' && sha256(source) === entry.sourceSha256,
+      `Stale source context for ${entry.id}; re-review its proof`,
+    );
+    requireThat(
+      originalAt(source, entry.location) === entry.original,
+      `Original expression changed for ${entry.id}`,
+    );
+    requireThat(
+      typeof entry.proof === 'string' &&
+        entry.proof.trim().length >= 50 &&
+        typeof entry.assumptions === 'string' &&
+        entry.assumptions.trim().length >= 20,
+      `Missing equivalence proof or assumptions for ${entry.id}`,
+    );
+    const key = exceptionKey(entry);
+    requireThat(!exceptions.has(key), `Duplicate mutation exception ${entry.id}`);
+    exceptions.set(key, entry);
+  }
+
+  const seen = new Set();
+  const mutantIds = new Set();
+  const totals = { killed: 0, timedOut: 0, equivalent: 0, total: 0 };
+  const perFile = {};
+  for (const file of paths) {
+    const source = sources.get(file);
+    const record = report.files[file];
+    requireThat(record.source === source, `Report source is stale: ${file}`);
+    requireThat(!/Stryker\s+disable/.test(source), `Source-level mutation suppression: ${file}`);
+    requireThat(
+      Array.isArray(record.mutants) && record.mutants.length > 0,
+      `No mutants generated for ${file}`,
+    );
+    const counts = { killed: 0, timedOut: 0, equivalent: 0, total: record.mutants.length };
+    const seenFingerprints = new Set();
+    for (const mutant of record.mutants) {
+      requireThat(
+        typeof mutant.id === 'string' && !mutantIds.has(mutant.id),
+        'Duplicate or invalid mutant ID',
+      );
+      mutantIds.add(mutant.id);
+      requireThat(
+        typeof mutant.replacement === 'string' && typeof mutant.mutatorName === 'string',
+        `Malformed mutant in ${file}`,
+      );
+      const key = identity(file, source, mutant);
+      requireThat(!seenFingerprints.has(key), `Duplicate mutation in ${file}`);
+      seenFingerprints.add(key);
+      const equivalent = exceptions.get(key);
+      if (equivalent) {
+        requireThat(
+          mutant.status === 'Survived',
+          `${equivalent.id} no longer survives as expected; re-review or remove the exception`,
+        );
+        requireThat(mutant.testsCompleted > 0, `${equivalent.id} was not tested`);
+        counts.equivalent++;
+        seen.add(key);
+      } else if (mutant.status === 'Killed') {
+        requireThat(
+          mutant.testsCompleted > 0 && mutant.killedBy?.length > 0,
+          `No failing-test evidence for killed mutant ${mutant.id}`,
+        );
+        counts.killed++;
+      } else if (mutant.status === 'Timeout') {
+        // Stryker counts timeouts as detected, not killed. Keep both visible.
+        requireThat(
+          Number.isFinite(mutant.duration) && mutant.duration > 0,
+          `Invalid timeout evidence for mutant ${mutant.id}`,
+        );
+        counts.timedOut++;
+      } else {
+        // Includes Survived, NoCoverage, Ignored, Pending, CompileError and RuntimeError.
+        throw new Error(
+          `Unreviewed ${mutant.status} mutant ${file}:${mutant.location.start.line} ` +
+            `${mutant.mutatorName} -> ${JSON.stringify(mutant.replacement)}`,
+        );
+      }
+    }
+    perFile[file] = counts;
+    for (const k of Object.keys(totals)) totals[k] += counts[k];
+  }
+  requireThat(seen.size === exceptions.size, 'Stale exception: its exact mutant was not generated');
+  const detected = totals.killed + totals.timedOut;
+  const relevant = totals.total - totals.equivalent;
+  requireThat(
+    relevant > 0 && detected === relevant,
+    'Adjusted mutation coverage is not exactly 100%',
+  );
+  return {
+    status: 'passed',
+    target: 100,
+    strykerVersion: policy.strykerVersion,
+    rawScore: (detected / totals.total) * 100,
+    adjustedScore: 100,
+    ...totals,
+    perFile,
+    equivalents: [...exceptions.values()].map((entry) => entry.id),
+    scope: paths,
+  };
+}

@@ -4,12 +4,12 @@ export default defineConfig({
   test: {
     include: ['tests/**/*.test.ts'],
     environment: 'node',
+    execArgv: ['--expose-gc'],
     testTimeout: 15_000,
     benchmark: { include: ['bench/**/*.bench.ts'] },
     coverage: {
       provider: 'v8',
       include: ['src/mp3/**/*.ts', 'src/app.ts', 'src/shutdown.ts'],
-      exclude: ['src/mp3/errors.ts'],
       thresholds: {
         lines: 95,
         functions: 100,

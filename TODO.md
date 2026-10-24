@@ -86,3 +86,9 @@ Verified on 2026-10-24; details in [release setup](docs/releasing.md).
       update. Then delete the override, regenerate the lockfile, and rerun
       mutation testing and both audits.
 - [x] Implement bounded free-format MPEG-1 Layer III frame-spacing inference and independent tests. Ambiguous very short streams are rejected.
+
+## Mutation validation follow-up
+
+- [x] Expand mutation testing to every parser module, including the stateful reader, traversal, and error class.
+- [x] Review every survivor after the parser updates from PRs #8, #13 and #16: 46 killed with new tests, 28 documented equivalents (raw 95.97%, adjusted 100%).
+- [ ] Preserve the raw score alongside the 100% audited gate; never suppress mutants solely to improve a headline metric.

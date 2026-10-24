@@ -133,7 +133,28 @@ HTTP tests cover the accepted MIME types, malformed multipart classification, re
 
 On Node 24.15.0 with npm 11.19.0, the complete local check passed **107 application tests** (including the external assessment sample and two pipelined-connection regressions) and **12 helper-tool tests**. Statements: **99.57%**, branches: **99.47%**, functions: **100%**, lines: **99.54%** across the configured parser, HTTP adapter, and shutdown scope. The four core parser modules retain **100%** in every coverage dimension. The HTTP adapter retains its defensive extra-field check. Server bootstrap is exercised by subprocess tests and the packaged runtime smoke; it is not included in the instrumented coverage denominator.
 
-The current focused mutation score is **98.27%**: 164 assertion kills, 6 timeouts, and 3 reviewed equivalent survivors across 173 mutants. The 95% gate is unchanged. See [the detailed mutation review](mutation-review.md) for scope and survivor reasoning. Full and production dependency audits report zero known advisories for the locked tree at this check. These are dated measurements, not permanent guarantees; current CI and scheduled audits are authoritative for subsequent changes.
+At that time, the focused two-decoder mutation score was **98.27%** (164 kills, 6 timeouts and 3 reviewed equivalent survivors across 173 mutants). The full-parser gate below has since replaced that scope and its 95% threshold. See [the detailed mutation review](mutation-review.md) for scope and survivor reasoning. Full and production dependency audits report zero known advisories for the locked tree at this check. These are dated measurements, not permanent guarantees; current CI and scheduled audits are authoritative for subsequent changes.
+
+## Full-parser mutation analysis
+
+The mutation scope covers all files in `src/mp3/**/*.ts`, including the
+streaming reader, frame traversal and errors. The command runner executes the
+parser test files; the HTTP adapter's tests are outside the `src/mp3` scope and are
+excluded, which changed no mutant's outcome. The gate runs all mutants, preserves the raw report, and fails
+on every unexplained survivor or stale exact equivalence approval; documentation
+is in [the audit](mutation-review.md).
+
+The full campaign on the combined parser (October 24, 2026, Stryker 10.1.1,
+`PROPERTY_SEED=20261024`) generated **694 mutants** across all seven modules.
+It produced **632 kills and 34 timeouts**. The **raw score is 95.97%**. The
+**adjusted score is 100%**, after excluding 28 reviewed equivalents. It ran
+in 5 minutes 41 seconds locally. Running the whole suite per mutant took 14
+minutes 49 seconds locally and exceeded the 20-minute CI wall-clock limit, so
+the mutation command now runs only parser tests and the per-mutant timeout is
+2 seconds. The first run on the combined tree scored 89.77% raw. Its 46
+non-equivalent survivors, in the free-format inference, the Xing/VBRI detector
+and the traversal error messages, were all killed with focused boundary tests
+rather than exempted.
 
 ## Free-format, raw upload and metadata-header policy
 

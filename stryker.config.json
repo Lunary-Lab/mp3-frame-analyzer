@@ -5,14 +5,18 @@
     "command": "npm run test:mutation:unit"
   },
   "coverageAnalysis": "off",
-  "mutate": ["src/mp3/frame-header.ts", "src/mp3/id3.ts"],
+  "mutate": ["src/mp3/**/*.ts"],
   "reporters": ["clear-text", "progress", "json"],
   "concurrency": 2,
-  "timeoutMS": 30000,
+  "timeoutMS": 2000,
   "thresholds": {
-    "high": 95,
-    "low": 80,
-    "break": 95
+    "high": 100,
+    "low": 100,
+    "break": 0
   },
-  "tempDirName": ".stryker-tmp"
+  "tempDirName": ".stryker-tmp",
+  "ignorePatterns": ["reports/**", "coverage/**", "dist/**", ".git/**"],
+  "jsonReporter": {
+    "fileName": "reports/mutation/mutation.json"
+  }
 }

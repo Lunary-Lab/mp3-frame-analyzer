@@ -77,8 +77,40 @@ describe('free-format MPEG-1 Layer III', () => {
 
   it('rejects mixing free-format and ordinary indexed frames', async () => {
     const free = mp3(Array.from({ length: 5 }, () => freeFrame(800)));
-    await expect(count(mp3([frame(), free]))).rejects.toMatchObject({ kind: 'invalid-mp3' });
-    await expect(count(mp3([free, frame()]))).rejects.toMatchObject({ kind: 'invalid-mp3' });
+    await expect(count(mp3([frame(), free]))).rejects.toMatchObject({
+      kind: 'invalid-mp3',
+      message: 'Cannot mix free-format and indexed MPEG frames',
+    });
+    await expect(count(mp3([free, frame()]))).rejects.toMatchObject({
+      kind: 'invalid-mp3',
+      message: 'Cannot mix indexed and free-format MPEG frames',
+    });
+  });
+
+  it('accepts the documented minimum of exactly three consecutive frames', async () => {
+    await expect(count(mp3([freeFrame(730), freeFrame(730), freeFrame(730)]))).resolves.toBe(3);
+  });
+
+  it('accepts the smallest and largest supported spans', async () => {
+    await expect(count(mp3(Array.from({ length: 4 }, () => freeFrame(24))))).resolves.toBe(4);
+    // A padded 2,881-byte first frame puts the second header at the last candidate offset.
+    const largest = mp3(Array.from({ length: 4 }, () => freeFrame(2_880, 1)));
+    await expect(count(largest, 4096)).resolves.toBe(4);
+  });
+
+  it('rejects spans just outside the supported range despite consecutive headers', async () => {
+    const belowMinimum = mp3([freeFrame(23, 1), freeFrame(23), freeFrame(23)]);
+    await expect(count(belowMinimum)).rejects.toMatchObject({ kind: 'unsupported-format' });
+    const aboveMaximum = mp3(Array.from({ length: 3 }, () => freeFrame(2_881)));
+    await expect(count(aboveMaximum, 4096)).rejects.toMatchObject({ kind: 'unsupported-format' });
+  });
+
+  it('sees the fourth maximum-size header at the probe edge over a shorter payload chain', async () => {
+    // The probe holds three maximum frames plus one header. The genuine chain
+    // then has four headers, outweighing a three-header decoy chain in frame 0.
+    const frames = Array.from({ length: 5 }, () => freeFrame(2_880, 1));
+    for (const offset of [1_000, 2_000]) frames[0]!.set([0xff, 0xfb, 0x02, 0xc4], offset);
+    await expect(count(mp3(frames), 4096)).resolves.toBe(5);
   });
 
   it('rejects inconsistent bitrate index after inferred free-format spacing', async () => {

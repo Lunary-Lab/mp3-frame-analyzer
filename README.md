@@ -94,7 +94,7 @@ npm run fuzz:extended      # 120 seconds per target, on-demand
 npm run test:memory        # distinct chunks, independent 8/32/128 MiB processes
 npm run test:performance   # two local 32 MiB uploads plus small-upload probes
 npm run bench              # Vitest Bench microbenchmark
-npm run mutation           # Stryker decoder mutations, CI minimum 95%
+npm run mutation           # Full parser; 100% audited detection
 ```
 
 `tests/` includes deterministic binary fixtures, structured property testing with fast-check, actual FFmpeg-encoded MP3s, HTTP injection tests, and a real TCP upload test. The mutation smoke harness is separate from the **coverage-guided Jazzer.js 4** targets. A raw-byte target detects crashes and chunk-dependent results; an independent structured-frame generator detects incorrect positive counts. Their seeds, regression corpus, minimizer, and limits are documented in [Fuzzing](fuzz/README.md).
@@ -186,3 +186,13 @@ The parser modules have **100% coverage** across statements, branches, functions
 and lines using actual edge-case tests. The HTTP adapter retains defensive
 branches without manufacturing test-only faults to obtain 100% overall coverage.
 See [Testing](docs/testing.md) for mutation testing and security verification.
+
+## Full-parser mutation gate
+
+`npm run mutation` now tests **every parser TypeScript module** under
+`src/mp3/**/*.ts`. The raw Stryker JSON report is preserved unchanged. A
+separate fail-closed audit requires **100% detection after narrowly reviewed
+behaviorally equivalent mutations**. Exceptions match source hashes, exact
+expressions, mutation operators and replacements in
+[`mutation-equivalents.json`](mutation-equivalents.json), never whole source
+lines or mutation families. [Audit design](docs/mutation-review.md).
