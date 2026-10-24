@@ -1,0 +1,33 @@
+name: Extended fuzz campaign
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Replay tracked fuzz cases
+        run: npm run fuzz:regression
+      - name: Run extended coverage-guided campaign (4 minutes total)
+        run: npm run fuzz:extended
+      - name: Upload crash artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fuzz-crashes
+          path: |
+            fuzz/crashes/
+            .fuzz-corpus/
+          if-no-files-found: warn
+          retention-days: 14
