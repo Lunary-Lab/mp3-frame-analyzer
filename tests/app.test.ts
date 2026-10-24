@@ -123,7 +123,87 @@ describe('POST /file-upload', () => {
     }
   });
 
-  it('returns 404 for unrelated routes', async () => {
-    expect((await app.inject({ method: 'GET', url: '/unknown' })).statusCode).toBe(404);
+  it('returns an explicit JSON 405 with Allow: POST for wrong upload methods', async () => {
+    for (const method of ['GET', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] as const) {
+      const response = await app.inject({ method, url: '/file-upload?unused=true' });
+      expect(response.statusCode).toBe(405);
+      expect(response.headers['allow']).toBe('POST');
+      expect(response.headers['content-type']).toContain('application/json');
+      expect(response.json()).toEqual({
+        error: 'method-not-allowed',
+        message: 'Use POST /file-upload',
+      });
+    }
+  });
+
+  it('rejects HEAD /file-upload with Allow: POST', async () => {
+    const response = await app.inject({ method: 'HEAD', url: '/file-upload' });
+    expect(response.statusCode).toBe(405);
+    expect(response.headers['allow']).toBe('POST');
+  });
+
+  it('returns a sanitized JSON 404 for unrelated routes', async () => {
+    const response = await app.inject({ method: 'GET', url: '/unknown' });
+    expect(response.statusCode).toBe(404);
+    expect(response.headers['content-type']).toContain('application/json');
+    expect(response.json()).toEqual({ error: 'not-found', message: 'Route not found' });
+  });
+
+  it('rejects an empty multipart file as 400, distinct from malformed audio', async () => {
+    const empty = await upload(Buffer.alloc(0));
+    expect(empty.statusCode).toBe(400);
+    expect(empty.json()).toEqual({
+      error: 'empty-file',
+      message: 'The MP3 file must not be empty',
+    });
+
+    const invalid = await upload(Buffer.from('not an MP3'));
+    expect(invalid.statusCode).toBe(422);
+    expect(invalid.json()).toHaveProperty('error', 'invalid-mp3');
+  });
+
+  it.each([
+    ['image/png', 'binary'],
+    ['application/pdf', 'binary'],
+    ['application/json', '{"not":"an upload"}'],
+    ['application/json', '{invalid-json'],
+  ])(
+    'reports unsupported %s bodies with a 415, even before route handling',
+    async (mime, payload) => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/file-upload',
+        headers: { 'content-type': mime },
+        payload,
+      });
+      expect(response.statusCode).toBe(415);
+      expect(response.json()).toEqual({
+        error: 'unsupported-media-type',
+        message: 'Expected an MP3 upload',
+      });
+    },
+  );
+
+  it('sanitizes unknown Fastify-style HTTP 413 errors instead of claiming file size', async () => {
+    const failingApp = await buildApp();
+    failingApp.addHook('preHandler', async () => {
+      throw Object.assign(new Error('internal resource detail'), { statusCode: 413 });
+    });
+    try {
+      const { contentType, payload } = multipartBody(frame());
+      const response = await failingApp.inject({
+        method: 'POST',
+        url: '/file-upload',
+        headers: { 'content-type': contentType },
+        payload,
+      });
+      expect(response.statusCode).toBe(413);
+      expect(response.json()).toEqual({
+        error: 'request-too-large',
+        message: 'Request exceeds configured limits',
+      });
+    } finally {
+      await failingApp.close();
+    }
   });
 });

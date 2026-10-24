@@ -174,3 +174,39 @@ it('cleans up a cancelled upload and continues accepting requests', async () => 
     await cancellationApp.close();
   }
 });
+
+it('does not treat a disconnected raw upload as an internal server error', async () => {
+  const cancellationApp = await buildApp();
+  const started = Promise.withResolvers<IncomingMessage>();
+  cancellationApp.addHook('onRequest', async (request) => {
+    started.resolve(request.raw);
+  });
+  const address = await cancellationApp.listen({ host: '127.0.0.1', port: 0 });
+  const client = httpRequest(address + '/file-upload', {
+    method: 'POST',
+    headers: {
+      'content-type': 'audio/mpeg',
+      'content-length': String(frame().length * 4),
+    },
+  });
+  client.on('error', () => {}); // Destroying the client is intentional.
+  try {
+    client.write(frame().subarray(0, 40));
+    const serverRequest = await started.promise;
+    const closed = new Promise<void>((resolve) => serverRequest.once('close', resolve));
+    client.destroy();
+    await closed;
+    expect(serverRequest.aborted).toBe(true);
+
+    const followUp = await fetch(address + '/file-upload', {
+      method: 'POST',
+      headers: { 'content-type': 'audio/mpeg' },
+      body: new Uint8Array(frame()),
+    });
+    expect(followUp.status).toBe(200);
+    expect(await followUp.json()).toEqual({ frameCount: 1 });
+  } finally {
+    client.destroy();
+    await cancellationApp.close();
+  }
+});

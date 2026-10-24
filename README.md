@@ -42,16 +42,24 @@ The response uses `Content-Type: application/json`. For multipart uploads, the `
 
 ### API
 
-| Condition                            | Status | Response                                              |
-| ------------------------------------ | ------ | ----------------------------------------------------- |
-| Valid MPEG-1 Layer III file          | 200    | `{ "frameCount": 33 }` (example)                      |
-| Missing or malformed multipart input | 400    | `{ "error": "missing-file", "message": "..." }`       |
-| Unsupported MIME / MPEG format       | 415    | `{ "error": "unsupported-format", "message": "..." }` |
-| Multipart limit exceeded             | 413    | `{ "error": "file-too-large", "message": "..." }`     |
-| Malformed / truncated MP3            | 422    | `{ "error": "invalid-mp3", "message": "..." }`        |
-| Unexpected application failure       | 500    | `{ "error": "internal-error", "message": "..." }`     |
+| Situation                                      | HTTP status | Error code / behavior                                                                            |
+| ---------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------ |
+| Valid raw or multipart MPEG-1 Layer III        | 200         | `{"frameCount":33}` (example)                                                                    |
+| Missing multipart file or invalid fields/query | 400         | `missing-file`, `invalid-upload`, `invalid-option`                                               |
+| Empty raw or multipart file                    | 400         | `empty-file`                                                                                     |
+| Invalid HTTP body framing / length             | 400         | `invalid-request` when the connection remains writable                                           |
+| MP3 file exceeds per-file limit                | 413         | `file-too-large`                                                                                 |
+| Extra multipart file / form field / part       | 413         | `too-many-files`, `unexpected-fields`, or `too-many-parts`, depending on the first limit reached |
+| Other framework size limit                     | 413         | `request-too-large`                                                                              |
+| Unsupported MIME or MPEG format                | 415         | `unsupported-media-type` or `unsupported-format`                                                 |
+| Invalid, malformed, or truncated MP3 content   | 422         | `invalid-mp3` or `truncated-mp3`                                                                 |
+| Unknown route                                  | 404         | `not-found`                                                                                      |
+| Wrong method on `/file-upload`                 | 405         | `method-not-allowed` with `Allow: POST`                                                          |
+| Unexpected application failure                 | 500         | `internal-error` (sanitized)                                                                     |
 
-Exact error codes vary with validation failure. Application-generated error bodies use JSON; a connection abort or low-level HTTP timeout can terminate before an application response is possible. Upload size is limited to **50 MiB** with one file part and no text fields; only a syntactically valid file yields a frame count.
+All application-generated error bodies use JSON with `error` and `message` strings. Limits apply to both raw and multipart uploads. A malformed MPEG header can be rejected **before** a later size-limit violation is observable; an explicit oversized raw `Content-Length` is rejected early. Thus 413 does not always take precedence over 422 for a malicious stream.
+
+A rejected **raw** upload sends its JSON error with `Connection: close` rather than draining arbitrary additional bytes. Multipart uploads retain existing draining behavior for keep-alive reuse. Client disconnects, aborted/incomplete HTTP bodies, and native Node request-header timeouts may prevent any application JSON response; a client should not expect an HTTP response from a broken connection. 429 and 503 are intentionally not configured because this local assessment API has no rate limiter or load-shedding policy.
 
 ## Why the frame count can differ from FFprobe and MediaInfo
 

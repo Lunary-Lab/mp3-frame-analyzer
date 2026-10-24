@@ -82,7 +82,7 @@ it('rejects text fields without accepting an empty file upload', async () => {
       '--field-test\r\nContent-Disposition: form-data; name="description"\r\n\r\nexample\r\n--field-test--\r\n',
   });
   expect(response.statusCode).toBe(413);
-  expect(response.json()).toHaveProperty('error', 'file-too-large');
+  expect(response.json()).toHaveProperty('error', 'unexpected-fields');
 });
 
 it('does not parse file declarations beyond the bounded multipart header buffer', async () => {
@@ -128,7 +128,7 @@ it.each(['file', 'field'] as const)(
       payload: Buffer.concat([first.payload.subarray(0, -closing.length), extra, closing]),
     });
     expect(response.statusCode).toBe(413);
-    expect(response.json()).toHaveProperty('error', 'file-too-large');
+    expect(response.json()).toHaveProperty('error', 'too-many-parts');
   },
 );
 

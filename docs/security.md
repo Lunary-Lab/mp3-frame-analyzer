@@ -6,7 +6,7 @@ The endpoint processes **untrusted binary files**. The primary risks are malform
 
 Controls:
 
-- Single streamed multipart `file`; fields and extra parts are not supported.
+- One streamed raw MP3 or one multipart `file` part; multipart text fields and extra parts are not supported.
 - Explicit per-file 50 MiB production limit, maximum 1 file, zero text fields, one part, 32 multipart header pairs and an 8 KiB header-buffer bound. The file limit is injectable for small boundary tests. `headerSize` bounds retained multipart header data; it is not a promise of HTTP 413 for every oversized header. Busboy supports this option at runtime even though the multipart plugin declaration omits it. The formerly configured `fieldNameSize` did not apply to multipart input.
 - Multipart limit errors take precedence over parser truncation errors (HTTP 413 rather than HTTP 422). Rejected MIME/field-name uploads are consumed without buffering to avoid stalling multipart parsing.
 - Early MIME filtering followed by actual MPEG header validation. Filename is never used as a path.
@@ -48,4 +48,14 @@ Buffer chunks under normal operation; these guards protect the parser boundary.
 
 ## Raw streaming boundary
 
-Raw MP3 content types are passed directly as Node streams by Fastify, not buffered by `parseAs: 'buffer'`. An independent chunk-by-chunk size limiter enforces the same 50 MiB cap as multipart even without `Content-Length`. Oversize known-length requests can be rejected immediately, with a background drain for keep-alive reuse. Query parameter `includeVbrHeaderFrame` accepts literal `true` and `false` only. Free-format frame-boundary inference reads at most about 8.7 KiB of bounded lookahead and does not scan arbitrarily long audio data to find a candidate sync.
+Raw MP3 content types are passed directly as Node streams by Fastify, not buffered by `parseAs: 'buffer'`. An independent chunk-by-chunk size limiter enforces the same 50 MiB cap as multipart even without `Content-Length`. Oversize known-length raw requests are rejected immediately with `Connection: close`, without draining their remaining payload. Query parameter `includeVbrHeaderFrame` accepts literal `true` and `false` only. Free-format frame-boundary inference reads at most about 8.7 KiB of bounded lookahead and does not scan arbitrarily long audio data to find a candidate sync.
+
+## HTTP error classification and connection lifecycle
+
+The upload handler maps Fastify 5 and `@fastify/multipart` 10.1.6 **typed error codes** to stable, sanitized JSON. The multipart plugin uses HTTP 413 not only for file size but also for its file-count, field-count, and part-count limits. These expose distinct codes `file-too-large`, `too-many-files`, `unexpected-fields`, and `too-many-parts`. Unknown framework 4xx errors preserve their HTTP category but never return internal messages or falsely claim to be multipart-specific.
+
+An empty named file is HTTP 400 `empty-file`; a nonempty but malformed MPEG file remains HTTP 422. Unsupported MIME types are 415 whether rejected by the route or before the handler by Fastify. The API explicitly returns HTTP 405 with `Allow: POST` for other methods on `/file-upload`; unknown routes return JSON 404. Application-generated errors never include parser internals beyond the existing typed MPEG error messages.
+
+Early rejection of **raw** uploads closes the HTTP/1.1 connection after responding rather than consuming an unbounded remainder. This prevents attackers from using an invalid first header to force a background drain. A raw request that was cancelled at the TCP layer may be impossible to answer; these are not silently converted into HTTP 500. Multipart early rejection retains its established stream-draining behavior for pipelining and connection reuse, subject to the existing per-file limit and server request timeout.
+
+For network framing violations (e.g., a client advertises more bytes in `Content-Length` than it sends before disconnecting), native Node may close the connection without an application JSON error. Error precedence is **first observable failure**, not a guarantee that a subsequent size limit overrides early MPEG validation. A public service would still need reverse-proxy aggregate body limits, client-rate controls and ingress timeouts.
