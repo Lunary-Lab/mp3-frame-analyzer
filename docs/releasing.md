@@ -65,6 +65,17 @@ These are administrator settings; merging this PR cannot enable or prove them:
 
 The review's ruleset request returned **403** because the current private-repository plan did not provide that feature. Keep the repository private; resolve plan/enforcement settings separately. Passing workflow files alone do not establish an enforced merge policy. When private build attestations are not enabled, the provenance job is skipped and a validated release can still publish with its checksums; do not describe it as build-attested. GitHub's immutable-release attestation is a separate platform feature.
 
+## Merge-policy audit
+
+GitHub returns **403** for branch protection and rulesets on this private repository under the organization's Free plan, so no merge rule is enforced. `main-policy-audit.yml` is a **detective** control, not a substitute: after every push to `main`, it reads metadata only and fails if any pushed commit:
+
+- is not a single-parent squash commit, or has a subject that is not a Conventional Commit;
+- did not arrive through a merged pull request based on `main`;
+- came from a PR head without passing **All checks** and **Conventional Commit PR title** check runs; or
+- was force-pushed.
+
+It warns when the PR had no approval from someone other than its author. A failed audit means the policy was bypassed after the fact; investigate it and correct `main` through a new PR. Release publication separately revalidates the exact tagged commit, so an unchecked merge cannot publish without passing CI.
+
 ## Local verification
 
 From a clean checkout with Node 24 and the documented npm 11.19.0. Archive packaging uses **GNU tar on Linux**, matching the GitHub runner:
