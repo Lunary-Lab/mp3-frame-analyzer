@@ -119,7 +119,9 @@ The assessment's actual MP3 is checked optionally when
 contains third-party music. SHA-256
 `97707a18a58ba75122b1668f5ed738f090121343432d9172a6409ddfa4fc5ab3`
 identifies the specific 1,458,172-byte file. Structural frame count: **6090**;
-FFprobe decoded-frame count: **6089** (Xing metadata frame).
+FFprobe decoded-frame count and MediaInfo `FrameCount`: **6089** (the first
+frame carries the Xing header, whose declared count is 6089). See
+[the frame-count contract](frame-count-contract.md).
 
 ## Upload lifecycle and release verification
 

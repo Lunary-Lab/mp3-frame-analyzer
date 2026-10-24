@@ -41,19 +41,35 @@ make the alias obsolete cannot pass CI until this item is reassessed.
       checks and do not suppress mutants for cosmetic improvements.
 - [x] Extract shared ID3 traversal and header-error classification to make
       the counting loop easier to follow and remove its complexity warning.
-- [ ] If the evaluator specifies whether Xing metadata frames count,
-      reconcile the API contract and sample expectations accordingly.
+- [ ] **Owner decision:** confirm whether `frameCount` includes the Xing/Info
+      metadata frame (6090 for the sample) or counts audio frames only (6089,
+      matching MediaInfo and FFprobe). Evidence, the clarification question, and
+      the change/versioning plan are in
+      [the frame-count contract](docs/frame-count-contract.md).
 
 ## Repository settings and supported format
 
-- [ ] Enable required checks (`All checks` and `Conventional Commit PR title`)
-      and protected release tags when the private-repository plan supports
-      them. This repository currently cannot enforce rulesets on its plan.
-- [ ] Confirm Actions is allowed to create release PRs; configure squash
-      commits to use the PR title. See [release setup](docs/releasing.md).
-- [ ] Enable immutable GitHub Releases after checking repository availability.
-- [ ] Enable build attestations when private-repository plan support is
-      available; checksums and SBOMs work without it.
+Verified on 2026-10-24; details in [release setup](docs/releasing.md).
+
+- [x] Squash merges only, PR title as the commit subject, blank commit body,
+      merge and rebase merges disabled, merged branches deleted.
+- [x] GitHub Actions may create release PRs (Release Please opened PR #10 with
+      `GITHUB_TOKEN`); default token permissions stay read-only.
+- [x] Allowed Actions limited to GitHub-owned actions plus
+      `googleapis/release-please-action` and
+      `amannn/action-semantic-pull-request`; SHA pinning is required.
+- [x] Dependabot alerts and security updates enabled.
+- [x] Immutable releases enabled.
+- [ ] **Blocked by plan:** require `All checks`, `Conventional Commit PR title`,
+      an independent approval, and protected release tags. Branch protection
+      and rulesets return 403 for this private repository on the organization's
+      Free plan (Team or higher, or a public repository, is required).
+      `main-policy-audit.yml` detects bypasses after the fact; it does not
+      prevent them.
+- [ ] **Blocked by plan:** build provenance attestations for this private
+      repository require GitHub Enterprise Cloud. When available, set the
+      Actions variable `ENABLE_ARTIFACT_ATTESTATIONS=true` and verify a release
+      with `gh attestation verify`.
 - [ ] Remove the scoped `typed-rest-client` / `qs` override (review by
       2026-12-15). `@stryker-mutator/core@10.1.1` (latest, 2026-10-23) still
       requires `typed-rest-client ~2.3.0`, whose 2.3.1 pins `qs@6.15.1`

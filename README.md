@@ -1,6 +1,6 @@
 # MP3 frame analyzer
 
-A small, streaming TypeScript API that **logically counts MPEG-1 Audio Layer III frames**, without invoking an audio decoder or third-party MP3 parsing package.
+A small, streaming TypeScript API that **logically counts MPEG-1 Audio Layer III frames**, without invoking an audio decoder or third-party MP3 parsing package. It answers an [MP3 file analysis assessment](docs/assessment-brief.md), kept in this repository as the original brief.
 
 Downloaded a release archive? Start with its **RUNTIME.md**, also available in the [runtime guide](docs/runtime.md). The steps below are for a source checkout.
 
@@ -44,11 +44,11 @@ The response uses `Content-Type: application/json`. The `file` field must be a *
 
 Exact error codes vary with validation failure. Application-generated error bodies use JSON; a connection abort or low-level HTTP timeout can terminate before an application response is possible. Upload size is limited to **50 MiB** with one file part and no text fields; only a syntactically valid file yields a frame count.
 
-## Why the frame count can differ from FFprobe
+## Why the frame count can differ from FFprobe and MediaInfo
 
 This endpoint counts **physical, complete MPEG-1 Layer III frames**. This includes a first MPEG frame containing Xing/Info/VBRI metadata. Such a frame may not carry independently decodable audio; some decoder-facing tools omit it from `nb_read_frames`. The included CBR and VBR fixtures contain 33 physical frames while `ffprobe -count_frames` reports 32 audio frames. The result is derived from frame headers **not** the Xing frame-count field.
 
-This counting convention is explicit because the task asks for the number of frames _in the file_, not only the number of decoded audio packets. If a supplied evaluation sample defines decoded frames differently, the contract must be clarified; do not silently subtract one.
+This counting convention is explicit because the task asks for the number of frames _in the file_, not only the number of decoded audio packets. **It is not yet confirmed by the evaluator.** The brief suggests MediaInfo for verification, and MediaInfo reports **6089** for the supplied sample (its Xing-declared count), as does FFprobe; this API reports **6090**. The evidence and a ready clarification question are in [the frame-count contract](docs/frame-count-contract.md). Do not silently subtract one: changing the convention is an owner decision.
 
 ## Implementation
 
@@ -123,10 +123,12 @@ npm run package:release    # packages the existing dist/ build; also creates SBO
 npm run test:artifact      # fresh production install, real upload, graceful shutdown
 ```
 
-See [Releasing and repository settings](docs/releasing.md) for initial GitHub settings, required checks, permissions, provenance availability, and recovery of an interrupted draft release.
+See [Releasing and repository settings](docs/releasing.md) for the verified GitHub settings, what the current plan cannot enforce, permissions, artifact verification, provenance availability, and recovery of an interrupted release.
 
 ## More detail
 
+- [Original assessment brief](docs/assessment-brief.md)
+- [Frame-count contract: evidence and open question](docs/frame-count-contract.md)
 - [Architecture, frame format and trade-offs](docs/architecture.md)
 - [Testing, fuzzing, performance and reproduction](docs/testing.md)
 - [Mutation review and equivalent mutants](docs/mutation-review.md)
@@ -157,9 +159,10 @@ ASSESSMENT_SAMPLE_PATH=/path/to/assessment_sample.mp3 npm run test:coverage
 
 The sample SHA-256 is
 `97707a18a58ba75122b1668f5ed738f090121343432d9172a6409ddfa4fc5ab3`.
-The API correctly returns `{"frameCount":6090}` using the documented
-**physical MPEG-frame** counting contract. FFprobe counts **6089 decoded audio
-frames** because the first MPEG frame carries Xing metadata.
+The API returns `{"frameCount":6090}` using the documented **physical
+MPEG-frame** counting contract. FFprobe and MediaInfo report **6089** because
+the first MPEG frame carries only the Xing header; whether the assessment
+expects 6089 is [an open question](docs/frame-count-contract.md).
 
 The parser modules have **100% coverage** across statements, branches, functions
 and lines using actual edge-case tests. The HTTP adapter retains defensive

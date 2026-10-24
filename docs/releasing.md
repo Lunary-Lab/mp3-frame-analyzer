@@ -6,7 +6,7 @@ Releases distribute a versioned runtime archive through GitHub Releases. The npm
 
 [Release Please Action v5](https://github.com/googleapis/release-please-action/blob/v5.0.0/README.md) maintains the release PR, changelog, package version, lockfile version, and `.release-please-manifest.json`. The manifest starts at **1.0.0**, with bootstrap commit `d951f1593d5d48947400a7943bd5b6e328d4d744`. This is a version baseline, not evidence of a published 1.0.0 artifact. The next nonbreaking `feat` release advances it to **1.1.0**.
 
-Use Conventional Commit PR titles and **squash merge with the PR title as the commit title**. Release Please reads the resulting commits on `main`; PR labels do not provide a second versioning authority. Optional scopes describe the changed area without changing the bump. Dependabot uses `fix(deps):` for production dependency updates, `build(deps-dev):` for development-only updates, and `ci(deps):` for Actions updates.
+Use Conventional Commit PR titles and **squash merge with the PR title as the commit title**. Release Please reads the resulting commits on `main`; PR labels do not provide a second versioning authority. The squash commit body defaults to **blank** because Release Please also parses commit bodies: a `BREAKING CHANGE:` note or a paragraph starting `fix:` copied from branch commits or a PR description would otherwise add releases the title did not declare. Mark breaking changes with `!` in the PR title; a deliberate `BREAKING CHANGE:` footer can still be typed into the merge dialog. Optional scopes describe the changed area without changing the bump. Dependabot uses `fix(deps):` for production dependency updates, `build(deps-dev):` for development-only updates, and `ci(deps):` for Actions updates.
 
 | Squashed PR title                                                     | Effect                   |
 | --------------------------------------------------------------------- | ------------------------ |
@@ -21,7 +21,7 @@ An intentional incompatible change to the JSON shape, documented status semantic
 ## Automated path
 
 1. A merge to `main` runs `release-please.yml`. Its metadata-only job creates or updates the release PR; it does not check out project code.
-2. The workflow explicitly dispatches **CI and Conventional Commit PR title validation at the release PR head** using `GITHUB_TOKEN`. This avoids relying on token-generated PR events or their approval-dependent runs. GitHub documents `workflow_dispatch` as an allowed trigger for this token in [Triggering a workflow](https://docs.github.com/actions/using-workflows/triggering-a-workflow).
+2. The workflow explicitly dispatches **CI and Conventional Commit PR title validation at the release PR head** using `GITHUB_TOKEN`. This avoids relying on token-generated PR events or their approval-dependent runs. GitHub documents `workflow_dispatch` as an allowed trigger for this token in [Triggering a workflow](https://docs.github.com/actions/using-workflows/triggering-a-workflow). The dispatched check runs attach to the release PR's head commit, but GitHub does not list `workflow_dispatch` runs in the PR's checks tab. Review them from the `check-release-pr` job log, which prints both run URLs, or with `gh api repos/Lunary-Lab/mp3-frame-analyzer/commits/<head-sha>/check-runs`. GitHub also queues the token-created PR's ordinary `pull_request` CI as **awaiting approval**. Approving it (Actions → the run → _Approve and run_) adds a second, PR-visible validation of the merge ref; CI is read-only, so approval grants no write access.
 3. Review and squash merge the release PR. Release Please creates a **draft release** and, with `force-tag-creation`, creates its `vX.Y.Z` tag while it is still a draft.
 4. The workflow dispatches `publish-release.yml` **at that exact tag**, passing its full commit SHA. Preflight requires a matching draft, a matching tag commit already reachable from `main`, and `GITHUB_SHA` equal to the declared source commit. Dispatching from `main` is rejected.
 5. The reusable, read-only CI validates that commit. It checks Node 24 and 26, npm compatibility, formatting, lint, both TypeScript compilers, coverage, tooling, mutation testing, fuzzing, dependency audits, static analysis, secrets, and measured memory/HTTP behavior. The Node 24 release lane packages the existing compiled output and tests the unpacked artifact; the publisher never rebuilds it.
@@ -53,17 +53,30 @@ The runtime archive is deliberately assembled from compiled output; `npm pack` i
 
 Workflow actions are pinned by commit. Ordinary PR title validation uses `pull_request_target` only to inspect metadata; it never executes PR code. The dispatched title check also verifies that it is checking the current release PR head.
 
-## One-time repository settings
+## Repository settings
 
-These are administrator settings; merging this PR cannot enable or prove them:
+Values below were read back from the GitHub API after being saved on **2026-10-24**. The repository stays private.
 
-- Allow GitHub Actions to create pull requests under the repository/organization policy, and permit the workflow's pinned actions.
-- Configure squash-merge titles to use PR titles and use squash merges for versioned changes.
-- Require **All checks**, **Conventional Commit PR title**, and appropriate review approval before merging to `main`; protect release tags from updates/deletion while allowing the release automation to create them.
-- Enable [immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases) where available. Attaching all assets before publication is compatible with immutability; this workflow does not overwrite published versions.
-- For this private repository, enable build attestations only after confirming plan support, then set the Actions variable **`ENABLE_ARTIFACT_ATTESTATIONS=true`**. GitHub requires **Enterprise Cloud** for private/internal build attestations; public repositories use the attestation job automatically. The workflow uses the first-party [`actions/attest`](https://github.com/actions/attest) action, which GitHub recommends for new implementations over the `attest-build-provenance` wrapper. See the official [attestation availability note](https://github.com/actions/attest-build-provenance#usage) and [attestation documentation](https://docs.github.com/en/actions/concepts/security/artifact-attestations).
+| Setting                                | Value                                                                                                                                           | Status                                 |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| Merge methods                          | Squash only; merge commits and rebase merges disabled                                                                                           | Enabled                                |
+| Squash commit                          | Title = PR title (`PR_TITLE`), body = blank (`BLANK`)                                                                                           | Enabled; used for PR #8                |
+| Delete merged branches                 | On                                                                                                                                              | Enabled; verified on PR #8             |
+| Auto-merge                             | Off (nothing would wait for checks)                                                                                                             | Unchanged                              |
+| Default `GITHUB_TOKEN` permissions     | Read-only, at both the organization and the repository                                                                                          | Unchanged                              |
+| Actions may create and approve PRs     | On, at both levels; GitHub offers one combined switch                                                                                           | Verified: Release Please opened PR #10 |
+| Allowed Actions                        | GitHub-owned, plus `googleapis/release-please-action@*` and `amannn/action-semantic-pull-request@*`; SHA pinning required (organization policy) | Enabled; previously "all actions"      |
+| Fork PR workflows (private)            | Not run; no write tokens or secrets                                                                                                             | Unchanged                              |
+| Dependabot alerts and security updates | On                                                                                                                                              | Enabled; previously off                |
+| Immutable releases                     | On                                                                                                                                              | Enabled; previously off                |
+| Branch protection and rulesets         | Return **403**: "Upgrade to GitHub Pro or make this repository public" (organization rulesets: "Upgrade to GitHub Team")                        | **Blocked by plan**                    |
+| Build provenance attestations          | Private repositories require GitHub Enterprise Cloud; `ENABLE_ARTIFACT_ATTESTATIONS` is unset                                                   | **Blocked by plan**                    |
 
-The review's ruleset request returned **403** because the current private-repository plan did not provide that feature. Keep the repository private; resolve plan/enforcement settings separately. Passing workflow files alone do not establish an enforced merge policy. When private build attestations are not enabled, the provenance job is skipped and a validated release can still publish with its checksums; do not describe it as build-attested. GitHub's immutable-release attestation is a separate platform feature.
+**Nothing enforces review or required checks.** Passing workflow files do not establish a merge policy. Treat `All checks`, `Conventional Commit PR title`, and an approval from someone other than the author as the merge standard. The [merge-policy audit](#merge-policy-audit) reports departures after they happen. When the plan allows it, add a ruleset for `main` that requires a PR, one approval with stale approvals dismissed, resolved conversations, and both checks; blocks force pushes and deletion; and grants no bypass except a documented emergency role. Add a tag ruleset protecting `v*` from updates and deletion.
+
+**Immutable releases** lock a release's assets and tag once it is published. Drafts remain editable, so publication attaches every asset to the draft first and then publishes it; published versions are never overwritten. GitHub's release attestation for immutable releases is a platform feature separate from build provenance.
+
+**Build attestations** use the first-party [`actions/attest`](https://github.com/actions/attest) action, which GitHub recommends over the `attest-build-provenance` wrapper for new implementations. The job runs automatically for public repositories. For this private repository, it runs only after Enterprise Cloud is available and the Actions variable **`ENABLE_ARTIFACT_ATTESTATIONS=true`** is set. When it is skipped, a validated release still publishes with checksums and an SBOM, and must not be described as build-attested. See [attestation availability](https://github.com/actions/attest-build-provenance#usage) and [the attestation documentation](https://docs.github.com/en/actions/concepts/security/artifact-attestations).
 
 ## Merge-policy audit
 
@@ -89,6 +102,27 @@ npm run test:artifact
 ```
 
 `npm run check` produces `dist/`. Packaging reuses it; the artifact test extracts the archive into an isolated temporary directory, installs only locked runtime dependencies, and checks the compiled application. The full reusable CI adds the security, fuzzing, mutation, and performance gates described above.
+
+## Verify a published release
+
+Download every asset of one release into an empty directory, then check the digests, metadata, and runtime:
+
+```bash
+tag=v1.1.0
+mkdir "release-$tag" && cd "release-$tag"
+gh release download "$tag" --repo Lunary-Lab/mp3-frame-analyzer
+sha256sum --check SHA256SUMS
+jq . "mp3-frame-analyzer-${tag#v}.manifest.json"   # version, tag, sourceCommit
+gh api "repos/Lunary-Lab/mp3-frame-analyzer/commits/$tag" --jq .sha   # must equal sourceCommit
+```
+
+Then follow [the runtime guide](runtime.md) to extract the archive, install production dependencies, upload an MP3, and stop the server with `SIGTERM`. When build attestations are enabled, also run `gh attestation verify "mp3-frame-analyzer-${tag#v}.tar.gz" --repo Lunary-Lab/mp3-frame-analyzer` and confirm that the reported workflow is `publish-release.yml` at `refs/tags/$tag`.
+
+## Recover from a failed release
+
+- **Release PR validation failed:** fix the cause in an ordinary PR. Release Please regenerates the release PR, and redispatches its checks, only when its title or notes change. Otherwise use the release PR's **Update branch** button; that human-initiated push runs the ordinary PR checks. Publication revalidates the tagged commit either way.
+- **Publication failed after the draft and tag were created:** a retry runs the workflows and source from the tag, so changes merged to `main` cannot repair it. Retry the draft as shown below for transient failures, such as a runner or network error. If the tagged source or its workflows are defective, leave the draft unpublished or delete it, merge the fix, and let Release Please propose the next version. Never move or recreate a release tag.
+- **A published release is defective:** published releases are immutable. Merge a correction and release a new version.
 
 ## Retry an unpublished draft
 
