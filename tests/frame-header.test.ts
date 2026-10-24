@@ -82,4 +82,15 @@ describe('MPEG-1 Layer III headers', () => {
       }
     }
   });
+
+  it('rejects a frame with all valid fields except the 11-bit sync marker', () => {
+    const corrupted = frame();
+    corrupted[0] = 0x7f;
+    expect(parseFrameHeader(corrupted)).toBeNull();
+  });
+
+  it('requires four bytes and both sync bytes before classifying unsupported MPEG', () => {
+    expect(looksLikeUnsupportedMpeg(Buffer.from([0xff, 0xf3]))).toBe(false);
+    expect(looksLikeUnsupportedMpeg(Buffer.from([0xff, 0x00, 0x90, 0x00]))).toBe(false);
+  });
 });

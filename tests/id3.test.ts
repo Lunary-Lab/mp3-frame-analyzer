@@ -99,4 +99,61 @@ describe('ID3 tag parsing', () => {
       expect(isId3v1Tag(Buffer.from(candidate))).toBe(false);
     }
   });
+
+  it('matches all three ID3 signature bytes, individually and together', () => {
+    for (const signature of ['XD3', 'IX3', 'IDX', 'XXX', 'IXX', 'XX3', 'ID4', 'I33']) {
+      const bytes = Buffer.concat([Buffer.from(signature), Buffer.alloc(8)]);
+      expect(parseId3Header(bytes, 0)).toBeNull();
+    }
+  });
+
+  it('preserves the kind, offset, and message for a truncated ID3 header', () => {
+    try {
+      parseId3Header(Buffer.from('ID3'), 82);
+      throw new Error('Expected truncated ID3 error');
+    } catch (error) {
+      expect(error).toMatchObject({
+        kind: 'truncated-mp3',
+        offset: 82,
+        message: 'Incomplete ID3v2 header',
+      });
+    }
+  });
+
+  it('rejects ID3v2 revision 0xff but accepts other revision values', () => {
+    const invalid = id3v2(Buffer.alloc(1), 4);
+    invalid[4] = 0xff;
+    expect(() => parseId3Header(invalid, 19)).toThrow(/Unsupported ID3v2 version/);
+    try {
+      parseId3Header(invalid, 19);
+      throw new Error('Expected unsupported revision');
+    } catch (error) {
+      expect(error).toMatchObject({ kind: 'unsupported-format', offset: 19 });
+    }
+    const valid = id3v2(Buffer.alloc(1), 4);
+    valid[4] = 0xfe;
+    expect(parseId3Header(valid, 19)).toMatchObject({ bodyLength: 1 });
+  });
+
+  it('allows ID3v2.3 defined experimental flag while rejecting it in ID3v2.2', () => {
+    const v3 = id3v2(Buffer.alloc(1), 3);
+    v3[5] = 0x20;
+    expect(parseId3Header(v3, 12)).toEqual({
+      bodyLength: 1,
+      totalLength: 11,
+      hasFooter: false,
+    });
+    const v2 = id3v2(Buffer.alloc(1), 2);
+    v2[5] = 0x20;
+    expect(() => parseId3Header(v2, 12)).toThrow(/Reserved ID3v2 flags/);
+  });
+
+  it('reads precisely the four synchsafe length bytes and never inspects tag body', () => {
+    const bytes = id3v2(Buffer.from([0x80, 0x80]), 4);
+    expect(parseId3Header(bytes, 0)).toEqual({
+      bodyLength: 2,
+      totalLength: 12,
+      hasFooter: false,
+    });
+  });
 });

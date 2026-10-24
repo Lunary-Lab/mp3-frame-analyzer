@@ -26,8 +26,10 @@
 
 ## Quality follow-ups
 
-- [ ] Reassess meaningful surviving Stryker mutants; avoid weakening tests,
-      suppressing mutants, or manufacturing score-only assertions.
+- [x] Classify and test the 16 surviving Stryker mutants; the latest score is
+      97.90%, with only 3 equivalent survivors and a 95% CI minimum.
+- [ ] Reassess surviving mutants after parser/tooling changes; retain defensive
+      checks and do not suppress mutants for cosmetic improvements.
 - [ ] Resolve the parser's advisory complexity warning only if extracting
       smaller functions makes the implementation clearer.
 - [ ] If the evaluator specifies whether Xing metadata frames count,

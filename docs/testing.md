@@ -104,10 +104,12 @@ decoder, where a changed bit, size or error code is meaningful. Do not equate
 mutants and add focused tests, without excluding difficult cases to inflate
 the score.
 
-The initial mutation baseline was **76.92%** (94.23% frame-header; 67.03%
-ID3) before the strengthened mutation-targeted assertions. These figures are
-not claimed as final scores. The extended run is intentionally separate from
-quick CI; normal CI should not depend on running hundreds of mutation cases.
+The measured Stryker score rose from **76.92% to 97.90%**, after tests for
+invalid MPEG sync patterns, ID3 signature and revision handling, and reserved
+flag boundaries. The latest run killed 138 mutants, timed out on 2, and left
+3 provably equivalent survivors in ID3 validation. CI now enforces a 95%
+minimum for the deliberately limited two-decoder mutation scope. See
+[the mutation audit](mutation-review.md) and [the passing GitHub run](https://github.com/Lunary-Lab/mp3-frame-analyzer/actions/runs/40102747242).
 
 The assessment's actual MP3 is checked optionally when
 `ASSESSMENT_SAMPLE_PATH` is set. It is not checked into Git because it

@@ -74,6 +74,7 @@ npm run fuzz:coverage      # 8 seconds per target, coverage-guided
 npm run fuzz:extended      # 120 seconds per target, on-demand
 npm run test:memory        # builds first, then streams 100k frames (~40 MiB)
 npm run bench              # Vitest Bench microbenchmark
+npm run mutation           # Stryker decoder mutations, CI minimum 95%
 ```
 
 `tests/` includes deterministic binary fixtures, structured property testing with fast-check, actual FFmpeg-encoded MP3s, HTTP injection tests, and a real TCP upload test. The mutation smoke harness is separate from the **coverage-guided Jazzer.js 4** targets. A raw-byte target detects crashes and chunk-dependent results; an independent structured-frame generator detects incorrect positive counts. Their seeds, regression corpus, minimizer, and limits are documented in [Fuzzing](fuzz/README.md).
@@ -98,7 +99,7 @@ k6 run bench/upload.k6.js
 
 ## Developer workflow / security
 
-- Node 24, TypeScript 6 with `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, ESM.
+- Node 24, native TypeScript 7 with the TypeScript 6 API compatibility alias, `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, ESM.
 - ESLint + type-aware `typescript-eslint`, cyclomatic complexity warnings, Prettier.
 - Vitest/V8 coverage with enforced thresholds; fast-check properties; mutation smoke, Jazzer.js coverage-guided fuzzing, and replayable crash regressions.
 - [Lefthook](https://lefthook.dev/) optional local hooks: `npm run hooks:install`. Pre-commit checks staged formatting and [Betterleaks](https://github.com/betterleaks/betterleaks) staged secrets (v1.9.0). Pre-push runs `npm run check`.
@@ -111,6 +112,7 @@ The staged secrets hook needs Betterleaks installed locally; the hook fails clos
 
 - [Architecture, frame format and trade-offs](docs/architecture.md)
 - [Testing, fuzzing, performance and reproduction](docs/testing.md)
+- [Mutation review and equivalent mutants](docs/mutation-review.md)
 - [Security assumptions and scope](docs/security.md)
 
 ## Native TypeScript 7 and API compatibility
