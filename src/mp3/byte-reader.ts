@@ -11,6 +11,7 @@ export class AsyncByteReader {
   private available = 0;
   private ended = false;
   private absoluteOffset = 0;
+  private static readonly MAX_EMPTY_CHUNKS = 1_024;
 
   constructor(input: AsyncIterable<Uint8Array>) {
     this.iterator = input[Symbol.asyncIterator]();
@@ -35,11 +36,25 @@ export class AsyncByteReader {
     if (!Number.isSafeInteger(length) || length < 0 || length > 1_500) {
       throw new RangeError('Lookahead must be between 0 and 1500 bytes');
     }
+    let consecutiveEmptyChunks = 0;
     while (this.available < length && !this.ended) {
       const next = await this.iterator.next();
       if (next.done) {
         this.ended = true;
-      } else if (next.value.length > 0) {
+      } else if (!(next.value instanceof Uint8Array)) {
+        throw new Mp3ParseError('invalid-mp3', this.absoluteOffset, 'Invalid byte stream chunk');
+      } else if (next.value.length === 0) {
+        // An async iterable can yield empty buffers indefinitely without ever
+        // advancing the parser. Bound this case to avoid starving the event loop.
+        if (++consecutiveEmptyChunks > AsyncByteReader.MAX_EMPTY_CHUNKS) {
+          throw new Mp3ParseError(
+            'invalid-mp3',
+            this.absoluteOffset,
+            'Input stream made no progress',
+          );
+        }
+      } else {
+        consecutiveEmptyChunks = 0;
         this.queued.push(next.value);
         this.available += next.value.length;
       }

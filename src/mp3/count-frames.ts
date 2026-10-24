@@ -15,10 +15,24 @@ import { isId3v1Tag, parseId3Header } from './id3.js';
  */
 export async function countMp3Frames(input: AsyncIterable<Uint8Array>): Promise<number> {
   const reader = new AsyncByteReader(input);
+  let failed = false;
   try {
     return await countFrames(reader);
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
-    await reader.close();
+    if (failed) {
+      // An upstream stream can fail a second time during cleanup. Preserve
+      // the original parse error rather than incorrectly returning HTTP 500.
+      try {
+        await reader.close();
+      } catch {
+        // The parse error remains the actionable failure.
+      }
+    } else {
+      await reader.close();
+    }
   }
 }
 

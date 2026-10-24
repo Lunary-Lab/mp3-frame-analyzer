@@ -51,6 +51,44 @@ describe('streaming MP3 frame counting', () => {
     expect(closed).toBe(true);
   });
 
+  it('rejects streams with no byte progress rather than spinning indefinitely', async () => {
+    let closed = false;
+    async function* emptyChunks(): AsyncGenerator<Uint8Array> {
+      try {
+        for (let i = 0; i < 2_000; i++) yield new Uint8Array(0);
+        yield frame();
+      } finally {
+        closed = true;
+      }
+    }
+    await expect(countMp3Frames(emptyChunks())).rejects.toMatchObject({
+      kind: 'invalid-mp3',
+      message: 'Input stream made no progress',
+    });
+    expect(closed).toBe(true);
+  });
+
+  it('preserves the parse error when upstream cleanup also fails', async () => {
+    const source: AsyncIterable<Uint8Array> = {
+      [Symbol.asyncIterator]() {
+        let sent = false;
+        return {
+          async next() {
+            if (!sent) {
+              sent = true;
+              return { done: false as const, value: Buffer.from('not-an-mp3') };
+            }
+            return { done: true as const, value: undefined };
+          },
+          async return() {
+            throw new Error('Upstream cleanup failed');
+          },
+        };
+      },
+    };
+    await expect(countMp3Frames(source)).rejects.toMatchObject({ kind: 'invalid-mp3' });
+  });
+
   it('rejects empty input, noise, and metadata-only input', async () => {
     await expect(count(Buffer.alloc(0))).rejects.toBeInstanceOf(Mp3ParseError);
     await expect(count(Buffer.from('Not an MP3 file'))).rejects.toMatchObject({

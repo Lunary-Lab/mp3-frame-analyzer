@@ -25,3 +25,11 @@ Fastify's multipart `fileSize` limit is **not** an aggregate HTTP-body limit. Th
 Lefthook checks staged secret content when explicitly installed by the developer. A missing Betterleaks binary fails the hook; GitHub Actions runs the history scan independently so bypassing local hooks does not bypass CI.
 
 The focused Semgrep rules are supplemental rather than a claim of comprehensive SAST coverage. A production deployment would additionally conduct threat modeling, host/container hardening, wider SAST rules, periodic dependency review, load testing, and incident monitoring.
+
+### Hostile async iterators
+
+The streaming parser bounds consecutive zero-length chunks and validates incoming
+chunk types. This prevents a malformed or custom async iterable from spinning
+forever without consuming a byte. On an early parse failure, iterator cleanup
+errors cannot mask the primary domain error. Fastify already emits nonempty
+Buffer chunks under normal operation; these guards protect the parser boundary.
