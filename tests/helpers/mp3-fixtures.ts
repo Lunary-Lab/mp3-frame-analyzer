@@ -1,7 +1,5 @@
 /** Small, deterministic MPEG fixtures; never relies on the parser under test. */
-const BITRATES = [
-  0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0,
-] as const;
+const BITRATES = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0] as const;
 const SAMPLE_RATES = [44_100, 48_000, 32_000] as const;
 
 export interface FrameOptions {

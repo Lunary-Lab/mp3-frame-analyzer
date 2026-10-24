@@ -5,6 +5,7 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     environment: 'node',
     testTimeout: 15_000,
+    benchmark: { include: ['bench/**/*.bench.ts'] },
     coverage: {
       provider: 'v8',
       include: ['src/mp3/**/*.ts', 'src/app.ts'],
@@ -13,5 +14,4 @@ export default defineConfig({
       reporter: ['text', 'lcov'],
     },
   },
-  benchmark: { include: ['bench/**/*.bench.ts'] },
 });

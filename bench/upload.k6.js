@@ -22,10 +22,9 @@ export const options = {
 };
 
 export default function () {
-  const response = http.post(
-    __ENV.BASE_URL ?? 'http://127.0.0.1:3000/file-upload',
-    { file: http.file(fixture, 'cbr.mp3', 'audio/mpeg') },
-  );
+  const response = http.post(__ENV.BASE_URL ?? 'http://127.0.0.1:3000/file-upload', {
+    file: http.file(fixture, 'cbr.mp3', 'audio/mpeg'),
+  });
   const valid = check(response, {
     'status 200': (r) => r.status === 200,
     'valid frame count': (r) => r.json('frameCount') === 33,

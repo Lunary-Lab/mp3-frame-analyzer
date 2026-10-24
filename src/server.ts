@@ -1,12 +1,12 @@
 import { buildApp } from './app.js';
 
-const portValue = process.env.PORT ?? '3000';
+const portValue = process.env['PORT'] ?? '3000';
 const port = Number(portValue);
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error('PORT must be an integer between 1 and 65535');
 }
 
-const host = process.env.HOST ?? '127.0.0.1';
+const host = process.env['HOST'] ?? '127.0.0.1';
 const app = await buildApp();
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

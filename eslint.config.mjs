@@ -18,4 +18,11 @@ export default tseslint.config(
       '@typescript-eslint/consistent-type-imports': 'error',
     },
   },
+  {
+    files: ['tests/**/*.ts'],
+    rules: {
+      // Async generators and iterator mocks intentionally don't await.
+      '@typescript-eslint/require-await': 'off',
+    },
+  },
 );

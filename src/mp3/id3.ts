@@ -30,8 +30,7 @@ export function parseId3Header(bytes: Uint8Array, offset: number): Id3Header | n
       throw new Mp3ParseError('invalid-mp3', offset + i, 'Invalid synchsafe ID3v2 size');
     }
   }
-  const bodyLength =
-    (bytes[6]! << 21) | (bytes[7]! << 14) | (bytes[8]! << 7) | bytes[9]!;
+  const bodyLength = (bytes[6]! << 21) | (bytes[7]! << 14) | (bytes[8]! << 7) | bytes[9]!;
   const hasFooter = version === 4 && (flags & 0x10) !== 0;
   return { bodyLength, totalLength: 10 + bodyLength + (hasFooter ? 10 : 0), hasFooter };
 }

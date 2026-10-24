@@ -20,7 +20,7 @@ Every frame is parsed individually. This supports constant and variable bitrate 
 
 - ID3v2 tags at the beginning are detected through `ID3` and skipped by their **28-bit synchsafe size** (plus a 10-byte footer when present in v2.4). Tag contents and album art are never accumulated into a whole-tag buffer.
 - ID3v1 at the end is recognized by the `TAG` prefix and excluded from the count (the trailing tag must be exactly 128 bytes).
-- The returned count includes all physically present MPEG-1 Layer III frames, including metadata-bearing Xing/Info/VBRI frames. The count is obtained by traversal, not copied from any encoder metadata. Decoder tools may report one fewer *decoded audio* frame than physical frame count.
+- The returned count includes all physically present MPEG-1 Layer III frames, including metadata-bearing Xing/Info/VBRI frames. The count is obtained by traversal, not copied from any encoder metadata. Decoder tools may report one fewer _decoded audio_ frame than physical frame count.
 - The stream must start at a frame or an ID3v2 tag; arbitrary leading garbage is not scanned away. Invalid bytes at expected frame boundaries are rejected rather than silently resynchronized.
 - A truncated final frame, leftover partial header, or unrecognized trailing metadata is rejected.
 

@@ -8,13 +8,14 @@ import { Mp3ParseError } from './mp3/errors.js';
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 class UploadError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly code: string,
-    message: string,
-  ) {
+  readonly status: number;
+  readonly code: string;
+
+  constructor(status: number, code: string, message: string) {
     super(message);
     this.name = 'UploadError';
+    this.status = status;
+    this.code = code;
   }
 }
 
@@ -36,14 +37,14 @@ const errorSchema = {
 } as const;
 
 /** A smaller limit can be supplied by tests without changing the production default. */
-export async function buildApp(
-  { maxUploadBytes = MAX_UPLOAD_BYTES }: { maxUploadBytes?: number } = {},
-): Promise<FastifyInstance> {
+export async function buildApp({
+  maxUploadBytes = MAX_UPLOAD_BYTES,
+}: { maxUploadBytes?: number } = {}): Promise<FastifyInstance> {
   if (!Number.isSafeInteger(maxUploadBytes) || maxUploadBytes < 1) {
     throw new RangeError('maxUploadBytes must be a positive safe integer');
   }
   const app = Fastify({
-    logger: process.env.NODE_ENV !== 'test',
+    logger: process.env['NODE_ENV'] !== 'test',
     requestTimeout: 30_000,
     connectionTimeout: 10_000,
   });
@@ -132,12 +133,24 @@ export async function buildApp(
     }
 
     // @fastify/multipart raises typed 413/4xx errors for parser limits and malformed forms.
-    const status = error.statusCode;
-    if (status !== undefined && status >= 400 && status < 500) {
+    const status = error instanceof Error && 'statusCode' in error ? error.statusCode : undefined;
+    if (typeof status === 'number' && status >= 400 && status < 500) {
       const code = status === 413 ? 'file-too-large' : 'invalid-upload';
       const message =
         status === 413 ? 'Multipart upload exceeds configured limits' : 'Invalid multipart upload';
       return reply.status(status).send({ error: code, message });
+    }
+
+    // Truncated multipart data can surface as a raw Busboy error with no statusCode.
+    if (
+      request.isMultipart() &&
+      error instanceof Error &&
+      ['Unexpected end of multipart data', 'Unexpected end of form'].includes(error.message)
+    ) {
+      return reply.status(400).send({
+        error: 'invalid-upload',
+        message: 'Incomplete multipart request',
+      });
     }
 
     request.log.error({ err: error }, 'Unexpected upload failure');

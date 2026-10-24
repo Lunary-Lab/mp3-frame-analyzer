@@ -17,21 +17,16 @@ export function parseFrameHeader(bytes: Uint8Array): FrameHeader | null {
   if (bytes.length < 4) return null;
 
   // Unsigned bitwise arithmetic avoids signed 32-bit interpretation issues.
-  const word =
-    ((bytes[0]! << 24) |
-      (bytes[1]! << 16) |
-      (bytes[2]! << 8) |
-      bytes[3]!) >>>
-    0;
+  const word = ((bytes[0]! << 24) | (bytes[1]! << 16) | (bytes[2]! << 8) | bytes[3]!) >>> 0;
 
-  if ((word >>> 21) !== 0x7ff) return null; // 11-bit sync marker
+  if (word >>> 21 !== 0x7ff) return null; // 11-bit sync marker
   if (((word >>> 19) & 0b11) !== 0b11) return null; // MPEG-1 only
   if (((word >>> 17) & 0b11) !== 0b01) return null; // Layer III only
 
   const bitrateKbps = BITRATES_KBPS[(word >>> 12) & 0b1111]!;
   const sampleRateHz = SAMPLE_RATES_HZ[(word >>> 10) & 0b11]!;
   if (bitrateKbps === 0 || sampleRateHz === 0) return null;
-  if (((word >>> 4) & 0b11) === 0b10) return null; // Reserved emphasis
+  if ((word & 0b11) === 0b10) return null; // Reserved emphasis occupies bits 1..0
 
   const padding = ((word >>> 9) & 1) as 0 | 1;
   return {

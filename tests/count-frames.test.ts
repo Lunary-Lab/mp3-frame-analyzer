@@ -131,7 +131,8 @@ describe('streaming MP3 frame counting', () => {
   it('requires an ID3v2.4 footer to match the original tag header', async () => {
     for (const footerByte of [3, 4, 5, 6, 7, 8, 9]) {
       const tag = id3v2(Buffer.alloc(8), 4, true);
-      tag[tag.length - 10 + footerByte] ^= 1;
+      const footerOffset = tag.length - 10 + footerByte;
+      tag[footerOffset] = tag[footerOffset]! ^ 1;
       await expect(count(mp3([frame()], tag))).rejects.toMatchObject({
         kind: 'invalid-mp3',
       });
@@ -142,9 +143,10 @@ describe('streaming MP3 frame counting', () => {
     await expect(
       count(mp3([frame()], undefined, Buffer.concat([id3v1(), frame()]))),
     ).rejects.toMatchObject({ kind: 'invalid-mp3' });
-    await expect(
-      count(mp3([frame()], Buffer.concat(Array.from({ length: 9 }, () => id3v2(Buffer.alloc(0))))),
-    ).rejects.toMatchObject({ kind: 'invalid-mp3' });
+    const tooManyTags = Buffer.concat(Array.from({ length: 9 }, () => id3v2(Buffer.alloc(0))));
+    await expect(count(mp3([frame()], tooManyTags))).rejects.toMatchObject({
+      kind: 'invalid-mp3',
+    });
   });
 
   it.each([

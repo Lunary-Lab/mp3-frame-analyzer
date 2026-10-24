@@ -23,7 +23,7 @@ To reproduce a failing mutation input use `FUZZ_CASES` with the deterministic PR
 - `npm run test:memory`: streams exactly 100,000 synthetic frames (41,700,000 bytes), reporting elapsed seconds, MiB/s, peak RSS growth, and Node version. The source reuses a constant-size frame rather than creating a file-sized Buffer.
 - `k6 run bench/upload.k6.js`: optional HTTP benchmark with five concurrent clients uploading a bundled fixture. Reports request latency percentiles and response correctness. Run against a **local** server, not public services.
 
-CI validates a *generous* upper RSS growth bound (64 MiB) for deterministic stream processing. Raw speed is informational, not a gating assertion on shared virtualized runners. Benchmark results should always be associated with Node version, CPU/machine, and environment.
+CI validates a _generous_ upper RSS growth bound (64 MiB) for deterministic stream processing. Raw speed is informational, not a gating assertion on shared virtualized runners. Benchmark results should always be associated with Node version, CPU/machine, and environment.
 
 ## Manual tool cross-check
 

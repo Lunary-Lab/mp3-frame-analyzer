@@ -1,4 +1,4 @@
-import { bench, describe } from 'vitest';
+import { describe, test } from 'vitest';
 import { countMp3Frames } from '../src/mp3/count-frames.js';
 import { chunks, frame, mp3 } from '../tests/helpers/mp3-fixtures.js';
 
@@ -10,11 +10,13 @@ const vbr = mp3(
 );
 
 describe('MP3 parser throughput (~2 MiB samples)', () => {
-  bench('CBR / 64 KiB chunks', async () => {
-    await countMp3Frames(chunks(cbr, [64 * 1024]));
+  test('CBR / 64 KiB chunks', async ({ bench }) => {
+    await bench('count 5,000 CBR frames', () => countMp3Frames(chunks(cbr, [64 * 1024]))).run();
   });
 
-  bench('VBR / variable chunk boundaries', async () => {
-    await countMp3Frames(chunks(vbr, [7, 4096, 512, 16384]));
+  test('VBR / variable chunk boundaries', async ({ bench }) => {
+    await bench('count 5,000 VBR frames', () =>
+      countMp3Frames(chunks(vbr, [7, 4096, 512, 16384])),
+    ).run();
   });
 });

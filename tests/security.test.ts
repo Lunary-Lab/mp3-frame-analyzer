@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp, MAX_UPLOAD_BYTES } from '../src/app.js';
-import { frame, id3v2, multipartBody, synchsafe } from './helpers/mp3-fixtures.js';
+import { frame, multipartBody, synchsafe } from './helpers/mp3-fixtures.js';
 
 let app: FastifyInstance;
 beforeAll(async () => {
@@ -69,7 +69,8 @@ it('rejects malformed multipart termination gracefully', async () => {
     method: 'POST',
     url: '/file-upload',
     headers: { 'content-type': 'multipart/form-data; boundary=bad' },
-    payload: '--bad\r\nContent-Disposition: form-data; name="file"; filename="x.mp3"\r\nContent-Type: audio/mpeg\r\n\r\n',
+    payload:
+      '--bad\r\nContent-Disposition: form-data; name="file"; filename="x.mp3"\r\nContent-Type: audio/mpeg\r\n\r\n',
   });
   expect(response.statusCode).toBeGreaterThanOrEqual(400);
   expect(response.statusCode).toBeLessThan(500);
