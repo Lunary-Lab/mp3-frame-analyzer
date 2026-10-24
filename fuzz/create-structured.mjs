@@ -4,9 +4,7 @@
  * Input bytes control frame count, bitrate, sample rate, padding, CRC, payload,
  * initial ID3 metadata and optional trailing ID3v1 metadata.
  */
-const BITRATE_KBPS = [
-  0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0,
-];
+const BITRATE_KBPS = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0];
 const SAMPLE_RATE_HZ = [44_100, 48_000, 32_000];
 
 function synchsafe(value) {
@@ -76,7 +74,7 @@ export function createStructuredMp3(input) {
   const tail = [];
   if ((flags & 4) !== 0) {
     const id3v1 = Buffer.alloc(128, 0);
-    id3v1.write("TAG", 0, "ascii");
+    id3v1.write('TAG', 0, 'ascii');
     tail.push(id3v1);
   }
   return {

@@ -5,15 +5,8 @@
     "command": "npm run test:mutation:unit"
   },
   "coverageAnalysis": "off",
-  "mutate": [
-    "src/mp3/frame-header.ts",
-    "src/mp3/id3.ts"
-  ],
-  "reporters": [
-    "clear-text",
-    "progress",
-    "json"
-  ],
+  "mutate": ["src/mp3/frame-header.ts", "src/mp3/id3.ts"],
+  "reporters": ["clear-text", "progress", "json"],
   "concurrency": 2,
   "timeoutMS": 30000,
   "thresholds": {

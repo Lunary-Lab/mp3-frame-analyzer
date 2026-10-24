@@ -1,8 +1,8 @@
-import fc from "fast-check";
-import { expect, it } from "vitest";
-import { countMp3Frames } from "../src/mp3/count-frames.js";
-import { Mp3ParseError } from "../src/mp3/errors.js";
-import { chunks, frame, id3v1, id3v2, mp3 } from "./helpers/mp3-fixtures.js";
+import fc from 'fast-check';
+import { expect, it } from 'vitest';
+import { countMp3Frames } from '../src/mp3/count-frames.js';
+import { Mp3ParseError } from '../src/mp3/errors.js';
+import { chunks, frame, id3v1, id3v2, mp3 } from './helpers/mp3-fixtures.js';
 
 const frameOptions = fc.record({
   bitrateIndex: fc.integer({ min: 1, max: 14 }),
@@ -13,8 +13,8 @@ const frameOptions = fc.record({
 });
 
 function options(runs: number): fc.Parameters<unknown> {
-  const seed = process.env["PROPERTY_SEED"];
-  const path = process.env["PROPERTY_PATH"];
+  const seed = process.env['PROPERTY_SEED'];
+  const path = process.env['PROPERTY_PATH'];
   return {
     numRuns: runs,
     ...(seed === undefined ? {} : { seed: Number(seed) }),
@@ -27,7 +27,7 @@ const partition = fc.array(fc.integer({ min: 1, max: 8192 }), {
   maxLength: 15,
 });
 
-it("property: VBR frame counts are invariant across chunk boundaries", async () => {
+it('property: VBR frame counts are invariant across chunk boundaries', async () => {
   const cases = fc.record({
     frames: fc.array(frameOptions, { minLength: 1, maxLength: 40 }),
     chunkSizes: partition,
@@ -35,15 +35,13 @@ it("property: VBR frame counts are invariant across chunk boundaries", async () 
   await fc.assert(
     fc.asyncProperty(cases, async ({ frames, chunkSizes }) => {
       const bytes = mp3(frames.map((spec) => frame(spec)));
-      expect(await countMp3Frames(chunks(bytes, chunkSizes))).toBe(
-        frames.length,
-      );
+      expect(await countMp3Frames(chunks(bytes, chunkSizes))).toBe(frames.length);
     }),
     options(180),
   );
 });
 
-it("property: arbitrary payload bytes including sync markers never introduce extra frames", async () => {
+it('property: arbitrary payload bytes including sync markers never introduce extra frames', async () => {
   await fc.assert(
     fc.asyncProperty(
       fc.array(fc.integer({ min: 0, max: 255 }), {
@@ -52,16 +50,14 @@ it("property: arbitrary payload bytes including sync markers never introduce ext
       }),
       async (seeds) => {
         const bytes = mp3(seeds.map((seed) => frame({ seed })));
-        expect(await countMp3Frames(chunks(bytes, [4, 3, 7, 99]))).toBe(
-          seeds.length,
-        );
+        expect(await countMp3Frames(chunks(bytes, [4, 3, 7, 99]))).toBe(seeds.length);
       },
     ),
     options(120),
   );
 });
 
-it("property: concatenating independently generated frame sequences adds their counts", async () => {
+it('property: concatenating independently generated frame sequences adds their counts', async () => {
   await fc.assert(
     fc.asyncProperty(
       fc.array(frameOptions, { minLength: 1, maxLength: 30 }),
@@ -69,16 +65,14 @@ it("property: concatenating independently generated frame sequences adds their c
       partition,
       async (left, right, sizes) => {
         const bytes = mp3([...left, ...right].map((spec) => frame(spec)));
-        expect(await countMp3Frames(chunks(bytes, sizes))).toBe(
-          left.length + right.length,
-        );
+        expect(await countMp3Frames(chunks(bytes, sizes))).toBe(left.length + right.length);
       },
     ),
     options(130),
   );
 });
 
-it("property: ID3 tag lengths, footers, and trailing ID3v1 never change counts", async () => {
+it('property: ID3 tag lengths, footers, and trailing ID3v1 never change counts', async () => {
   await fc.assert(
     fc.asyncProperty(
       fc.array(frameOptions, { minLength: 1, maxLength: 20 }),
@@ -101,7 +95,7 @@ it("property: ID3 tag lengths, footers, and trailing ID3v1 never change counts",
   );
 });
 
-it("property: truncating a final frame always yields a typed truncation error", async () => {
+it('property: truncating a final frame always yields a typed truncation error', async () => {
   await fc.assert(
     fc.asyncProperty(
       frameOptions,
@@ -110,15 +104,10 @@ it("property: truncating a final frame always yields a typed truncation error", 
       async (first, last, percentage) => {
         const initial = frame(first);
         const final = frame(last);
-        const remaining = Math.max(
-          1,
-          Math.floor((final.length * percentage) / 100),
-        );
+        const remaining = Math.max(1, Math.floor((final.length * percentage) / 100));
         const bytes = Buffer.concat([initial, final.subarray(0, remaining)]);
-        await expect(
-          countMp3Frames(chunks(bytes, [1, 3, 128])),
-        ).rejects.toMatchObject({
-          kind: "truncated-mp3",
+        await expect(countMp3Frames(chunks(bytes, [1, 3, 128]))).rejects.toMatchObject({
+          kind: 'truncated-mp3',
         });
       },
     ),
@@ -126,47 +115,47 @@ it("property: truncating a final frame always yields a typed truncation error", 
   );
 });
 
-it("property: every forbidden MPEG header bit pattern is rejected", async () => {
+it('property: every forbidden MPEG header bit pattern is rejected', async () => {
   const modeArb = fc.constantFrom(
-    "unsupported-version",
-    "unsupported-layer",
-    "invalid-rate",
-    "invalid-bitrate",
-    "reserved-emphasis" as const,
+    'unsupported-version',
+    'unsupported-layer',
+    'invalid-rate',
+    'invalid-bitrate',
+    'reserved-emphasis' as const,
   );
   await fc.assert(
     fc.asyncProperty(frameOptions, modeArb, async (spec, mode) => {
       const bytes = frame(spec);
       switch (mode) {
-        case "unsupported-version":
+        case 'unsupported-version':
           bytes[1] = (bytes[1]! & ~0x18) | 0x10;
           break;
-        case "unsupported-layer":
+        case 'unsupported-layer':
           bytes[1] = (bytes[1]! & ~0x06) | 0x04;
           break;
-        case "invalid-rate":
+        case 'invalid-rate':
           bytes[2] = (bytes[2]! & ~0x0c) | 0x0c;
           break;
-        case "invalid-bitrate":
+        case 'invalid-bitrate':
           bytes[2] = (bytes[2]! & ~0xf0) | 0xf0;
           break;
-        case "reserved-emphasis":
+        case 'reserved-emphasis':
           bytes[3] = (bytes[3]! & ~3) | 2;
           break;
       }
-      await expect(
-        countMp3Frames(chunks(bytes, [1, 12, 67])),
-      ).rejects.toBeInstanceOf(Mp3ParseError);
+      await expect(countMp3Frames(chunks(bytes, [1, 12, 67]))).rejects.toBeInstanceOf(
+        Mp3ParseError,
+      );
     }),
     options(150),
   );
 });
 
-it("property: parsing arbitrary byte streams is independent of chunk partitioning", async () => {
+it('property: parsing arbitrary byte streams is independent of chunk partitioning', async () => {
   const outcome = async (bytes: Uint8Array, sizes: readonly number[]) => {
     try {
       return {
-        kind: "count",
+        kind: 'count',
         value: await countMp3Frames(chunks(bytes, sizes)),
       };
     } catch (error) {

@@ -45,4 +45,58 @@ describe('ID3 tag parsing', () => {
   it('produces 28-bit synchsafe big-endian values', () => {
     expect([...synchsafe(0x12345)]).toEqual([0, 4, 70, 69]);
   });
+  it('handles short ID3 signatures and exposes exact typed validation errors', () => {
+    expect(parseId3Header(Buffer.alloc(0), 3)).toBeNull();
+    expect(parseId3Header(Buffer.from('ID'), 3)).toBeNull();
+    expect(() => parseId3Header(Buffer.from('ID3'), 10)).toThrow(/Incomplete/);
+
+    for (const version of [0, 1, 5, 255]) {
+      const bytes = id3v2(Buffer.alloc(1));
+      bytes[3] = version;
+      try {
+        parseId3Header(bytes, 77);
+        throw new Error('Expected unsupported-format error');
+      } catch (error) {
+        expect(error).toMatchObject({ kind: 'unsupported-format', offset: 77 });
+      }
+    }
+
+    for (const index of [6, 7, 8, 9]) {
+      const bytes = id3v2(Buffer.alloc(1));
+      bytes[index] = 0x80;
+      try {
+        parseId3Header(bytes, 100);
+        throw new Error('Expected invalid-mp3 error');
+      } catch (error) {
+        expect(error).toMatchObject({
+          kind: 'invalid-mp3',
+          offset: 100 + index,
+          message: 'Invalid synchsafe ID3v2 size',
+        });
+      }
+    }
+
+    for (const [version, invalidFlag] of [
+      [2, 0x20],
+      [3, 0x10],
+      [4, 0x01],
+    ] as const) {
+      const bytes = id3v2(Buffer.alloc(1), version);
+      bytes[5] = invalidFlag;
+      expect(() => parseId3Header(bytes, 13)).toThrow(/Reserved ID3v2 flags/);
+      try {
+        parseId3Header(bytes, 13);
+      } catch (error) {
+        expect(error).toMatchObject({ kind: 'invalid-mp3', offset: 13 });
+      }
+    }
+  });
+
+  it('recognizes exactly the TAG prefix (including three-byte input)', () => {
+    expect(isId3v1Tag(Buffer.from('TAG'))).toBe(true);
+    expect(isId3v1Tag(Buffer.from('TAG-anything'))).toBe(true);
+    for (const candidate of ['TA', 'TAG'.slice(0, 1), 'XAG', 'TBG', 'TAH', 'XXG', 'TXG']) {
+      expect(isId3v1Tag(Buffer.from(candidate))).toBe(false);
+    }
+  });
 });

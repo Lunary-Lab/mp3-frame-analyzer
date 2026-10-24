@@ -3,7 +3,7 @@
  * 127 shell failure or missing runtime is not a reproducible parser crash.
  */
 export function classifyReplayProcess(proc) {
-  if (proc.error?.code === "ETIMEDOUT") return "timeout";
+  if (proc.error?.code === 'ETIMEDOUT') return 'timeout';
   if (proc.error) {
     throw new Error(`Fuzz replay could not launch: ${proc.error.message}`, {
       cause: proc.error,
@@ -21,17 +21,17 @@ export function classifyReplayProcess(proc) {
   try {
     parsed = JSON.parse(match[1]);
   } catch (error) {
-    throw new Error("Fuzz replay produced an invalid failure marker", {
+    throw new Error('Fuzz replay produced an invalid failure marker', {
       cause: error,
     });
   }
   if (
-    typeof parsed?.name !== "string" ||
+    typeof parsed?.name !== 'string' ||
     parsed.name.length === 0 ||
-    typeof parsed.family !== "string" ||
+    typeof parsed.family !== 'string' ||
     parsed.family.length === 0
   ) {
-    throw new Error("Fuzz replay produced an incomplete failure marker");
+    throw new Error('Fuzz replay produced an incomplete failure marker');
   }
   return `${parsed.name}:${parsed.family}`;
 }

@@ -11,7 +11,7 @@ export async function minimizeBytes(
   let probes = 0;
   const deadline = Date.now() + budgetMs;
   if (!(await reproduces(candidate)))
-    throw new Error("Original input does not reproduce the failure");
+    throw new Error('Original input does not reproduce the failure');
   let parts = 2;
   while (candidate.length > 0 && probes < maxProbes && Date.now() < deadline) {
     const sliceSize = Math.ceil(candidate.length / parts);
@@ -22,10 +22,7 @@ export async function minimizeBytes(
       begin += sliceSize
     ) {
       const end = Math.min(candidate.length, begin + sliceSize);
-      const reduced = Buffer.concat([
-        candidate.subarray(0, begin),
-        candidate.subarray(end),
-      ]);
+      const reduced = Buffer.concat([candidate.subarray(0, begin), candidate.subarray(end)]);
       probes++;
       if (await reproduces(reduced)) {
         candidate = reduced;

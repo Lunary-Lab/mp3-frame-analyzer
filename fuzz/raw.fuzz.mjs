@@ -1,4 +1,4 @@
-import { outcome, assertSameOutcome } from "./oracles.mjs";
+import { outcome, assertSameOutcome } from './oracles.mjs';
 
 /** Coverage-guided byte-level mutation target, instrumenting dist/mp3. */
 export async function fuzz(data) {

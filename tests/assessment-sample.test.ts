@@ -11,8 +11,6 @@ it.skipIf(!sample)('correctly counts the original assessment sample', async () =
     '97707a18a58ba75122b1668f5ed738f090121343432d9172a6409ddfa4fc5ab3',
   );
   for (const highWaterMark of [127, 4096, 65536]) {
-    await expect(
-      countMp3Frames(createReadStream(sample!, { highWaterMark })),
-    ).resolves.toBe(6090);
+    await expect(countMp3Frames(createReadStream(sample!, { highWaterMark }))).resolves.toBe(6090);
   }
 });

@@ -64,6 +64,16 @@ describe('POST /file-upload', () => {
     expect(response.json()).toHaveProperty('error', 'unsupported-format');
   });
 
+  it('rejects valid JSON requests that do not contain multipart data', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/file-upload',
+      headers: { 'content-type': 'application/json' },
+      payload: { frameCount: 17 },
+    });
+    expect(response.statusCode).toBe(415);
+  });
+
   it('returns 404 for unrelated routes', async () => {
     expect((await app.inject({ method: 'GET', url: '/unknown' })).statusCode).toBe(404);
   });

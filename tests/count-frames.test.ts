@@ -116,6 +116,16 @@ describe('streaming MP3 frame counting', () => {
     await expect(count(unsupported)).rejects.toMatchObject({ kind: 'unsupported-format' });
   });
 
+  it('rejects incomplete leading ID3 headers and ID3v2.4 footers', async () => {
+    await expect(count(Buffer.from([0x49, 0x44, 0x33, 4, 0]))).rejects.toMatchObject({
+      kind: 'truncated-mp3',
+    });
+    const valid = id3v2(Buffer.alloc(3), 4, true);
+    await expect(count(valid.subarray(0, valid.length - 2))).rejects.toMatchObject({
+      kind: 'truncated-mp3',
+    });
+  });
+
   it('rejects corrupt ID3v2 footer or truncated metadata', async () => {
     const badFooter = id3v2(Buffer.alloc(10), 4, true);
     badFooter[badFooter.length - 10] = 0;

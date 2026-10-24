@@ -55,4 +55,34 @@ describe('incremental byte reader', () => {
     expect(returnCount).toBe(1);
     expect(await reader.has(1)).toBe(false);
   });
+  it('rejects malformed byte chunks and invalid cursor arguments', async () => {
+    const source: AsyncIterable<Uint8Array> = {
+      [Symbol.asyncIterator]() {
+        return {
+          async next() {
+            return { done: false as const, value: 'invalid' as unknown as Uint8Array };
+          },
+          async return() {
+            return { done: true as const, value: undefined };
+          },
+        };
+      },
+    };
+    const invalid = new AsyncByteReader(source);
+    await expect(invalid.has(1)).rejects.toMatchObject({
+      kind: 'invalid-mp3',
+      message: 'Invalid byte stream chunk',
+    });
+    await invalid.close();
+
+    const reader = new AsyncByteReader(asChunks([1, 2]));
+    expect(() => reader.peek(-1)).toThrow(RangeError);
+    expect(() => reader.peek(3)).toThrow(RangeError);
+    await expect(reader.skipExactly(-1)).rejects.toThrow(RangeError);
+    await expect(reader.skipExactly(Number.POSITIVE_INFINITY)).rejects.toThrow(RangeError);
+    expect(await reader.has(2)).toBe(true);
+    await reader.skipExactly(0);
+    expect([...reader.peek(0)]).toEqual([]);
+    await reader.close();
+  });
 });
