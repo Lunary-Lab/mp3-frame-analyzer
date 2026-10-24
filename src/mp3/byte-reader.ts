@@ -21,6 +21,11 @@ export class AsyncByteReader {
     return this.absoluteOffset;
   }
 
+  /** Bytes already buffered during bounded free-format frame-size discovery. */
+  get bufferedLength(): number {
+    return this.available;
+  }
+
   /** Stop consuming on early rejection and release any retained stream chunk. */
   async close(): Promise<void> {
     this.queued.length = 0;
@@ -33,8 +38,8 @@ export class AsyncByteReader {
   }
 
   async has(length: number): Promise<boolean> {
-    if (!Number.isSafeInteger(length) || length < 0 || length > 1_500) {
-      throw new RangeError('Lookahead must be between 0 and 1500 bytes');
+    if (!Number.isSafeInteger(length) || length < 0 || length > 12_288) {
+      throw new RangeError('Lookahead must be between 0 and 12288 bytes');
     }
     let consecutiveEmptyChunks = 0;
     while (this.available < length && !this.ended) {

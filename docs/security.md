@@ -45,3 +45,7 @@ chunk types. This prevents a malformed or custom async iterable from spinning
 forever without consuming a byte. On an early parse failure, iterator cleanup
 errors cannot mask the primary domain error. Fastify already emits nonempty
 Buffer chunks under normal operation; these guards protect the parser boundary.
+
+## Raw streaming boundary
+
+Raw MP3 content types are passed directly as Node streams by Fastify, not buffered by `parseAs: 'buffer'`. An independent chunk-by-chunk size limiter enforces the same 50 MiB cap as multipart even without `Content-Length`. Oversize known-length requests can be rejected immediately, with a background drain for keep-alive reuse. Query parameter `includeVbrHeaderFrame` accepts literal `true` and `false` only. Free-format frame-boundary inference reads at most about 8.7 KiB of bounded lookahead and does not scan arbitrarily long audio data to find a candidate sync.

@@ -46,6 +46,33 @@ function drainRejectedFile(file: Readable): void {
   discardFile(file).catch(() => {});
 }
 
+const rawMp3Types = new Set(['audio/mpeg', 'audio/mp3', 'application/octet-stream']);
+
+/** The multipart limit does not apply to raw request streams. Enforce it per chunk. */
+async function* boundedRawUpload(file: Readable, limit: number): AsyncGenerator<Uint8Array> {
+  let received = 0;
+  for await (const chunk of file.iterator({ destroyOnReturn: false })) {
+    if (!(chunk instanceof Uint8Array)) {
+      throw new UploadError(400, 'invalid-upload', 'Invalid raw byte chunk');
+    }
+    received += chunk.length;
+    if (received > limit) {
+      throw new UploadError(413, 'file-too-large', 'File exceeds configured upload limit');
+    }
+    yield chunk;
+  }
+}
+
+function includeVbrHeaderFrame(query: unknown): boolean {
+  const value =
+    typeof query === 'object' && query !== null && 'includeVbrHeaderFrame' in query
+      ? query.includeVbrHeaderFrame
+      : undefined;
+  if (value === undefined || value === 'true') return true;
+  if (value === 'false') return false;
+  throw new UploadError(400, 'invalid-option', 'includeVbrHeaderFrame must be "true" or "false"');
+}
+
 const errorSchema = {
   type: 'object',
   additionalProperties: false,
@@ -79,6 +106,10 @@ export async function buildApp({
     headerSize: 8 * 1024,
     headerPairs: 32,
   };
+  // Fastify delegates the raw request body without buffering it in memory.
+  // Its normal parseAs:'buffer' size protection does not apply to this path.
+  app.addContentTypeParser([...rawMp3Types], (_request, payload, done) => done(null, payload));
+
   await app.register(multipart, {
     throwFileSizeLimit: true,
     limits: multipartLimits,
@@ -104,8 +135,36 @@ export async function buildApp({
       },
     },
     async (request) => {
+      const include = includeVbrHeaderFrame(request.query);
       if (!request.isMultipart()) {
-        throw new UploadError(415, 'unsupported-media-type', 'Expected multipart/form-data');
+        const mime = String(request.headers['content-type'] ?? '')
+          .split(';')[0]!
+          .trim()
+          .toLowerCase();
+        if (!rawMp3Types.has(mime)) {
+          throw new UploadError(415, 'unsupported-media-type', 'Expected an MP3 upload');
+        }
+        const file = request.body as Readable | undefined;
+        if (!file || typeof file.iterator !== 'function') {
+          throw new UploadError(400, 'missing-file', 'A raw MP3 request body is required');
+        }
+        const declaredSize = request.headers['content-length'];
+        if (declaredSize !== undefined && Number(declaredSize) > maxUploadBytes) {
+          drainRejectedFile(file);
+          throw new UploadError(413, 'file-too-large', 'File exceeds configured upload limit');
+        }
+        try {
+          return {
+            frameCount: await countMp3Frames(boundedRawUpload(file, maxUploadBytes), {
+              includeVbrHeaderFrame: include,
+            }),
+          };
+        } catch (error) {
+          if (error instanceof Mp3ParseError || error instanceof UploadError) {
+            drainRejectedFile(file);
+          }
+          throw error;
+        }
       }
 
       let frameCount: number | undefined;
@@ -127,7 +186,9 @@ export async function buildApp({
         try {
           // Destroying an unfinished Busboy file stream stalls the request
           // body, so an early parser rejection must leave it drainable.
-          frameCount = await countMp3Frames(part.file.iterator({ destroyOnReturn: false }));
+          frameCount = await countMp3Frames(part.file.iterator({ destroyOnReturn: false }), {
+            includeVbrHeaderFrame: include,
+          });
         } catch (error) {
           // A file truncated at the multipart limit is a transport error,
           // not a malformed-MP3 parser error.

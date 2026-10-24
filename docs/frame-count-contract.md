@@ -54,6 +54,10 @@ documented behavior.
 > frames. MediaInfo and FFprobe both report 6089. Should `frameCount` include
 > the Xing/Info metadata frame (6090), or count only audio frames (6089)?
 
+## Optional explicit convention
+
+The endpoint now accepts `?includeVbrHeaderFrame=false` for clients that want to exclude **one recognized initial** Xing/Info/LAME or VBRI frame. Omitted and `true` retain the physical-frame count. This does not guarantee the same result as every audio decoder or media metadata tool, and the declared encoder frame count is never trusted. The assessment default remains an unresolved external decision.
+
 ## If audio frames are confirmed
 
 Skip at most one leading frame whose side-information region carries a `Xing`,

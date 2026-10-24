@@ -21,10 +21,12 @@ curl -i http://127.0.0.1:3000/file-upload \
   -F 'file=@/path/to/audio.mp3;type=audio/mpeg'
 ```
 
-Successful responses use `application/json` and contain only `{"frameCount":<number>}`. Counts include physical MPEG frames containing Xing/Info/VBRI metadata. Free-format MPEG-1 Layer III is explicitly unsupported. The source repository README describes the remaining format and upload limits.
+Successful responses use `application/json` and contain only `{"frameCount":<number>}`. Counts include physical MPEG frames containing Xing/Info/VBRI metadata. Free-format MPEG-1 Layer III is supported when sufficient consecutive headers establish unambiguous frame spacing; otherwise the stream is rejected. The source repository README describes the remaining format and upload limits.
 
 `release-metadata.json` identifies the release version, tag, source commit, and Node/npm versions used to package it. Its contents match the external `.manifest.json`. The `.cdx.json` file is a CycloneDX application SBOM generated from production dependencies in the lockfile. `SHA256SUMS` covers the archive, SBOM, and manifest.
 
 Send `SIGTERM` or `SIGINT` to stop the service. The server allows requests to drain within a bounded shutdown interval. Choose `HOST=0.0.0.0` only when the service must listen beyond loopback, and supply deployment-specific TLS, authentication, rate limits, and aggregate concurrency controls at the ingress.
 
 The source README also contains contributor commands. Source, tests, development scripts, and fixtures are deliberately absent from this runtime archive; use the Git repository for development and verification.
+
+Raw uploads are also accepted at `POST /file-upload` using `Content-Type: audio/mpeg` with a streamed binary request body. Append `?includeVbrHeaderFrame=false` to either raw or multipart URLs to exclude a recognized initial encoder header frame; omitted/`true` counts all physical MPEG frames. The parser accepts free-format MPEG-1 Layer III when a unique frame span is inferable from at least three compatible headers, otherwise it returns a client error.

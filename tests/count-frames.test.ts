@@ -227,15 +227,18 @@ describe('streaming MP3 frame counting', () => {
     await expect(count(unsupported)).rejects.toMatchObject({ kind: 'unsupported-format' });
   });
 
-  it('reports free-format MPEG-1 Layer III as unsupported instead of corrupt', async () => {
+  it('rejects ambiguous free-format framing and incompatible mixed frame modes', async () => {
     const freeFormatHeader = Buffer.from([0xff, 0xfb, 0, 0]);
-    for (const prefix of [Buffer.alloc(0), frame()]) {
-      await expect(count(Buffer.concat([prefix, freeFormatHeader]), 1)).rejects.toMatchObject({
-        kind: 'unsupported-format',
-        offset: prefix.length,
-        message: 'Free-format MPEG-1 Layer III is not supported; use a table-defined bitrate',
-      });
-    }
+    await expect(count(freeFormatHeader, 1)).rejects.toMatchObject({
+      kind: 'unsupported-format',
+      offset: 0,
+      message: 'Cannot infer a unique free-format MPEG frame size from consecutive headers',
+    });
+    const first = frame();
+    await expect(count(Buffer.concat([first, freeFormatHeader]), 1)).rejects.toMatchObject({
+      kind: 'invalid-mp3',
+      offset: first.length,
+    });
   });
 
   it('rejects incomplete leading ID3 headers and ID3v2.4 footers', async () => {

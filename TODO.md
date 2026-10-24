@@ -85,5 +85,4 @@ Verified on 2026-10-24; details in [release setup](docs/releasing.md).
       `qs`; `scripts/temporary-dependencies.test.mjs` fails on that dependency
       update. Then delete the override, regenerate the lockfile, and rerun
       mutation testing and both audits.
-- [ ] Only add free-format MPEG-1 Layer III if the assessment or a real user
-      requires it; implement and independently verify frame-spacing inference.
+- [x] Implement bounded free-format MPEG-1 Layer III frame-spacing inference and independent tests. Ambiguous very short streams are rejected.

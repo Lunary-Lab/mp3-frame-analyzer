@@ -3,22 +3,32 @@ import { Mp3ParseError } from './errors.js';
 import { parseFrameHeader, looksLikeUnsupportedMpeg, isFreeFormatHeader } from './frame-header.js';
 import type { FrameHeader } from './frame-header.js';
 import { isId3v1Tag, isId3v2Tag, parseId3Header } from './id3.js';
+import { inferFreeFormatBaseLength } from './free-format.js';
+import { isVbrHeaderFrame } from './vbr-header.js';
 
 /**
  * Count complete, structurally valid MPEG-1 Layer III frames.
  *
- * Counts ALL physical MPEG frames, including optional Xing/Info/VBRI metadata
- * frames. It does not decode MP3 audio or trust a VBR header's declared count.
+ * Counts physical MPEG frames by default. An optional policy excludes a
+ * recognized first Xing/Info/VBRI frame; it does not decode MP3 audio or trust
+ * encoder-declared counts.
  * Leading ID3v2, appended ID3v2.4 with a footer, and trailing ID3v1 are excluded.
  *
- * Processing is O(input bytes) with bounded lookahead (<= 10 bytes for ID3,
- * 4 bytes for each frame header); memory is O(input stream chunk size).
+ * Processing is O(input bytes), with one bounded free-format probe (8.7 KiB),
+ * and memory O(largest input chunk plus probe bytes).
  */
-export async function countMp3Frames(input: AsyncIterable<Uint8Array>): Promise<number> {
+export interface Mp3CountOptions {
+  readonly includeVbrHeaderFrame?: boolean;
+}
+
+export async function countMp3Frames(
+  input: AsyncIterable<Uint8Array>,
+  options: Mp3CountOptions = {},
+): Promise<number> {
   const reader = new AsyncByteReader(input);
   let failed = false;
   try {
-    return await countFrames(reader);
+    return await countFrames(reader, options.includeVbrHeaderFrame !== false);
   } catch (error) {
     failed = true;
     throw error;
@@ -37,7 +47,10 @@ export async function countMp3Frames(input: AsyncIterable<Uint8Array>): Promise<
   }
 }
 
-async function countFrames(reader: AsyncByteReader): Promise<number> {
+async function countFrames(
+  reader: AsyncByteReader,
+  includeVbrHeaderFrame: boolean,
+): Promise<number> {
   let tagCount = 0;
   while ((await reader.has(3)) && isId3v2Tag(reader.peek(3))) {
     if (++tagCount > 8) {
@@ -47,6 +60,10 @@ async function countFrames(reader: AsyncByteReader): Promise<number> {
   }
 
   let frames = 0;
+  let excludedVbrFrame = 0;
+  let bitrateMode: 'free' | 'indexed' | undefined;
+  let freeBaseLength: number | undefined;
+  let freeSampleRateBits: number | undefined;
   for (;;) {
     const position = reader.offset;
     if (!(await reader.has(4))) {
@@ -56,17 +73,50 @@ async function countFrames(reader: AsyncByteReader): Promise<number> {
       if (await reader.has(1)) {
         throw new Mp3ParseError('truncated-mp3', position, 'Incomplete trailing frame header');
       }
-      return frames;
+      return frames - excludedVbrFrame;
     }
 
     const bytes = reader.peek(4);
     if (frames > 0 && (isId3v2Tag(bytes) || isId3v1Tag(bytes))) {
       await skipTrailingTags(reader);
-      return frames;
+      return frames - excludedVbrFrame;
     }
 
-    const frame = requireFrameHeader(bytes, position);
-    await reader.skipExactly(frame.length);
+    let frameLength: number;
+    if (isFreeFormatHeader(bytes)) {
+      if (bitrateMode === 'indexed') {
+        throw new Mp3ParseError(
+          'invalid-mp3',
+          position,
+          'Cannot mix free-format and indexed MPEG frames',
+        );
+      }
+      bitrateMode = 'free';
+      const sampleRateBits = bytes[2]! & 0x0c;
+      if (freeBaseLength === undefined) {
+        freeSampleRateBits = sampleRateBits;
+        freeBaseLength = await inferFreeFormatBaseLength(reader);
+      }
+      if (sampleRateBits !== freeSampleRateBits) {
+        throw new Mp3ParseError('invalid-mp3', position, 'Free-format sample rate changed');
+      }
+      frameLength = freeBaseLength + ((bytes[2]! >>> 1) & 1);
+    } else {
+      if (bitrateMode === 'free') {
+        throw new Mp3ParseError(
+          'invalid-mp3',
+          position,
+          'Cannot mix indexed and free-format MPEG frames',
+        );
+      }
+      bitrateMode = 'indexed';
+      frameLength = requireFrameHeader(bytes, position).length;
+    }
+
+    if (frames === 0 && !includeVbrHeaderFrame && (await reader.has(frameLength))) {
+      if (isVbrHeaderFrame(reader.peek(frameLength))) excludedVbrFrame = 1;
+    }
+    await reader.skipExactly(frameLength);
     frames++;
   }
 }
@@ -127,13 +177,6 @@ async function skipTrailingTags(reader: AsyncByteReader): Promise<void> {
 function requireFrameHeader(bytes: Uint8Array, offset: number): FrameHeader {
   const frame = parseFrameHeader(bytes);
   if (frame !== null) return frame;
-  if (isFreeFormatHeader(bytes)) {
-    throw new Mp3ParseError(
-      'unsupported-format',
-      offset,
-      'Free-format MPEG-1 Layer III is not supported; use a table-defined bitrate',
-    );
-  }
   if (looksLikeUnsupportedMpeg(bytes)) {
     throw new Mp3ParseError('unsupported-format', offset, 'Only MPEG-1 Layer III is supported');
   }

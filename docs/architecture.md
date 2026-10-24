@@ -2,7 +2,7 @@
 
 ## Boundary definition
 
-`POST /file-upload` receives one streamed multipart file. The HTTP adapter enforces upload resource limits and maps domain errors to JSON. The parser itself knows nothing about HTTP or Fastify and accepts a standard `AsyncIterable<Uint8Array>`, so it is easy to unit-test with arbitrary chunk partitions.
+`POST /file-upload` receives either one streamed multipart `file` or a raw binary `audio/mpeg` request body. Both use the same byte-stream parser; the optional `includeVbrHeaderFrame` query controls initial encoder-header counting. The HTTP adapter enforces upload resource limits and maps domain errors to JSON. The parser itself knows nothing about HTTP or Fastify and accepts a standard `AsyncIterable<Uint8Array>`, so it is easy to unit-test with arbitrary chunk partitions.
 
 ## MPEG-1 Layer III frame structure
 
@@ -21,17 +21,17 @@ Every frame is parsed individually. This supports constant and variable bitrate 
 - Up to eight ID3v2 tags at the beginning are detected through `ID3` and skipped by their **28-bit synchsafe size** (plus a 10-byte footer when present in v2.4). Tag contents and album art are never accumulated into a whole-tag buffer.
 - One appended ID3v2.4 tag is accepted after the audio only when its required footer matches the header. Only a final ID3v1 tag may follow it; later audio or another appended tag is rejected.
 - ID3v1 at the end is recognized by the `TAG` prefix and excluded from the count (the trailing tag must be exactly 128 bytes).
-- The returned count includes all physically present MPEG-1 Layer III frames, including metadata-bearing Xing/Info/VBRI frames. The count is obtained by traversal, not copied from any encoder metadata. Decoder tools may report one fewer _decoded audio_ frame than physical frame count. Whether the assessment expects that lower count is unresolved; see [the frame-count contract](frame-count-contract.md).
+- The returned count includes all physically present MPEG-1 Layer III frames by default, including a first Xing/Info/LAME or VBRI encoder-metadata frame. When `includeVbrHeaderFrame=false`, only a structurally recognized **initial** metadata header is excluded; payload signatures in later frames are not. The count is obtained by traversal, not copied from any encoder metadata. Decoder tools may report one fewer _decoded audio_ frame than physical frame count. Whether the assessment expects that lower count is unresolved; see [the frame-count contract](frame-count-contract.md).
 - The stream must start at a frame or an ID3v2 tag; arbitrary leading garbage is not scanned away. Invalid bytes at expected frame boundaries are rejected rather than silently resynchronized.
 - A truncated final frame, leftover partial header, or unrecognized trailing metadata is rejected.
 
-Free-format MPEG-1 Layer III uses bitrate index zero and requires discovering a frame spacing rather than using the bitrate table. It is explicitly rejected as `unsupported-format`, not described as corrupt. Supporting it would require a separate frame-spacing design and independent real free-format fixtures.
+Free-format MPEG-1 Layer III uses bitrate index zero and a fixed base frame span plus the padding bit. The parser infers a unique span using at least three consecutive compatible headers within an 8.7 KiB probe, then advances without rescanning payload. Ambiguous streams (including very short streams) return `unsupported-format`. It supports inferred frame lengths up to 2,881 bytes (640 kbps at 32 kHz); the standard MPEG-1 bitrate table does not apply.
 
 This is a **structural parser**. Full validation would additionally examine side information, bit reservoir usage, Huffman data, optional CRC, appended APEv2 tags, and MPEG variants beyond the stated assessment scope.
 
 ## Resource model
 
-The byte cursor queues incoming stream chunks only as required to read a four-byte header or ten-byte metadata header, then consumes frame/tag bytes incrementally. The cursor does not ask for more than 1,500 bytes of lookahead (actual parser maximum: 10). Time is linear in bytes consumed; memory is proportional to the largest chunk delivered by the upstream stream, **not** the total upload size.
+The byte cursor queues incoming stream chunks to read a four-byte MPEG header or a ten-byte ID3 header, with one bounded ~8.7 KiB lookahead when inferring free-format frame spacing. Time is linear in bytes consumed; memory is proportional to the largest chunk delivered by the upstream stream, **not** the total upload size.
 
 Fastify's multipart implementation provides stream backpressure, a 50 MiB per-file cap, one file / one part limit, an 8 KiB multipart-header buffering bound, and dedicated error handling. Parsing terminates immediately on invalid headers. Request and idle-connection timeouts bound slow or abandoned uploads. They do not impose an aggregate body cap or global concurrency limit. A 50 MiB upload has a 30-second receive deadline, so filling the maximum requires about 1.67 MiB/s before protocol overhead.
 

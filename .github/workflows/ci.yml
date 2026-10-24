@@ -45,6 +45,14 @@ jobs:
         run: npm install --global npm@11.19.0 --ignore-scripts --no-audit --no-fund
       - name: Install locked dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify real free-format MP3 fixtures with independent LAME encoder
+        if: matrix.node == '24'
+        run: |
+          if ! command -v lame >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq --no-install-recommends lame
+          fi
+          lame --version
       - run: npm run check
       - name: Verify release version agreement
         run: npm run verify:version

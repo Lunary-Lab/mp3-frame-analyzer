@@ -23,7 +23,7 @@ describe('incremental byte reader', () => {
 
   it('rejects invalid lookahead and reports the exact truncated offset', async () => {
     const reader = new AsyncByteReader(asChunks([1, 2, 3]));
-    await expect(reader.has(1501)).rejects.toThrow(RangeError);
+    await expect(reader.has(12289)).rejects.toThrow(RangeError);
     await expect(reader.has(-1)).rejects.toThrow(RangeError);
     await expect(reader.skipExactly(4)).rejects.toMatchObject({
       kind: 'truncated-mp3',

@@ -16,7 +16,7 @@ npm start
 
 Default server: `http://127.0.0.1:3000`. Set `HOST` and `PORT` to override; for example `HOST=0.0.0.0 PORT=8080 npm start`.
 
-Upload an MP3:
+Upload an MP3 as multipart/form-data:
 
 ```bash
 curl -i -X POST http://127.0.0.1:3000/file-upload \
@@ -29,7 +29,16 @@ Expected successful result for the bundled CBR fixture:
 { "frameCount": 33 }
 ```
 
-The response uses `Content-Type: application/json`. The `file` field must be a **single** multipart upload. Supported MIME types are `audio/mpeg`, `audio/mp3`, and `application/octet-stream`; MIME is checked only as a preliminary filter, and the file contents must also contain valid MPEG-1 Layer III headers.
+The same endpoint also accepts a raw binary MP3 stream:
+
+```bash
+curl -i -X POST http://127.0.0.1:3000/file-upload \\
+  -H 'Content-Type: audio/mpeg' --data-binary @tests/fixtures/cbr.mp3
+```
+
+Append `?includeVbrHeaderFrame=false` to either URL to exclude a **recognized first** Xing/Info/LAME or VBRI metadata header. The default is `true` (all physical MPEG frames). This option does not decode audio or blindly subtract one from files without such a frame.
+
+The response uses `Content-Type: application/json`. For multipart uploads, the `file` field must be a **single** part. Supported MIME types are `audio/mpeg`, `audio/mp3`, and `application/octet-stream`; MIME is checked only as a preliminary filter, and the file contents must also contain valid MPEG-1 Layer III headers.
 
 ### API
 
@@ -61,7 +70,7 @@ This counting convention is explicit because the task asks for the number of fra
 
 Complexity: **O(n)** time and **O(max upstream chunk size)** additional memory. Frame headers require only four bytes of lookahead, and metadata content is streamed past rather than accumulated.
 
-The parser rejects invalid data at the next required frame boundary. It does not resynchronize after corrupt frames or arbitrarily skip noise before the first header: doing so can silently turn a malformed upload into a plausible but wrong count. It supports up to eight leading ID3v2 tags, one appended ID3v2.4 tag with a matching footer, then an optional final ID3v1 tag. **Free-format MPEG-1 Layer III** (bitrate index zero) is a valid but unsupported subtype and returns 415; table-defined bitrates 32–320 kbps are supported. Other unsupported scope includes MPEG-2/2.5, Layers I/II, APE/Lyrics3 trailers, audio decoding, and CRC validation.
+The parser detects free-format frame spacing using multiple consecutive compatible MPEG headers instead of a bitrate-table lookup. The parser rejects invalid data at the next required frame boundary. It does not resynchronize after corrupt frames or arbitrarily skip noise before the first header: doing so can silently turn a malformed upload into a plausible but wrong count. It supports up to eight leading ID3v2 tags, one appended ID3v2.4 tag with a matching footer, then an optional final ID3v1 tag. **Free-format MPEG-1 Layer III** (bitrate index zero) is supported with bounded inference of fixed frame spacing and per-frame padding; ambiguous streams with too few verifiable frames return 415. Table-defined bitrates 32–320 kbps remain supported. Other unsupported scope includes MPEG-2/2.5, Layers I/II, APE/Lyrics3 trailers, audio decoding, and CRC validation.
 
 ## Verification
 
@@ -159,7 +168,8 @@ ASSESSMENT_SAMPLE_PATH=/path/to/assessment_sample.mp3 npm run test:coverage
 
 The sample SHA-256 is
 `97707a18a58ba75122b1668f5ed738f090121343432d9172a6409ddfa4fc5ab3`.
-The API returns `{"frameCount":6090}` using the documented **physical
+The API returns `{"frameCount":6090}` by default, or 6089 with
+`?includeVbrHeaderFrame=false`, using the documented **physical
 MPEG-frame** counting contract. FFprobe and MediaInfo report **6089** because
 the first MPEG frame carries only the Xing header; whether the assessment
 expects 6089 is [an open question](docs/frame-count-contract.md).
