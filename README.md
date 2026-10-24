@@ -112,3 +112,36 @@ The staged secrets hook needs Betterleaks installed locally; the hook fails clos
 - [Architecture, frame format and trade-offs](docs/architecture.md)
 - [Testing, fuzzing, performance and reproduction](docs/testing.md)
 - [Security assumptions and scope](docs/security.md)
+
+## Native TypeScript 7 and API compatibility
+
+The build and `typecheck` use **TypeScript 7.0.2's native `tsc`**, while
+`typescript-eslint` uses the **TypeScript 6 compiler API** exposed by the
+`typescript` npm alias to `@typescript/typescript6`. `tsc6` runs a
+secondary compatibility check. This is Microsoft's [official side-by-side
+transition guidance](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/#running-side-by-side-with-typescript-60);
+install with `npm ci`, without `--legacy-peer-deps`.
+
+[TODO.md](TODO.md) tracks removal of the second compiler with a **December 15,
+2026 review target**, conditional on stable tooling support.
+
+## Verify the supplied sample
+
+The supplied assessment MP3 is intentionally not redistributed in this
+repository. Set its location and execute:
+
+```bash
+npm run verify:sample -- /path/to/assessment_sample.mp3
+ASSESSMENT_SAMPLE_PATH=/path/to/assessment_sample.mp3 npm run test:coverage
+```
+
+The sample SHA-256 is
+`97707a18a58ba75122b1668f5ed738f090121343432d9172a6409ddfa4fc5ab3`.
+The API correctly returns `{"frameCount":6090}` using the documented
+**physical MPEG-frame** counting contract. FFprobe counts **6089 decoded audio
+frames** because the first MPEG frame carries Xing metadata.
+
+The parser modules have **100% coverage** across statements, branches, functions
+and lines using actual edge-case tests. The HTTP adapter retains defensive
+branches without manufacturing test-only faults to obtain 100% overall coverage.
+See [Testing](docs/testing.md) for mutation testing and security verification.

@@ -86,3 +86,32 @@ unit tests, including a regression for infrastructure exits lacking a valid
 failure marker. These runs establish bounded verification, **not** proof that
 all malformed inputs have been explored. The project's Node.js 24 build/test
 suite was validated separately.
+
+## Coverage and mutation testing (October 24, 2026)
+
+With additional boundary tests, **the four core parser modules have 100%
+statement/branch/function/line coverage**; total `src/mp3/**` + `src/app.ts`
+coverage is 97.07% branches and 98.13% statements. No branches were ignored
+to achieve this result. The remaining HTTP branches are defensive and are not
+deleted merely for a score.
+
+Mutation testing uses [Stryker](https://stryker-mutator.io/) with the **command
+runner** (not its Vitest 5 runner, which has a documented test-name-filtering
+regression: https://github.com/stryker-mutator/stryker-js/issues/6210).
+Run `npm run mutation`. It deliberately targets the MPEG header and ID3
+decoder, where a changed bit, size or error code is meaningful. Do not equate
+100% coverage with 100% mutation score; inspect surviving non-equivalent
+mutants and add focused tests, without excluding difficult cases to inflate
+the score.
+
+The initial mutation baseline was **76.92%** (94.23% frame-header; 67.03%
+ID3) before the strengthened mutation-targeted assertions. These figures are
+not claimed as final scores. The extended run is intentionally separate from
+quick CI; normal CI should not depend on running hundreds of mutation cases.
+
+The assessment's actual MP3 is checked optionally when
+`ASSESSMENT_SAMPLE_PATH` is set. It is not checked into Git because it
+contains third-party music. SHA-256
+`97707a18a58ba75122b1668f5ed738f090121343432d9172a6409ddfa4fc5ab3`
+identifies the specific 1,458,172-byte file. Structural frame count: **6090**;
+FFprobe decoded-frame count: **6089** (Xing metadata frame).

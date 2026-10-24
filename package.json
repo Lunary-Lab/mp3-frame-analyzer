@@ -21,14 +21,18 @@
     "bench": "vitest bench --run",
     "test:memory": "npm run build --silent && node --expose-gc scripts/memory-benchmark.mjs",
     "test:fuzz": "npm run build --silent && node scripts/fuzz-parser.mjs && npm run test:fuzz-tooling",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test:coverage && npm run build",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run typecheck:legacy && npm run test:coverage && npm run build",
     "audit:dependencies": "npm audit --audit-level=high",
     "hooks:install": "lefthook install",
     "fuzz:coverage": "npm run build --silent && node scripts/run-jazzer.mjs",
     "fuzz:regression": "npm run build --silent && node scripts/run-jazzer.mjs --regression",
     "fuzz:extended": "npm run build --silent && node scripts/run-jazzer.mjs --extended",
     "fuzz:minimize": "node scripts/minimize-fuzz-crash.mjs",
-    "test:fuzz-tooling": "node --test scripts/minimize-core.test.mjs"
+    "test:fuzz-tooling": "node --test scripts/minimize-core.test.mjs",
+    "typecheck:legacy": "tsc6 --project tsconfig.lint.json --noEmit",
+    "test:mutation:unit": "vitest run tests/frame-header.test.ts tests/id3.test.ts tests/count-frames.test.ts",
+    "mutation": "stryker run",
+    "verify:sample": "npm run build --silent && node scripts/verify-sample.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "10.1.6",
@@ -36,16 +40,18 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@types/node": "24.10.0",
+    "@types/node": "24.19.2",
     "@vitest/coverage-v8": "5.0.5",
     "eslint": "10.13.0",
     "fast-check": "4.10.2",
     "lefthook": "2.2.2",
     "prettier": "3.9.10",
     "tsx": "4.20.6",
-    "typescript": "6.0.3",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
     "typescript-eslint": "8.72.0",
     "vitest": "5.0.5",
-    "@jazzer.js/core": "4.0.0"
+    "@jazzer.js/core": "4.0.0",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "@stryker-mutator/core": "10.1.1"
   }
 }
