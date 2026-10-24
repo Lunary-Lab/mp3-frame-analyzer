@@ -1,0 +1,16 @@
+rules:
+  - id: mp3-api-no-dynamic-code-execution
+    message: Dynamic code execution is prohibited in the MP3 upload processing path.
+    languages: [typescript]
+    severity: ERROR
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+  - id: mp3-api-no-shell-command-execution
+    message: Uploaded audio must not reach a shell command.
+    languages: [typescript]
+    severity: ERROR
+    pattern-either:
+      - pattern: execSync(...)
+      - pattern: exec(...)
+      - pattern: spawn(...)

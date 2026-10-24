@@ -1,0 +1,13 @@
+pre-commit:
+  parallel: true
+  commands:
+    format:
+      glob: '*.{ts,js,mjs,json,md,yml,yaml}'
+      run: npx prettier --check {staged_files}
+    secrets:
+      run: bash scripts/scan-staged-secrets.sh
+
+pre-push:
+  commands:
+    quality:
+      run: npm run check

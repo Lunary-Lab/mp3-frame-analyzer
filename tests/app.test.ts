@@ -62,7 +62,7 @@ describe('POST /file-upload', () => {
     expect(response.json()).toHaveProperty('error', 'unsupported-format');
   });
 
-  it('returns 404 for unrelated routes and 405? no implicit handler required', async () => {
+  it('returns 404 for unrelated routes', async () => {
     expect((await app.inject({ method: 'GET', url: '/unknown' })).statusCode).toBe(404);
   });
 });

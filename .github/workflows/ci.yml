@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Types, lint, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+      # npm install creates the lockfile on the first run. Once committed,
+      # switch back to npm ci and restore setup-node cache: npm.
+      - run: npm install --no-audit --no-fund
+      - run: npm run check
+      - run: npm run test:fuzz
+      - run: npm run test:memory
+      - name: Audit production dependency tree
+        run: npm audit --omit=dev --audit-level=high
+
+  security:
+    name: Secret scanning and focused SAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.27.3'
+      - name: Install pinned Betterleaks
+        run: go install github.com/betterleaks/betterleaks@v1.9.0
+      - name: Scan entire Git history for secrets
+        run: "$(go env GOPATH)/bin/betterleaks" git . --no-banner
+      - name: Install Semgrep CE
+        run: python3 -m pip install --user 'semgrep>=1,<2'
+      - name: Targeted security static analysis
+        run: "$HOME/.local/bin/semgrep" scan --config .semgrep.yml --error --metrics=off src
