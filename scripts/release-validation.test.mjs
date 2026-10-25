@@ -7,8 +7,61 @@ import {
   validateArchiveEntries,
 } from './release-utils.mjs';
 import { validateVersionMetadata } from './verify-version.mjs';
+import { normalizeApplicationSbom } from './package-release.mjs';
 
 const head = '0123456789abcdef0123456789abcdef01234567';
+
+test('SBOM root normalization requires matching authoritative package identifiers', () => {
+  const identity = { name: 'mp3-frame-analyzer', version: '1.2.3' };
+  const valid = () => ({
+    bomFormat: 'CycloneDX',
+    metadata: {
+      component: {
+        type: 'application',
+        name: 'renamed-checkout',
+        version: '1.2.3',
+        'bom-ref': 'mp3-frame-analyzer@1.2.3',
+        purl: 'pkg:npm/mp3-frame-analyzer@1.2.3',
+      },
+    },
+  });
+  const sbom = valid();
+  assert.equal(normalizeApplicationSbom(sbom, identity), sbom);
+  assert.equal(sbom.metadata.component.name, identity.name);
+  for (const change of [
+    (value) => {
+      value.bomFormat = 'other';
+    },
+    (value) => {
+      delete value.metadata;
+    },
+    (value) => {
+      delete value.metadata.component;
+    },
+    (value) => {
+      value.metadata.component.type = 'library';
+    },
+    (value) => {
+      value.metadata.component.version = '1.2.2';
+    },
+    (value) => {
+      value.metadata.component['bom-ref'] = 'other@1.2.3';
+    },
+    (value) => {
+      value.metadata.component.purl = 'pkg:npm/other@1.2.3';
+    },
+    (value) => {
+      delete value.metadata.component.purl;
+    },
+  ]) {
+    const invalid = valid();
+    change(invalid);
+    assert.throws(
+      () => normalizeApplicationSbom(invalid, identity),
+      /different package or version/,
+    );
+  }
+});
 
 function metadata(version = '1.2.3') {
   return [

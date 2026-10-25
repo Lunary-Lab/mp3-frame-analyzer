@@ -14,6 +14,23 @@ async function checkCompiledFiles(directory) {
   }
 }
 
+export function normalizeApplicationSbom(sbom, { name, version }) {
+  const component = sbom.metadata?.component;
+  // npm uses the checkout directory for the root's display name, but derives
+  // both identifiers from package.json. Verify those before canonicalizing it.
+  if (
+    sbom.bomFormat !== 'CycloneDX' ||
+    component?.type !== 'application' ||
+    component?.version !== version ||
+    component?.['bom-ref'] !== `${name}@${version}` ||
+    component?.purl !== `pkg:npm/${name}@${version}`
+  ) {
+    throw new Error('npm returned an SBOM for a different package or version');
+  }
+  component.name = name;
+  return sbom;
+}
+
 export async function packageRelease() {
   const version = await loadVersionMetadata();
   const names = releaseNames(version.version);
@@ -33,14 +50,7 @@ export async function packageRelease() {
     '--sbom-format=cyclonedx',
     '--sbom-type=application',
   ]);
-  const sbom = JSON.parse(sbomResult.stdout);
-  if (
-    sbom.bomFormat !== 'CycloneDX' ||
-    sbom.metadata?.component?.name !== metadata.name ||
-    sbom.metadata?.component?.version !== metadata.version
-  ) {
-    throw new Error('npm returned an SBOM for a different package or version');
-  }
+  const sbom = normalizeApplicationSbom(JSON.parse(sbomResult.stdout), metadata);
 
   const stage = await mkdtemp(join(tmpdir(), 'mp3-release-stage-'));
   try {
