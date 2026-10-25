@@ -30,7 +30,7 @@ Legend: **Required** = assessment's format; **Supported** = implemented structur
 | Arbitrary junk, false sync or corruption between frames          | Strict Policy                                    | Reject instead of decoder-style resynchronization                                            | [RFC 3003](https://www.rfc-editor.org/rfc/rfc3003.html) permits broader interspersed material                         |
 | MPEG-2/2.5, Layers I/II, AAC, MP4                                | Explicit assessment exclusion                    | Reject; don't add support just for completeness                                              | [Assessment](../assessment-brief.md)                                                                                  |
 | Multipart and raw upload, same `POST /file-upload`               | Assessment + API extensions                      | Both supported; single file part `file`                                                      | [RFC 7578](https://www.rfc-editor.org/rfc/rfc7578.html), `upload.ts`                                                  |
-| 50 MiB limit, resource bounds, malformed HTTP                    | Project Security Policy                          | Streamed limit and typed errors                                                              | `upload.ts`, `app.ts`, [security](../security.md)                                                                     |
+| 50 MiB limit, resource bounds, malformed HTTP                    | Project Security Policy                          | Streamed limit and typed errors                                                              | `upload.ts`, `error-response.ts`, [security](../security.md)                                                          |
 
 ## Rules for tests and claims
 
@@ -50,6 +50,7 @@ Legend: **Required** = assessment's format; **Supported** = implemented structur
 - VBR signature detection: [`src/mp3/vbr-header.ts`](../../src/mp3/vbr-header.ts)
 - Bounded buffering: [`src/mp3/byte-reader.ts`](../../src/mp3/byte-reader.ts)
 - Upload policies: [`src/upload.ts`](../../src/upload.ts)
-- HTTP route and errors: [`src/app.ts`](../../src/app.ts)
+- Error responses: [`src/error-response.ts`](../../src/error-response.ts)
+- HTTP route: [`src/app.ts`](../../src/app.ts)
 
 Project tests: [`tests/free-format.test.ts`](../../tests/free-format.test.ts), [`tests/free-format-real.test.ts`](../../tests/free-format-real.test.ts), [`tests/count-frames.test.ts`](../../tests/count-frames.test.ts), [`tests/id3.test.ts`](../../tests/id3.test.ts), [`tests/raw-upload.test.ts`](../../tests/raw-upload.test.ts), [`tests/upload.test.ts`](../../tests/upload.test.ts).

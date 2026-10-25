@@ -1,7 +1,8 @@
 import { Readable } from 'node:stream';
 import { afterEach, expect, it, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { registerUploads, UploadError, type UploadConsumer } from '../src/upload.js';
+import { ClientError } from '../src/client-error.js';
+import { registerUploads, type UploadConsumer } from '../src/upload.js';
 import { sendPipelined } from './helpers/http.js';
 import { multipartBody } from './helpers/mp3-fixtures.js';
 
@@ -21,7 +22,7 @@ async function uploadApp(consume: UploadConsumer<unknown>, maxUploadBytes = 64 *
       return { result: await uploads.consume(request, reply, consume) };
     } catch (error) {
       errors.push(error);
-      const status = error instanceof UploadError ? error.status : 422;
+      const status = error instanceof ClientError ? error.status : 422;
       return reply.status(status).send({ error: (error as Error).message });
     }
   });

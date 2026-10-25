@@ -98,6 +98,24 @@ describe('POST /file-upload', () => {
     },
   );
 
+  it('closes the connection after rejecting an invalid option, before reading the upload', async () => {
+    const form = multipartBody(frame());
+    for (const [contentType, payload] of [
+      ['audio/mpeg', frame()],
+      [form.contentType, form.payload],
+    ] as const) {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/file-upload?includeVbrHeaderFrame=maybe',
+        headers: { 'content-type': contentType },
+        payload,
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toHaveProperty('error', 'invalid-option');
+      expect(response.headers.connection).toBe('close');
+    }
+  });
+
   it('keeps unexpected failures as sanitized HTTP 500 responses', async () => {
     const failingApp = await buildApp();
     // A failed request hook is a real framework boundary, independent of parser details.
@@ -183,27 +201,4 @@ describe('POST /file-upload', () => {
       });
     },
   );
-
-  it('sanitizes unknown Fastify-style HTTP 413 errors instead of claiming file size', async () => {
-    const failingApp = await buildApp();
-    failingApp.addHook('preHandler', async () => {
-      throw Object.assign(new Error('internal resource detail'), { statusCode: 413 });
-    });
-    try {
-      const { contentType, payload } = multipartBody(frame());
-      const response = await failingApp.inject({
-        method: 'POST',
-        url: '/file-upload',
-        headers: { 'content-type': contentType },
-        payload,
-      });
-      expect(response.statusCode).toBe(413);
-      expect(response.json()).toEqual({
-        error: 'request-too-large',
-        message: 'Request exceeds configured limits',
-      });
-    } finally {
-      await failingApp.close();
-    }
-  });
 });

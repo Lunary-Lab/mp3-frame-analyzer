@@ -35,7 +35,9 @@ Read this file before changing parser, API, fixtures, fuzzers, or counts. This f
 `src/mp3/id3.ts`: tag sizing; `src/mp3/vbr-header.ts`: recognized initial encoder frame.
 `src/mp3/byte-reader.ts`: chunk partition independence / bounded memory.
 `src/upload.ts`: raw and multipart upload policies (media types, limits, unread remainder).
-`src/app.ts`: route, query option and error responses.
+`src/error-response.ts`: maps every failure the route raises to its JSON error response.
+`src/client-error.ts`: the one deliberate, client-facing failure type.
+`src/app.ts`: route, query option and Fastify wiring.
 
 Domain terms live in [`GLOSSARY.md`](GLOSSARY.md); architecture decisions live in [`docs/adr/`](docs/adr/).
 

@@ -9,7 +9,14 @@ export default defineConfig({
     benchmark: { include: ['bench/**/*.bench.ts'] },
     coverage: {
       provider: 'v8',
-      include: ['src/mp3/**/*.ts', 'src/app.ts', 'src/upload.ts', 'src/shutdown.ts'],
+      include: [
+        'src/mp3/**/*.ts',
+        'src/app.ts',
+        'src/upload.ts',
+        'src/error-response.ts',
+        'src/client-error.ts',
+        'src/shutdown.ts',
+      ],
       thresholds: {
         lines: 95,
         functions: 100,

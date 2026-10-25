@@ -2,7 +2,7 @@
 
 ## Boundary definition
 
-`POST /file-upload` receives either one streamed multipart `file` or a raw binary `audio/mpeg` request body. Both use the same byte-stream parser. The HTTP adapter explicitly excludes one recognized initial encoder-metadata frame unless `includeVbrHeaderFrame=true` requests physical counting; omitted and `false` select exclusion. The upload module enforces upload resource limits, and the route maps domain errors to JSON. The parser itself knows nothing about HTTP or Fastify and accepts a standard `AsyncIterable<Uint8Array>`, so it is easy to unit-test with arbitrary chunk partitions. Direct `countMp3Frames()` calls retain their physical-frame default.
+`POST /file-upload` receives either one streamed multipart `file` or a raw binary `audio/mpeg` request body. Both use the same byte-stream parser. The HTTP adapter explicitly excludes one recognized initial encoder-metadata frame unless `includeVbrHeaderFrame=true` requests physical counting; omitted and `false` select exclusion. The upload module enforces upload resource limits, and the error-response module maps every failure to its JSON response. The parser itself knows nothing about HTTP or Fastify and accepts a standard `AsyncIterable<Uint8Array>`, so it is easy to unit-test with arbitrary chunk partitions. Direct `countMp3Frames()` calls retain their physical-frame default.
 
 ## MPEG-1 Layer III frame structure
 

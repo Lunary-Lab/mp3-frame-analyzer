@@ -9,7 +9,7 @@ One MP3 file's bytes as a client sends them to `POST /file-upload`, in one of tw
 _Avoid_: body, file, payload
 
 **Raw upload**:
-An upload sent as the entire request body, labelled with an accepted MP3 media type.
+An upload sent as the entire request body rather than inside a multipart form.
 _Avoid_: binary upload, direct upload
 
 **Multipart upload**:

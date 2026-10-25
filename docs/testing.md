@@ -2,7 +2,7 @@
 
 ## Test pyramid
 
-1. **Unit**: table-based validation of bitrate, rate, padding, CRC bit, invalid indices, reserved flags and synchsafe ID3 lengths.
+1. **Unit**: table-based validation of bitrate, rate, padding, CRC bit, invalid indices, reserved flags and synchsafe ID3 lengths. A table drives `errorResponseFor` through every failure mechanism, and stub consumers drive the upload module's guarantees.
 2. **Property-based**: fast-check generates valid VBR sequences, random payloads, and arbitrary chunk boundaries. The invariant is that every generated frame is counted exactly once regardless of chunk partitioning. Reproducible seeds and minimized counterexamples come from fast-check.
 3. **Integration**: Fastify `inject()` exercises multipart parsing, content type, limits, validation, JSON response and status codes.
 4. **Real HTTP**: a listening server receives multipart `FormData` via Node's native `fetch`.
@@ -201,4 +201,4 @@ Independent frame constructors exercise free-format MPEG-1 Layer III across supp
 
 ## HTTP error taxonomy and adversarial framing
 
-Real socket and Fastify-injection tests verify that Fastify-generated unsupported media types are classified as 415, empty raw/multipart bodies are classified as 400, multipart file/field/part limits are distinguished from file byte limits, and unknown methods return 405 with `Allow: POST` while unknown paths stay 404. Raw early-error responses close their connection instead of draining an unbounded body; multipart rejections continue to exercise pipelined keep-alive. The tests also distinguish a transport-level cancellation or mismatched advertised HTTP length (which might not produce any JSON response) from an application-level malformed MP3 response, and they verify that the server remains operational after the client disconnects. Expected error precedence follows the first observed error for streaming content.
+The taxonomy itself is unit-tested in `tests/error-response.test.ts`; the HTTP tests below prove the framework really raises those failures. Real socket and Fastify-injection tests verify that Fastify-generated unsupported media types are classified as 415, empty raw/multipart bodies are classified as 400, multipart file/field/part limits are distinguished from file byte limits, and unknown methods return 405 with `Allow: POST` while unknown paths stay 404. Raw early-error responses close their connection instead of draining an unbounded body; multipart rejections continue to exercise pipelined keep-alive. The tests also distinguish a transport-level cancellation or mismatched advertised HTTP length (which might not produce any JSON response) from an application-level malformed MP3 response, and they verify that the server remains operational after the client disconnects. Expected error precedence follows the first observed error for streaming content.

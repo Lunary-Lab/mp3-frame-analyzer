@@ -2,27 +2,24 @@ import { finished } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import multipart, { type MultipartFile } from '@fastify/multipart';
+import { ClientError } from './client-error.js';
 
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 /** Accepted for a raw upload's request and a multipart upload's form part alike. */
 const mp3MediaTypes = new Set(['audio/mpeg', 'audio/mp3', 'application/octet-stream']);
 
-export class UploadError extends Error {
-  readonly status: number;
-  readonly code: string;
+/** The two ways a client can send an upload. */
+export type UploadForm = 'raw' | 'multipart';
 
-  constructor(status: number, code: string, message: string) {
-    super(message);
-    this.name = 'UploadError';
-    this.status = status;
-    this.code = code;
-  }
+/** Any request that is not a multipart form is an attempted raw upload. */
+export function uploadFormOf(request: FastifyRequest): UploadForm {
+  return request.isMultipart() ? 'multipart' : 'raw';
 }
 
 const fileTooLarge = () =>
-  new UploadError(413, 'file-too-large', 'File exceeds configured upload limit');
-const emptyUpload = () => new UploadError(400, 'empty-file', 'The MP3 file must not be empty');
+  new ClientError(413, 'file-too-large', 'File exceeds configured upload limit');
+const emptyUpload = () => new ClientError(400, 'empty-file', 'The MP3 file must not be empty');
 
 /** Reads an upload's bytes, such as the MP3 frame counter. */
 export type UploadConsumer<T> = (upload: AsyncIterable<Uint8Array>) => Promise<T>;
@@ -31,7 +28,7 @@ export interface Uploads {
   /**
    * Feed one raw or multipart upload to `consumer` and return its result.
    *
-   * Upload faults this module detects reject with an UploadError: before
+   * Upload faults this module detects reject with a ClientError: before
    * `consumer` runs where possible, otherwise by failing its iteration of the
    * upload, which the consumer must let propagate. Multipart protocol and limit
    * errors from the multipart plugin propagate as the plugin raised them. Reading past the size limit is such a fault
@@ -68,7 +65,7 @@ export async function registerUploads(
   await app.register(multipart, { throwFileSizeLimit: true, limits: multipartLimits });
   return {
     consume: (request, reply, consumer) =>
-      request.isMultipart()
+      uploadFormOf(request) === 'multipart'
         ? consumeMultipartUpload(request, consumer)
         : consumeRawUpload(request, reply, maxUploadBytes, consumer),
   };
@@ -81,7 +78,7 @@ async function consumeRawUpload<T>(
   consumer: UploadConsumer<T>,
 ): Promise<T> {
   if (!mp3MediaTypes.has(mediaTypeOf(request))) {
-    throw new UploadError(415, 'unsupported-media-type', 'Expected an MP3 upload');
+    throw new ClientError(415, 'unsupported-media-type', 'Expected an MP3 upload');
   }
   try {
     const body = request.body as Readable | undefined;
@@ -106,22 +103,22 @@ async function consumeMultipartUpload<T>(
   let consumed: { readonly result: T } | undefined;
   for await (const part of request.parts()) {
     if (part.type !== 'file') {
-      throw new UploadError(400, 'invalid-upload', 'Only one file field is accepted');
+      throw new ClientError(400, 'invalid-upload', 'Only one file field is accepted');
     }
     if (part.fieldname !== 'file') {
       // Busboy expects a yielded form part to be consumed. Drain rejected
       // parts without buffering rather than abandoning a live stream.
       await discardPart(part.file);
-      throw new UploadError(400, 'invalid-upload', 'Upload field must be named "file"');
+      throw new ClientError(400, 'invalid-upload', 'Upload field must be named "file"');
     }
     if (!mp3MediaTypes.has(part.mimetype)) {
       await discardPart(part.file);
-      throw new UploadError(415, 'unsupported-media-type', 'Expected an MP3 file');
+      throw new ClientError(415, 'unsupported-media-type', 'Expected an MP3 file');
     }
     consumed = { result: await consumeMultipartStream(part.file, consumer) };
   }
   if (consumed === undefined) {
-    throw new UploadError(400, 'missing-file', 'A multipart field named "file" is required');
+    throw new ClientError(400, 'missing-file', 'A multipart field named "file" is required');
   }
   return consumed.result;
 }
@@ -183,7 +180,7 @@ async function* checkedUpload(
   let received = 0;
   for await (const chunk of chunks) {
     if (!(chunk instanceof Uint8Array)) {
-      throw new UploadError(400, 'invalid-upload', 'Invalid raw byte chunk');
+      throw new ClientError(400, 'invalid-upload', 'Invalid raw byte chunk');
     }
     received += chunk.length;
     if (received > limit) throw fileTooLarge();

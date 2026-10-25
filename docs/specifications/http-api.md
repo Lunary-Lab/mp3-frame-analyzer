@@ -50,7 +50,7 @@ Current application-generated errors: `{"error": string, "message": string}`, JS
 - 422: structurally invalid/truncated MPEG data.
 - 500: unexpected internal failure (sanitized client message).
 
-These are **project mappings** compatible with RFC 9110 statuses, not exact error bodies mandated by the RFC. An abandoned TCP connection or low-level timeout cannot always deliver a JSON reply.
+These are **project mappings** compatible with RFC 9110 statuses, not exact error bodies mandated by the RFC. One pure function, `errorResponseFor` in [`src/error-response.ts`](../../src/error-response.ts), maps every failure the route raises to its status and body, and says whether the connection must close. The upload module also closes raw uploads it rejects, and a client that disconnected gets no response at all. An abandoned TCP connection or low-level timeout cannot always deliver a JSON reply.
 
 ## Resource/security policy (project, not MPEG/HTTP normative limits)
 
@@ -76,4 +76,4 @@ curl -i 'http://127.0.0.1:3000/file-upload?includeVbrHeaderFrame=true' \
   -F 'file=@tests/fixtures/vbr.mp3;type=audio/mpeg'
 ```
 
-For binary transport, timeouts, upload limits and RFC handling tests, see [`upload.ts`](../../src/upload.ts), [`app.ts`](../../src/app.ts), [HTTP E2E](../../tests/http.e2e.test.ts), [raw-upload tests](../../tests/raw-upload.test.ts) and [security tests](../../tests/security.test.ts).
+For binary transport, timeouts, upload limits and RFC handling tests, see [`upload.ts`](../../src/upload.ts), [`error-response.ts`](../../src/error-response.ts), [`app.ts`](../../src/app.ts), [HTTP E2E](../../tests/http.e2e.test.ts), [raw-upload tests](../../tests/raw-upload.test.ts) and [security tests](../../tests/security.test.ts).
