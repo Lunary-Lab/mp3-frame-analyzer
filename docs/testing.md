@@ -114,7 +114,10 @@ bit, size or error code is meaningful. The current `npm run mutation` command
 runs the full-parser gate described below. Do not equate
 100% coverage with 100% mutation score; inspect surviving non-equivalent
 mutants and add focused tests, without excluding difficult cases to inflate
-the score.
+the score. The current gate uses the native Stryker Vitest runner with per-test
+coverage and independently verified reuse rules; see
+[mutation-cache safety and verification](mutation-cache.md). The historical
+command-runner measurements below do not describe the current runner's performance.
 
 The measured Stryker score rose from **76.92% to 97.90%**, after tests for
 invalid MPEG sync patterns, ID3 signature and revision handling, and reserved
@@ -138,7 +141,7 @@ expectations. See
 
 HTTP tests cover the accepted MIME types, malformed multipart classification, rejected text/additional file parts, exact file-limit boundaries, sanitized application failures, cancellation, continued service after rejection, and demonstrated keep-alive connection reuse, including pipelined requests behind a large upload that the parser rejected early. Shutdown tests exercise successful close hooks, rejected hooks, the drain deadline, invalid startup configuration, and a real child process receiving SIGTERM on POSIX. A transport abort is not asserted to produce an application JSON response.
 
-`npm run check` includes helper-tool tests and builds the application. `npm run package:release` packages that existing build, verifies version agreement, and generates checksums and a production CycloneDX SBOM. `npm run test:artifact` verifies the digests, installs production dependencies in a temporary unpacked directory, starts `dist/server.js`, checks a real HTTP upload, and observes graceful shutdown. This guards against source-only npm tarballs that omit `dist/`. The GitHub Release workflow reuses the complete CI gates for the exact tagged commit and uploads the same tested artifact bytes.
+`npm run check` includes helper-tool tests and builds the application. The build removes generated `dist/` first, so renamed or deleted source modules cannot linger in the runtime archive; a tooling regression renames a source module between two builds and verifies the obsolete output is gone. `npm run package:release` packages that existing build, verifies version agreement, and generates checksums and a production CycloneDX SBOM. `npm run test:artifact` verifies the digests, installs production dependencies in a temporary unpacked directory, starts `dist/server.js`, checks a real HTTP upload, and observes graceful shutdown. This guards against source-only npm tarballs that omit `dist/`. The GitHub Release workflow reuses the complete CI gates for the exact tagged commit and uploads the same tested artifact bytes.
 
 ## Release-hardening verification (October 24, 2026)
 
@@ -179,18 +182,19 @@ The queue cursor and independent free-format validation followup produced
 retained queue slots without a bound were killed by memory regressions; four
 exact compaction-timing variants were separately proved equivalent.
 
-The current checkout retains the parser-only runner and `timeoutMS: 2000`.
-Stryker also includes 1.5 times the measured baseline duration and its measured
-overhead when setting each mutant's timeout. The command stops after the first
-failing test for a killed mutant; baseline and surviving mutants run all
-selected parser tests. The whole-run wrapper permits 60 minutes, with a
-65-minute CI job limit, following the measured CI timeout described in the
-[mutation review](mutation-review.md). Its seven parser source files match the completed 704-mutant campaign;
-the previous raw report is audited against those exact sources. The HTTP
-default change passes an explicit policy and does not change parser source or
-its low-level default. Those local results reuse completed evidence; the new
-parser-only CI campaign is recorded separately below. See the
-[mutation review](mutation-review.md) for the exact scope, proofs and limitations.
+At the PR #20 stage, the parser-only runner used `timeoutMS: 2000`.
+Stryker also included 1.5 times the measured baseline duration and its measured
+overhead when setting each mutant's timeout. The command stopped after the first
+failing test for a killed mutant; baseline and surviving mutants ran all
+selected parser tests. The wrapper was extended to 60 minutes, with a
+65-minute CI job limit, following the measured timeout in the
+[mutation review](mutation-review.md). At that stage, the seven parser source
+files matched the completed 704-mutant campaign, so its raw report could be
+audited against those exact sources. The HTTP default change was outside the
+parser. This was reuse of completed source evidence, not a new mutation run.
+Later parser refactors changed those sources and their inventory; that report
+does not validate the current checkout. The subsequent campaigns are recorded
+below. Current source, configuration, and fresh CI results remain authoritative.
 
 The subsequent [parser-only CI campaign](https://github.com/Lunary-Lab/mp3-frame-analyzer/actions/runs/40145577143)
 completed all 704 mutants in 29 minutes 9 seconds: 638 killed, 36 timed out and

@@ -12,7 +12,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
-    "build": "tsc --project tsconfig.json",
+    "build": "node scripts/clean-dist.mjs && tsc --project tsconfig.json",
     "typecheck": "tsc --project tsconfig.lint.json --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",

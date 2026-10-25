@@ -80,30 +80,32 @@ independent free-format validation changes. That campaign ran the full test
 suite with four workers, `timeoutMS: 5000` and a 20-minute process
 watchdog. Its original raw and audited reports are preserved unchanged.
 
-The final checkout starts from main at
-`5e0f0f8574d312ccb5d925549bd1720db14b426b`. All seven parser source files are
+For that historical review, the final checkout started from main at
+`5e0f0f8574d312ccb5d925549bd1720db14b426b`. Its seven parser source files were
 byte-for-byte identical to the completed campaign. A separate audit of that
-original report against the final parser sources and exact policy passes; it
-is source-evidence reuse, not a second mutation campaign. The changed HTTP
-counting default is outside `src/mp3`; its raw and multipart behavior is
-verified by HTTP tests, including the supplied sample when available.
+original report against those parser sources and exact policy passed; this was
+source-evidence reuse, not a second mutation campaign. The HTTP default change
+was outside `src/mp3` and was verified separately by raw and multipart tests.
+Later parser refactors below changed the inventory and sources: the 704-mutant
+report does not validate the current checkout.
 
-The current mutation runner uses only parser test files and two workers.
-Stryker's unchanged `timeoutMS: 2000` is an additional allowance: its effective
-per-mutant timeout is the measured baseline net duration multiplied by the
-default factor 1.5, plus that allowance and measured overhead. It is not a hard
+The PR #20 mutation runner used only parser test files and two workers.
+Its `timeoutMS: 2000` was an additional allowance: its effective
+per-mutant timeout was the measured baseline net duration multiplied by the
+default factor 1.5, plus that allowance and measured overhead. It was not a hard
 two-second limit.
 
 PR #20's first CI run reached 464 of 704 mutants before the former 30-minute
 wrapper limit terminated it; Stryker estimated about 45 minutes for completion.
-The wrapper now permits 60 minutes, with a 65-minute CI job limit for setup
-and report upload. These finite whole-run limits are separate from Stryker's
+The wrapper was then extended to 60 minutes, with a 65-minute CI job limit
+for setup and report upload. Those finite whole-run limits were separate from Stryker's
 per-mutant timeout policy.
 
 The historical command runner used Vitest's `--bail=1`: one failing test already detects
 the active mutant, so remaining tests need not run for that mutant. The
 then-current unmodified baseline and every surviving mutant ran the complete
-parser test selection. The native runner now uses coverage-based test selection. Every parser mutant remains in scope, and the 100%
+parser test selection. The native runner now uses coverage-based test selection.
+Every parser mutant remains in scope, and the 100%
 adjusted score requirement is unchanged. A fresh CI invocation generates and
 audits its own reports; the historical result below does not substitute for
 that CI run. The original timed-out run is retained in
