@@ -4,7 +4,7 @@ The route used to inline two upload adapters, raw and multipart, that handled me
 
 ## Decisions
 
-- **Restructure, not a behaviour change.** Status codes and error bodies are unchanged, and so is connection handling for every failure the parser or upload can produce; the existing HTTP tests prove it. The one widening is below.
+- **Restructure, not a behaviour change.** Status codes and error bodies are unchanged; existing HTTP regressions cover connection handling for the exercised failures. The one widening is below.
 - **The consumer is passed in.** The module feeds an upload to a caller-supplied consumer and deals with the unread remainder whenever the consumer stops early, for any reason. Previously only MPEG parse errors drained a multipart remainder; the other consumer failures happen after the upload is fully read, come from a stream the transport already ended (draining it does nothing), or are unexpected internal errors, which used to leave the connection stalled until its timeout and now drain like the rest. The module knows nothing about MP3 parsing.
 - **Rejected remainders:** a raw upload's connection closes after the error response, because its remainder is attacker-sized and unbounded by any multipart limit; a multipart upload's remainder drains in the background, bounded by the multipart file limit, so its connection stays usable.
 - **The parser's cleanup contract stays.** `countMp3Frames` closes its input when it fails, which is correct for any async iterable. The Busboy stall that closing causes is Node-stream knowledge, so the upload module reads files with `destroyOnReturn: false` instead of the parser changing.
