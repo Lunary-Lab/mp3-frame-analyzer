@@ -7,10 +7,30 @@ MPEG parser directly. There are two targets:
   count and the **same outcome** across different stream chunk partitions.
   Arbitrary corrupt bytes have no independent frame-count oracle; this target
   cannot certify a positive count by itself.
-- `structured.fuzz.mjs`: mutation bytes construct an independent, always-valid
-  MPEG-1 Layer III stream with variable bitrates, sample rates, CRC, padding,
-  synthetic payloads and ID3 tags. Its known expected physical-frame count
-  makes **incorrect positive counts** detectable.
+- `structured.fuzz.mjs`: mutation bytes construct independently known frame
+  boundaries for indexed and free-format MPEG-1 Layer III streams. Free-format
+  uses one fixed bitrate and sample rate per stream, variable per-frame padding,
+  CRC/channel flags, and 8–640 kbps cases at all three MPEG-1 sample rates.
+  Optional ID3 and initial Xing/Info/VBRI metadata never supply the expected
+  count. The generator records frame offsets and lengths during construction;
+  its known physical-frame count makes **incorrect positive counts** detectable.
+
+Generated fixtures validate the structural counting contract. Their synthetic
+payloads are not asserted to decode, and CRC values are not calculated. Free-format
+payloads exclude sync bytes so this known-count oracle remains unambiguous;
+arbitrary payload mutations and ambiguous short streams belong to the raw target.
+Free-format fixtures contain at least three headers, matching the supported
+discovery contract. Metadata headers are only inserted when a frame can hold them.
+
+The raw target's sanity bound uses the parser's supported minimum free-format
+span of 24 bytes. The previous indexed-bitrate minimum of 96 bytes incorrectly
+rejected successful counts on shorter free-format frames. The fuzzer-found
+`regressions/raw/free-format-three-short-frames.bin` contains three 55-byte frames;
+the independently constructed 72-byte `regressions/raw/free-format-minimum.bin`
+contains three 24-byte frames. Both are replayed through that oracle. Structured
+seeds cover 24-byte and 2,880-byte base spans, including padding.
+`scripts/structured-fuzz.test.mjs` independently checks the generated geometry
+and metadata policy as part of `npm run test:tooling`.
 
 ## Commands
 
@@ -56,4 +76,5 @@ To replay a crash in Jazzer itself:
 ```
 
 The repository includes committed regression examples for known header and
-metadata issues. It does **not** claim the fixtures were discovered by Jazzer.
+metadata issues. The three-55-byte-frame regression was found by coverage-guided
+fuzzing; the minimum-span regression and structured seeds were constructed directly.

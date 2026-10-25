@@ -46,11 +46,12 @@ function runStryker() {
       } else child.kill('SIGKILL');
     }
     // Per-mutant timeouts are in stryker.config.json; this bounds the whole run.
+    // CI projected about 45 minutes for the full corpus; retain finite headroom.
     const onInterrupt = () => stop('SIGINT');
     const onTerminate = () => stop('SIGTERM');
     process.once('SIGINT', onInterrupt);
     process.once('SIGTERM', onTerminate);
-    const timer = setTimeout(stop, 30 * 60 * 1000);
+    const timer = setTimeout(stop, 60 * 60 * 1000);
     function cleanup() {
       clearTimeout(timer);
       process.removeListener('SIGINT', onInterrupt);
@@ -86,9 +87,18 @@ try {
   const summary = auditMutations(report, policy, await parserSources());
   await writeFile(join(output, 'audit.json'), JSON.stringify(summary, null, 2) + '\n');
   console.log(`Raw mutation score: ${summary.rawScore.toFixed(2)}%`);
-  console.log(`Adjusted mutation score: ${summary.adjustedScore}% (required: 100%)`);
   console.log(
-    `Killed: ${summary.killed}; timed out: ${summary.timedOut}; reviewed equivalents: ${summary.equivalent}.`,
+    `Adjusted mutation score: ${summary.adjustedScore}% ` +
+      `(${summary.adjustedDetected}/${summary.adjustedTotal}; required: 100%)`,
+  );
+  console.log(
+    `Killed: ${summary.killed}; timed out: ${summary.timedOut}; ` +
+      `reviewed equivalent survivors: ${summary.equivalent}.`,
+  );
+  console.log(
+    `Reviewed equivalent timeouts: ${summary.timedOutEquivalents.length}` +
+      (summary.timedOutEquivalents.length ? ` (${summary.timedOutEquivalents.join(', ')})` : '') +
+      '.',
   );
   console.log('Every parser module is included. Raw report: reports/mutation/mutation.json');
 } catch (error) {

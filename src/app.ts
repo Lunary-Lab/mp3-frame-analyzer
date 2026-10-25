@@ -104,8 +104,10 @@ function includeVbrHeaderFrame(query: unknown): boolean {
     typeof query === 'object' && query !== null && 'includeVbrHeaderFrame' in query
       ? query.includeVbrHeaderFrame
       : undefined;
-  if (value === undefined || value === 'true') return true;
-  if (value === 'false') return false;
+  // The HTTP contract excludes one recognized initial encoder-metadata frame.
+  // Pass an explicit policy so the low-level parser's physical default is unchanged.
+  if (value === undefined || value === 'false') return false;
+  if (value === 'true') return true;
   throw new UploadError(400, 'invalid-option', 'includeVbrHeaderFrame must be "true" or "false"');
 }
 

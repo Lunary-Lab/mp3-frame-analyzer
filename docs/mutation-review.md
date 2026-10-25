@@ -11,8 +11,10 @@ HTTP adapter or the entire application.
 Every generated mutant is executed. There are **no source-level Stryker ignores,
 no excluded mutator families, and no native ignore plugin**. The raw JSON report
 is preserved unchanged. The adjusted score excludes only exact, reviewed,
-behaviorally equivalent survivors from its denominator; it is a separate metric,
-not a rewrite of Stryker's score.
+behaviorally equivalent mutants from its population. A reviewed equivalent that
+times out remains a timeout in the raw report and raw score; it is removed from
+both the adjusted detected count and denominator. The adjusted score is a
+separate metric, not a rewrite of Stryker's score.
 
 ## Why not `Stryker disable next-line ConditionalExpression`?
 
@@ -39,6 +41,16 @@ fresh complete report with `scripts/mutation-policy.mjs`. CI fails for:
 - An exception that no longer identifies its exact generated mutant or one
   whose supposedly equivalent mutant now fails a test.
 
+A reviewed equivalent may finish as `Survived` with completed-test evidence or
+as `Timeout` with a finite positive execution duration. A timeout alone does not
+establish equivalence: the existing exact source-bound proof is still required.
+Timeouts for reviewed equivalents are listed separately in
+`audit.json` as `timedOutEquivalents`; they are included in the raw `timedOut`
+count but excluded from both `adjustedDetected` and `adjustedTotal`. The
+`equivalent` count identifies reviewed survivors, and `equivalents` lists all
+reviewed identities. A test-killed equivalent still requires re-review, and
+incomplete or erroneous outcomes remain failures.
+
 The native Stryker `thresholds.break` is deliberately **0** so Stryker can emit
 its unfiltered report. It is **not the acceptance threshold**. The mandatory
 auditor then requires exactly 100%, with no rounding tolerance. CI invokes the
@@ -51,29 +63,83 @@ requests, pushes to `main`, and manual dispatches.
 
 ## Evidence and compatibility
 
-The measurements below come from the full campaign on the parser after PRs
-#8, #13 and #16 (raw and audit reports are CI artifacts).
+The measurements below come from the completed full local campaign combining
+PR #9 at `7e676dcb29327fa2673a422d274b87584c0b6ea6` with the queue cursor and
+independent free-format validation changes. That campaign ran the full test
+suite with four workers, `timeoutMS: 5000` and a 20-minute process
+watchdog. Its original raw and audited reports are preserved unchanged.
+
+The final checkout starts from main at
+`5e0f0f8574d312ccb5d925549bd1720db14b426b`. All seven parser source files are
+byte-for-byte identical to the completed campaign. A separate audit of that
+original report against the final parser sources and exact policy passes; it
+is source-evidence reuse, not a second mutation campaign. The changed HTTP
+counting default is outside `src/mp3`; its raw and multipart behavior is
+verified by HTTP tests, including the supplied sample when available.
+
+The current mutation runner uses only parser test files and two workers.
+Stryker's unchanged `timeoutMS: 2000` is an additional allowance: its effective
+per-mutant timeout is the measured baseline net duration multiplied by the
+default factor 1.5, plus that allowance and measured overhead. It is not a hard
+two-second limit.
+
+PR #20's first CI run reached 464 of 704 mutants before the former 30-minute
+wrapper limit terminated it; Stryker estimated about 45 minutes for completion.
+The wrapper now permits 60 minutes, with a 65-minute CI job limit for setup
+and report upload. These finite whole-run limits are separate from Stryker's
+per-mutant timeout policy.
+
+The command runner uses Vitest's `--bail=1`: one failing test already detects
+the active mutant, so remaining tests need not run for that mutant. The
+unmodified baseline and every surviving mutant still run the complete parser
+test selection. Every parser mutant remains in scope, and the 100%
+adjusted score requirement is unchanged. A fresh CI invocation generates and
+audits its own reports; the historical result below does not substitute for
+that CI run. The original timed-out run is retained in
+[GitHub Actions](https://github.com/Lunary-Lab/mp3-frame-analyzer/actions/runs/40142842959).
+
+### Parser-only CI campaign and timeout accounting
+
+The subsequent [PR #20 campaign](https://github.com/Lunary-Lab/mp3-frame-analyzer/actions/runs/40145577143)
+completed all **704 mutants** in **29 minutes 9 seconds**: **638 killed,
+36 timed out and 30 survived**, for **95.74% raw**. All 30 survivors match exact
+reviewed equivalents. Two other reviewed equivalents, `EQ-FREE-PRECHECK` and
+`EQ-FREE-DISTINCT-BASE`, timed out after 7,759 and 7,764 ms respectively. Their
+source and proofs are unchanged. The first chain step repeats the pre-check,
+and successive candidate bases remain distinct.
+
+That run failed its audit because the original policy implementation required
+every reviewed equivalent to have the `Survived` status. The corrected auditor
+preserves both timeout outcomes and explicitly removes those two known
+equivalents from the adjusted detected count as well as its denominator.
+The unchanged raw report therefore has **672/672 adjusted detection**, with
+**32 reviewed equivalents** split into 30 survivors and two timeouts. No policy
+entry, parser source, test selection, mutation scope or timeout setting changes
+for this accounting correction. A fresh CI run must still complete and audit
+its own full report before merge.
+
+### Historical campaign totals
 
 | Module            | Mutants |  Killed | Timed out | Reviewed equivalents |
 | ----------------- | ------: | ------: | --------: | -------------------: |
-| `byte-reader.ts`  |     138 |     116 |        17 |                    5 |
-| `count-frames.ts` |     172 |     166 |         2 |                    4 |
-| `errors.ts`       |       2 |       2 |         0 |                    0 |
-| `frame-header.ts` |      77 |      74 |         3 |                    0 |
+| `byte-reader.ts`  |     148 |      89 |        50 |                    9 |
+| `count-frames.ts` |     172 |     146 |        22 |                    4 |
+| `errors.ts`       |       2 |       1 |         1 |                    0 |
+| `frame-header.ts` |      77 |      51 |        26 |                    0 |
 | `free-format.ts`  |      75 |      58 |        11 |                    6 |
-| `id3.ts`          |      96 |      92 |         1 |                    3 |
+| `id3.ts`          |      96 |      91 |         2 |                    3 |
 | `vbr-header.ts`   |     134 |     124 |         0 |                   10 |
-| **Total**         | **694** | **632** |    **34** |               **28** |
+| **Total**         | **704** | **560** |   **112** |               **32** |
 
-The mutation command runs the parser test files with a 2-second per-mutant
-timeout, because the mutation scope is `src/mp3`. Running the whole suite,
-including HTTP adapter tests that start servers and processes, detected exactly
-the same mutants. That run took 14 m 49 s locally, compared with 5 m 41 s now,
-and exceeded the CI wall clock. The wrapper's limit is 30 minutes.
+Raw score: **95.45%**; adjusted score: **100%**. All 32 survivors match exact
+reviewed equivalents. Timeouts are reported separately from assertion kills;
+their split can vary with the machine's scheduling.
 
-Raw score: **95.97%**; adjusted score: **100%**. The first run on the combined
-tree scored 89.77% raw. Its 46 non-equivalent survivors were killed with
-boundary tests:
+The preceding merged PR #9 campaign recorded 694 mutants: 632 killed,
+34 timed out and 28 reviewed equivalents, for 95.97% raw and 100% adjusted.
+Its earlier full-suite run detected the same 666 mutants, split as 560 killed
+and 106 timed out. Earlier testing in that work found and killed 46
+non-equivalent survivors with boundary tests:
 
 - Xing optional fields that exactly fill a frame, or fall one byte short.
 - Partial and wrong signatures.
@@ -84,7 +150,26 @@ boundary tests:
 - The three-frame minimum and the probe-window edge.
 - Traversal error messages.
 
-The 28 equivalents fall into five groups. Every entry in
+The queue cursor introduced seven new survivors in an initial reader-only
+diagnostic. Three removed necessary queue storage cleanup: deleting the empty
+queue reset, disabling nonempty-prefix compaction, or deleting that compaction
+body. They were **not** treated as equivalent. Two lifetime regressions now
+exercise repeated empty-queue refill and a continuously buffered queue. Each
+reuses one source byte, warms the reader, then measures live heap after another
+400,000 reads and garbage collection. This isolates queue bookkeeping from
+payload allocation and detects unbounded retention of consumed slots. A focused
+mutation rerun killed all three cleanup faults; the full campaign above includes
+those tests.
+
+The five existing byte-reader copy-loop proofs were re-reviewed against the
+active queue suffix before their source hashes and locations were updated.
+Consumed entries lie before `headIndex` and are cleared immediately; active
+entries remain defined, their order is unchanged by compaction, and `available`
+is their total remaining byte count. The other modules' source and their
+dependent cleanup assumptions were checked before updating the full parser
+context hash.
+
+The 32 equivalents fall into six groups. Every entry in
 [`mutation-equivalents.json`](../mutation-equivalents.json) records the exact
 mutant, its source hash, assumptions and proof.
 
@@ -102,3 +187,12 @@ mutant, its source hash, assumptions and proof.
   `EQ-ID3-LEADING-PLACEMENT`).
 - **Flag-word arithmetic**, where validation accepts only words with zero
   high bytes: `EQ-VBR-U32-*`. An exhaustive byte-level check confirmed it.
+- **Queue compaction timing**, where the exact mutation still clears consumed
+  payload references and preserves bytes, offsets, errors, iterator lifecycle
+  and a constant bound on retained queue slots: `EQ-QUEUE-*`. These four proofs
+  cover deferring the empty-queue fast path to the existing threshold, compacting
+  after every consumed chunk, delaying compaction by one slot, and an inverted
+  threshold that inductively performs the same eager compaction. Their costs
+  can differ; equivalence does not promise identical instruction counts or
+  throughput. Performance measurements remain separate from the functional and
+  bounded-storage mutation score.

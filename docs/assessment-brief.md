@@ -6,6 +6,15 @@ only the formatting was converted to Markdown (including the brief's repeated
 response-format sentence). The interpretation of "number of frames" is
 discussed in [the frame-count contract](frame-count-contract.md).
 
+**Repository interpretation, approved by the owner (2026-10-24):** the HTTP
+endpoint excludes one recognized initial Xing/Info/VBRI metadata frame by
+default. The supplied sample therefore returns `{"frameCount":6089}`;
+`?includeVbrHeaderFrame=true` requests its 6090 physical frames. This decision
+applies to raw and multipart uploads and is a breaking change to the previous
+HTTP default. It is the repository owner's choice, not an additional statement
+from the evaluator or confirmation of its intended answer.
+The original brief below remains unchanged.
+
 ---
 
 ## Assignment

@@ -67,22 +67,29 @@ are **optional compatibility extensions**, not independently mandated
 assessment features. They must not take priority over a correct working
 solution within the five-day target.
 
-## Most important unresolved acceptance risk
+## Selected count policy and evaluator uncertainty
 
 The assessment asks for "the number of frames" without specifying how to
 treat an initial MPEG frame carrying only an encoder's Xing/Info metadata.
-On the supplied sample, the present implementation returns **6090 physical
-MPEG frames** by default, while **MediaInfo (explicitly suggested in the
-assignment) and FFprobe report 6089** decoder-facing audio frames. That makes
-**6089 a plausible, perhaps more likely evaluator expectation**, but the
-brief alone does not prove either interpretation.
+The supplied sample contains **6090 physical MPEG frames**, while **MediaInfo
+(explicitly suggested in the assignment) and FFprobe report 6089**
+decoder-facing audio frames. The brief alone does not establish either
+counting convention as the evaluator's intended rule.
 
-The existing `?includeVbrHeaderFrame=false` extension returns **6089**
-for the sample. **An evaluator is not required to use this optional query
-parameter.** Therefore it does **not** resolve the default-response risk.
-Do not claim the assessment is fully verified until the default convention
-is clarified or explicitly chosen, and regression-tested, by the owner.
-See [count-contract evidence](../frame-count-contract.md).
+The owner explicitly chose the HTTP default on **2026-10-24**: omitted or
+`?includeVbrHeaderFrame=false` excludes one recognized initial Xing/Info/VBRI
+metadata frame, returning **6089** for the sample. Explicit `true` returns
+**6090** physical frames. Raw and multipart requests use the same policy;
+direct `countMp3Frames()` calls retain their physical default. This is a
+breaking change to the previous HTTP contract, with real-file regressions
+for both upload modes and optional identity-checked sample tests.
+
+The chosen default aligns with the suggested tool's sample result, but
+The evaluator has not confirmed its intended convention.
+Agreement with that intention remains an inference, not a verified external
+acceptance result. Structural metadata exclusion does not decode audio or
+guarantee agreement with every media tool. See the
+[count-contract evidence and decision](../frame-count-contract.md).
 
 ## Evaluation criteria, not extra format requirements
 
@@ -116,5 +123,7 @@ curl -i -X POST 'http://127.0.0.1:3000/file-upload' \
 ```
 
 The success response must include an `application/json` content type
-and a `frameCount` number. The particular multipart field name `file`
+and a `frameCount` number. For this bundled CBR fixture, the selected HTTP
+default returns `{"frameCount":32}`; explicit `includeVbrHeaderFrame=true`
+returns 33 physical frames. The particular multipart field name `file`
 is the current implementation's choice, not wording from the assessment.

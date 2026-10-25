@@ -16,7 +16,7 @@ Use Conventional Commit PR titles and **squash merge with the PR title as the co
 | `feat(api)!: change the frame-counting contract`                      | Major                    |
 | `docs: clarify setup`, `ci: update checks`, `chore: maintain tooling` | No release by themselves |
 
-An intentional incompatible change to the JSON shape, documented status semantics, or accepted API contract requires a breaking-change marker. In particular, changing from **physical MPEG frames, including Xing/Info/VBRI frames**, to decoded-audio counts changes the contract and requires a major release. Correcting an implementation to its documented contract remains a fix.
+An intentional incompatible change to the JSON shape, documented status semantics, or accepted API contract requires a breaking-change marker. The owner-approved change from a physical-frame HTTP default to excluding one recognized initial Xing/Info/VBRI metadata frame changes that contract and requires a major release. It is structural exclusion, not audio decoding. Use a breaking PR title such as `feat(api)!: exclude initial encoder metadata by default`; let Release Please update the version, changelog, lockfile and release manifest. Correcting an implementation to its documented contract remains a fix.
 
 ## Automated path
 
@@ -123,6 +123,11 @@ Independent checks after publication:
 - The downloaded files pass `sha256sum --check`, equal GitHub's asset digests, and are byte-identical to the run's tested `release-assets` artifact.
 - The manifest's `sourceCommit` equals the tag commit, and the archive contains only the runtime inventory.
 - A fresh extract with production-only dependencies returned 6090 for the assessment sample and 33 for `cbr.mp3`. After a rejected 16 MiB upload it still served a pipelined request on the same connection, and it exited 0 on `SIGTERM`.
+
+Those counts describe the published v1.1.0 physical-frame default. The later
+owner-approved HTTP default returns 6089 and 32 for those files, respectively;
+an explicit `includeVbrHeaderFrame=true` retains physical counting. That source
+change does not alter the already published artifact or imply a new release.
 
 The 1.1.0 changelog heading links to the release because the 1.0.0 baseline was never tagged.
 

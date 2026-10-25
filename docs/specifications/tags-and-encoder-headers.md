@@ -1,12 +1,12 @@
 # MP3 metadata and encoder-header boundary specifications
 
-These structures are **not MPEG-1 Layer III audio decoding**. They affect where MPEG frames begin/end and, optionally, whether the first metadata-bearing MPEG frame contributes to the API's count. See [authority registry](README.md), [MPEG-1 frame contract](mpeg-1-layer-iii.md), and the [unresolved count contract](../frame-count-contract.md).
+These structures are **not MPEG-1 Layer III audio decoding**. They affect where MPEG frames begin/end and how the selected policy counts an initial metadata-bearing MPEG frame. See [authority registry](README.md), [MPEG-1 frame contract](mpeg-1-layer-iii.md), and the [owner-selected count contract](../frame-count-contract.md).
 
 ## 1. Terminology: never confuse these "frames"
 
-- **MPEG audio frame:** a physical frame beginning with a 4-byte MPEG header; counted by default.
+- **MPEG audio frame:** a physical frame beginning with a 4-byte MPEG header; included by physical counting, while the HTTP default can exclude one recognized initial encoder-metadata frame.
 - **ID3v2 frame:** a record _inside an ID3 tag_, such as a title or embedded picture; never an MPEG audio frame and never counted.
-- **Xing/Info/LAME/VBRI encoder header frame:** a physical MPEG audio frame whose ancillary/payload region contains indexing or encoding metadata. Counted by default; conditionally omitted by `includeVbrHeaderFrame=false`.
+- **Xing/Info/LAME/VBRI encoder header frame:** a physical MPEG audio frame whose ancillary/payload region contains indexing or encoding metadata. A recognized initial frame is excluded by HTTP omitted/`false` and included by HTTP `true`. Direct parser calls retain their physical default.
 
 ID3 formats are independent _informal standards_. Xing/Info and VBRI are _de facto encoder conventions_. None redefines the MPEG bitrate table or the Layer III frame-size formula.
 
@@ -84,7 +84,7 @@ LAME extends these structures with version, gapless delay/padding and other enco
 
 For MPEG-1 Layer III, an unprotected initial Xing/Info tag is conventionally at offset `4 + (mono ? 17 : 32)` from the start of its MPEG frame. CRC-protected _encoder header_ placement has interoperability quirks: compare the original LAME implementation and the repository's candidate offsets; do not assert a single ISO-mandated Xing offset or blindly copy the ordinary MPEG CRC offset as an encoder-header rule.
 
-Default: include this complete physical MPEG frame. Explicit `includeVbrHeaderFrame=false`: exclude at most **one** validated initial metadata-only frame. Do not subtract based on arbitrary string matches within audio payload or on the encoder's declared count.
+HTTP default and explicit `includeVbrHeaderFrame=false`: exclude at most **one** structurally recognized initial metadata frame. Explicit `true`: include every complete physical frame. Direct `countMp3Frames()` calls retain their physical default. Do not subtract based on arbitrary string matches within audio payload or on the encoder's declared count, and do not infer decoded-audio validity from structural recognition.
 
 ## 5. VBRI
 

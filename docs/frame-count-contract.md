@@ -1,10 +1,34 @@
 # Frame-count contract
 
-**Status: unresolved external decision.** The API returns **physical MPEG-1
-Layer III frames**, including a leading Xing/Info/VBRI metadata frame. That
-behavior is preserved until the evaluator (or the repository owner)
-confirms which count the assessment expects. It has not been changed on
-speculation.
+**Status: HTTP default selected by the repository owner (2026-10-24);
+evaluator intent unconfirmed.** The endpoint excludes one recognized initial
+Xing/Info/VBRI metadata frame by default. Clients can request all physical
+MPEG-1 Layer III frames with `?includeVbrHeaderFrame=true`. This is an explicit
+breaking change from the previous HTTP default, not a confirmed clarification
+from the evaluator.
+
+## Selected contract
+
+| Entry point and option                              | Count policy                                          |
+| --------------------------------------------------- | ----------------------------------------------------- |
+| Raw or multipart HTTP upload, option omitted        | Exclude one recognized initial metadata frame         |
+| HTTP `includeVbrHeaderFrame=false`                  | Exclude one recognized initial metadata frame         |
+| HTTP `includeVbrHeaderFrame=true`                   | Include every complete physical MPEG frame            |
+| Direct `countMp3Frames()` call, option omitted      | Include every complete physical MPEG frame; unchanged |
+| Direct call with `{ includeVbrHeaderFrame: false }` | Exclude one recognized initial metadata frame         |
+
+The parser still traverses and validates each required frame boundary. Under
+the exclusion policy, it removes at most one frame from the resulting count,
+only when the first MPEG frame after any leading ID3 tags has a recognized
+Xing/Info or VBRI structure at the expected position. LAME is an extension of
+Xing/Info, not an independent frame signature. Later payload signatures do not
+trigger exclusion, and files without a recognized initial metadata frame keep
+their full count. The declared count inside encoder metadata is never used as
+the answer.
+
+This is a structural metadata-exclusion policy. It does not decode audio or
+guarantee that every counted frame produces audio samples, and it need not
+agree with every decoder or metadata tool.
 
 ## What the brief says
 
@@ -23,46 +47,53 @@ VBR, 44.1 kHz joint stereo) contains 6090 structurally valid MPEG-1 Layer III
 frames. The first starts at byte 44, after an ID3v2 tag, and carries a `Xing`
 header whose frame field declares 6089 frames.
 
-| File                         | Physical frames (API) | Xing/Info declared | FFprobe 6.0 `nb_read_frames` | MediaInfo 26.05 `FrameCount` |
-| ---------------------------- | --------------------: | -----------------: | ---------------------------: | ---------------------------: |
-| Assessment sample (VBR)      |              **6090** |               6089 |                         6089 |                     **6089** |
-| `tests/fixtures/vbr.mp3`     |                    33 |                 32 |                           32 |                           32 |
-| `tests/fixtures/cbr.mp3`     |                    33 |        32 (`Info`) |                           32 |                           33 |
-| `tests/fixtures/no-xing.mp3` |                    51 |               none |                           51 |                           51 |
+| File                         | HTTP default / `false` | Physical frames / HTTP `true` | Xing/Info declared | FFprobe 6.0 `nb_read_frames` | MediaInfo 26.05 `FrameCount` |
+| ---------------------------- | ---------------------: | ----------------------------: | -----------------: | ---------------------------: | ---------------------------: |
+| Assessment sample (VBR)      |               **6089** |                      **6090** |               6089 |                         6089 |                     **6089** |
+| `tests/fixtures/vbr.mp3`     |                     32 |                            33 |                 32 |                           32 |                           32 |
+| `tests/fixtures/cbr.mp3`     |                     32 |                            33 |        32 (`Info`) |                           32 |                           33 |
+| `tests/fixtures/no-xing.mp3` |                     51 |                            51 |               none |                           51 |                           51 |
 
 MediaInfo labels the sample's first frame `Tag (Xing)` rather than audio. Its
 reported duration, 159.060 s, equals 6089 × 1152 samples ÷ 44 100 Hz. For VBR
 files MediaInfo reports the Xing-declared count; for the CBR fixture it reports
 33, a size-derived count that includes the `Info` frame. No single convention
-reproduces MediaInfo on every file. Excluding only a leading Xing/Info/VBRI
-frame (counting audio-bearing frames) matches FFprobe on every fixture and
-MediaInfo on the supplied sample.
+reproduces MediaInfo on every file. Excluding only a recognized leading
+Xing/Info/VBRI frame matches FFprobe on these fixtures and MediaInfo on the
+supplied sample.
 
 ## Assessment
 
 The brief's suggested tool reports **6089** for the supplied sample, as does
-FFprobe, while this API reports **6090**. That is strong evidence an evaluator
-following the tip expects 6089, but the brief does not explicitly require
-excluding metadata frames, and the owner has not authorized changing the
-externally visible contract. The physical count therefore remains the
-documented behavior.
+FFprobe. The owner has chosen **6089** as the endpoint's default result, with
+**6090** available through the explicit physical-count option. Agreement with
+both tools on the supplied file supports this choice. An evaluator following
+the brief's tip may expect 6089, but that remains an inference: the brief does
+not explicitly settle metadata-frame inclusion, and the evaluator has not
+confirmed the intended convention.
 
 ## Clarification question
 
-> For the supplied sample, our endpoint counts 6090 MPEG-1 Layer III frames: the
-> first frame contains only the LAME/Xing VBR header, followed by 6089 audio
-> frames. MediaInfo and FFprobe both report 6089. Should `frameCount` include
-> the Xing/Info metadata frame (6090), or count only audio frames (6089)?
+> We selected 6089 as the default result for the supplied sample by excluding
+> its initial Xing metadata frame, matching MediaInfo and FFprobe. An explicit
+> option returns all 6090 physical frames. Does that default match the
+> assessment's intended convention?
 
-## Optional explicit convention
+## Compatibility and verification
 
-The endpoint now accepts `?includeVbrHeaderFrame=false` for clients that want to exclude **one recognized initial** Xing/Info/LAME or VBRI frame. Omitted and `true` retain the physical-frame count. This does not guarantee the same result as every audio decoder or media metadata tool, and the declared encoder frame count is never trusted. The assessment default remains an unresolved external decision.
+Existing HTTP clients that need the previous default must add
+`?includeVbrHeaderFrame=true`. The response shape, upload types, and low-level
+parser default are unchanged. Both HTTP upload modes pass an explicit policy
+to that parser.
 
-## If audio frames are confirmed
+Real-file HTTP regressions cover omitted, `false`, and `true` options for CBR
+and VBR files with initial metadata and for a file without Xing. The optional
+`ASSESSMENT_SAMPLE_PATH` checks the supplied file's identity, default result
+6089, and explicit physical count 6090. Parser construction and fuzz oracles
+continue to distinguish their independently known physical and excluded counts.
 
-Skip at most one leading frame whose side-information region carries a `Xing`,
-`Info`, or `VBRI` signature; never trust the declared count itself. Update the
-parser tests, fixtures (`cbr.mp3` and `vbr.mp3` become 32), sample oracle,
-README, runtime guide, architecture notes, and fuzz oracles. Treat it as a
-contract change (`feat!:` → 2.0.0) unless the owner decides the brief always
-required audio frames, in which case `fix:` (patch) documents a correction.
+The change must use a breaking Conventional Commit PR title, for example
+`feat(api)!: exclude initial encoder metadata by default`. Release Please
+remains responsible for version and changelog updates; this source change does
+not manually edit those release files. Published v1.1.0 measurements retain
+their historical physical-frame contract.

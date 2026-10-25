@@ -28,7 +28,7 @@ export default function () {
   const valid = check(response, {
     'status 200': (r) => r.status === 200,
     'JSON content type': (r) => String(r.headers['Content-Type']).includes('application/json'),
-    'valid frame count': (r) => r.json('frameCount') === 33,
+    'valid frame count': (r) => r.json('frameCount') === 32,
   });
   failed.add(!valid);
 }

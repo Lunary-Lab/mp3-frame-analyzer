@@ -68,17 +68,17 @@ This is a structural inference from frame starts, not a reconstructed bitrate ta
 
 Current code `src/mp3/free-format.ts`:
 
-- Reads a bounded ~8.7 KiB initial probe, tests compatible Layer III/free-format/sample-rate headers, needs at least three sequential candidate headers, and chooses a unique best span; tied/ambiguous evidence rejects.
+- Reads a bounded 8,647-byte initial probe, tests compatible Layer III/free-format/sample-rate headers, requires at least three sequential candidate headers, and selects the span with the unique greatest header-match count. Equal best scores and insufficient evidence reject. This does not prove that the bytes admit only one plausible framing; a lower-scoring alternative can remain possible.
 - Caches the inferred **unpadded** span, adds each frame's padding bit thereafter, and rejects mixing free-format and indexed frames or changing free-format sample rate after acquisition.
 - Cannot confidently count truly short ambiguous one-/two-frame free-format streams. **Do not equate this limitation with the ISO declaring such streams invalid.**
-- False sync words **can occur inside compressed payload**. A three-header chain is evidence, not cryptographic proof. Fuzz competing candidate spans and prefer bounded rejection over an incorrect positive count.
+- False sync words **can occur inside compressed payload**. A three-header chain is evidence, not proof of a unique possible framing. Fuzz competing candidate spans and prefer bounded rejection over an incorrect positive count.
 - Avoid arbitrary unbounded re-synchronization, recursive search, and zero-progress loops. Free-format probing must not affect the indexed-bitrate steady-state path.
 
 ## 5. Structural checks vs full ISO bitstream conformance
 
 The parser is a **frame-structure counter**, _not_ a decoder or an ISO/IEC 11172-4-certified conformance validator. It does not establish that CRC checks pass, side-information fields are semantically valid, Huffman data decodes, bit-reservoir dependencies can be satisfied, or playback is gapless. [ISO/IEC 11172-4](https://webstore.iec.ch/en/publication/9590) describes a different, much larger conformance-testing target.
 
-A test's expected value must be explicit about whether it means (1) physically present complete MPEG frame boundaries, (2) audio-bearing frames after optional initial encoder header exclusion, or (3) frames/packets a specific decoder chose to emit.
+A test's expected value must be explicit about whether it means (1) physically present complete MPEG frame boundaries, (2) the structural count after recognized initial encoder-header exclusion, or (3) frames/packets a specific decoder chose to emit. HTTP omitted/`false` selects (2), HTTP `true` selects (1), and direct parser calls retain (1) as their default. Neither structural policy proves that every counted frame produces decoded audio.
 
 ## 6. Test obligations
 

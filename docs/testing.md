@@ -31,7 +31,7 @@ CI saves JSON performance measurements as workflow artifacts. Investigate a sust
 
 ## Manual tool cross-check
 
-FFprobe's `nb_read_frames` counts frames that its decoder-facing demuxer accepts as audio. Xing/Info metadata-bearing MPEG frames can be omitted from this count. For our two audio fixtures it reports 32 audio frames versus 33 structurally present MPEG frames. The difference is intentional and should be explained rather than dismissed as incorrect parsing.
+FFprobe's `nb_read_frames` counts frames that its decoder-facing demuxer accepts as audio. Xing/Info metadata-bearing MPEG frames can be omitted from this count. For the CBR and VBR fixtures it reports 32 audio frames versus 33 structurally present MPEG frames. The HTTP default and explicit `includeVbrHeaderFrame=false` return 32 for these fixtures; `true` returns 33. The no-Xing fixture returns 51 under all three HTTP options. Direct parser calls retain their physical-frame default. These policies are tested separately rather than assuming every tool counts the same thing.
 
 Generate a new fixture independently:
 
@@ -58,8 +58,10 @@ These generated fixtures complement the actual assessment MP3. The supplied samp
 The original 2,000-case mutation smoke is still useful but does not use
 coverage feedback. The added Jazzer.js `raw` and `structured` fuzz targets do.
 The raw target checks chunk-partition invariance and treats typed domain errors
-as valid rejections. The structured target generates valid frames independently
-and asserts an exact count, including metadata and CRC/padding variants.
+as valid rejections. The structured target independently constructs frames with
+known boundaries and asserts exact physical and metadata-excluded counts,
+including free-format, metadata, CRC and padding variants. These are structural
+fixtures; their payloads are not asserted to be decodable audio.
 
 Use `npm run fuzz:regression` for deterministic corpus replay, `npm run
 fuzz:coverage` for bounded PR fuzzing, and `npm run fuzz:extended` for the
@@ -67,7 +69,7 @@ longer on-demand campaign. The timeouts and crash-reduction workflow are
 documented in [`fuzz/README.md`](../fuzz/README.md). A failure from libFuzzer
 or the process watchdog is never marked successful. Curated byte-level
 regressions in `fuzz/regressions/raw` are replayed by Vitest and have
-explicit expected errors; `.fuzz-corpus` and minimized crashes remain outside
+explicit expected counts or errors; `.fuzz-corpus` and minimized crashes remain outside
 Git until reviewed. The fast-check properties include metadata boundaries,
 truncation, bit-field invalidity, concatenation, and arbitrary byte partition
 invariance. Use `PROPERTY_SEED` and `PROPERTY_PATH` to replay shrunk cases.
@@ -98,11 +100,12 @@ coverage is 97.07% branches and 98.13% statements. No branches were ignored
 to achieve this result. The remaining HTTP branches are defensive and are not
 deleted merely for a score.
 
-Mutation testing uses [Stryker](https://stryker-mutator.io/) with the **command
+At this baseline, mutation testing used [Stryker](https://stryker-mutator.io/) with the **command
 runner** (not its Vitest 5 runner, which has a documented test-name-filtering
 regression: https://github.com/stryker-mutator/stryker-js/issues/6210).
-Run `npm run mutation`. It deliberately targets the MPEG header and ID3
-decoder, where a changed bit, size or error code is meaningful. Do not equate
+The initial scope targeted the MPEG header and ID3 decoder, where a changed
+bit, size or error code is meaningful. The current `npm run mutation` command
+runs the full-parser gate described below. Do not equate
 100% coverage with 100% mutation score; inspect surviving non-equivalent
 mutants and add focused tests, without excluding difficult cases to inflate
 the score.
@@ -110,8 +113,8 @@ the score.
 The measured Stryker score rose from **76.92% to 97.90%**, after tests for
 invalid MPEG sync patterns, ID3 signature and revision handling, and reserved
 flag boundaries. That baseline run killed 138 mutants, timed out on 2, and left
-3 provably equivalent survivors in ID3 validation. CI now enforces a 95%
-minimum for the deliberately limited two-decoder mutation scope. See
+3 provably equivalent survivors in ID3 validation. At that point CI enforced a
+95% minimum for the deliberately limited two-decoder mutation scope. See
 [the mutation audit](mutation-review.md) and [the passing GitHub run](https://github.com/Lunary-Lab/mp3-frame-analyzer/actions/runs/40102747242).
 
 The assessment's actual MP3 is checked optionally when
@@ -120,7 +123,9 @@ contains third-party music. SHA-256
 `97707a18a58ba75122b1668f5ed738f090121343432d9172a6409ddfa4fc5ab3`
 identifies the specific 1,458,172-byte file. Structural frame count: **6090**;
 FFprobe decoded-frame count and MediaInfo `FrameCount`: **6089** (the first
-frame carries the Xing header, whose declared count is 6089). See
+frame carries the Xing header, whose declared count is 6089). The HTTP default
+and explicit `false` return 6089 in both upload modes, while `true` returns 6090. These optional tests verify the sample's identity before applying those
+expectations. See
 [the frame-count contract](frame-count-contract.md).
 
 ## Upload lifecycle and release verification
@@ -139,26 +144,60 @@ At that time, the focused two-decoder mutation score was **98.27%** (164 kills, 
 
 The mutation scope covers all files in `src/mp3/**/*.ts`, including the
 streaming reader, frame traversal and errors. The command runner executes the
-parser test files; the HTTP adapter's tests are outside the `src/mp3` scope and are
-excluded, which changed no mutant's outcome. The gate runs all mutants, preserves the raw report, and fails
+parser test files; the HTTP adapter's tests run separately in the quality gate.
+The mutation gate runs all mutants, preserves the raw report, and fails
 on every unexplained survivor or stale exact equivalence approval; documentation
 is in [the audit](mutation-review.md).
 
-The full campaign on the combined parser (October 24, 2026, Stryker 10.1.1,
+The preceding full campaign on the parser before the queue cursor change
+(October 24, 2026, Stryker 10.1.1,
 `PROPERTY_SEED=20261024`) generated **694 mutants** across all seven modules.
 It produced **632 kills and 34 timeouts**. The **raw score is 95.97%**. The
 **adjusted score is 100%**, after excluding 28 reviewed equivalents. It ran
 in 5 minutes 41 seconds locally. Running the whole suite per mutant took 14
 minutes 49 seconds locally and exceeded the 20-minute CI wall-clock limit, so
-the mutation command now runs only parser tests and the per-mutant timeout is
-2 seconds. The first run on the combined tree scored 89.77% raw. Its 46
+the mutation command now runs only parser tests with `timeoutMS: 2000` as an
+additional timeout allowance. The first run on the combined tree scored 89.77% raw. Its 46
 non-equivalent survivors, in the free-format inference, the Xing/VBRI detector
 and the traversal error messages, were all killed with focused boundary tests
 rather than exempted.
 
+The queue cursor and independent free-format validation followup produced
+**704 mutants: 560 killed, 112 timed out, and 32 reviewed equivalents**, for
+**95.45% raw and 100% adjusted**. That completed campaign used PR #9 at
+`7e676dcb29327fa2673a422d274b87584c0b6ea6` with its full-suite runner,
+`timeoutMS: 5000` and four local workers. Three new mutations that
+retained queue slots without a bound were killed by memory regressions; four
+exact compaction-timing variants were separately proved equivalent.
+
+The current checkout retains the parser-only runner and `timeoutMS: 2000`.
+Stryker also includes 1.5 times the measured baseline duration and its measured
+overhead when setting each mutant's timeout. The command stops after the first
+failing test for a killed mutant; baseline and surviving mutants run all
+selected parser tests. The whole-run wrapper permits 60 minutes, with a
+65-minute CI job limit, following the measured CI timeout described in the
+[mutation review](mutation-review.md). Its seven parser source files match the completed 704-mutant campaign;
+the previous raw report is audited against those exact sources. The HTTP
+default change passes an explicit policy and does not change parser source or
+its low-level default. Those local results reuse completed evidence; the new
+parser-only CI campaign is recorded separately below. See the
+[mutation review](mutation-review.md) for the exact scope, proofs and limitations.
+
+The subsequent [parser-only CI campaign](https://github.com/Lunary-Lab/mp3-frame-analyzer/actions/runs/40145577143)
+completed all 704 mutants in 29 minutes 9 seconds: 638 killed, 36 timed out and
+30 survived (95.74% raw). All survivors are reviewed equivalents; two additional
+reviewed equivalents timed out. The original auditor rejected those changed
+statuses. The corrected audit retains the raw outcomes, names the reviewed
+equivalent timeouts, and excludes all 32 reviewed equivalents from the adjusted
+population, yielding 672/672 (100%). An equivalent that fails a test still
+requires re-review; incomplete or invalid outcomes still fail. The correction
+requires a fresh passing CI campaign before merge.
+
 ## Free-format, raw upload and metadata-header policy
 
-The same `POST /file-upload` endpoint accepts raw `audio/mpeg` (also `audio/mp3` and `application/octet-stream`) or single-file multipart bodies. HTTP tests cover both modes, default/optional counting, 413 errors for known-length and chunked streams, and invalid query values. Independent frame constructors exercise free-format MPEG-1 Layer III across supported sample rates and padding variations, including constant spans without padding (48 kHz and 32 kHz at round bitrates), malformed alignment, decoy sync bytes and truncation. When `lame` is installed, real encoder output is also checked at 400 kbps, 320 kbps, 192 kbps and 128 kbps across all three sample rates. The count option `includeVbrHeaderFrame=false` excludes only a structurally verified initial Xing/Info/LAME or VBRI encoder header, never an arbitrary payload match or a declared VBR count. The supplied sample oracle remains 6090 by default and 6089 with exclusion. Truly short free-format streams without enough header evidence fail closed rather than guessing. Real free-format LAME fixtures may be reproduced with `lame --freeformat -b 400 input.wav output.mp3` and decoded with `lame --decode` for independent confirmation; FFprobe may not recognize above-table free-format bitrates.
+The same `POST /file-upload` endpoint accepts raw `audio/mpeg` (also `audio/mp3` and `application/octet-stream`) or single-file multipart bodies. HTTP tests cover both modes, default/optional counting, 413 errors for known-length and chunked streams, and invalid query values. The owner-selected HTTP default and explicit `includeVbrHeaderFrame=false` exclude only a structurally recognized initial Xing/Info or VBRI encoder header; `true` requests physical counting. No arbitrary payload match or declared VBR count changes the answer. The supplied sample's HTTP expectations are 6089 for omitted/`false` and 6090 for `true`; the low-level parser's default remains 6090.
+
+Independent frame constructors exercise free-format MPEG-1 Layer III across supported sample rates and padding variations, including constant spans without padding (48 kHz and 32 kHz at round bitrates), malformed alignment, decoy sync bytes and truncation. When `lame` is installed, real encoder output is also checked at 400 kbps, 320 kbps, 192 kbps and 128 kbps across all three sample rates. Short free-format streams without enough header evidence are rejected. The bounded acquisition rule selects a unique greatest header-match score; it does not establish that no other plausible header-only partition exists. Real free-format LAME fixtures may be reproduced with `lame --freeformat -b 400 input.wav output.mp3` and decoded with `lame --decode` for independent confirmation; FFprobe may not recognize above-table free-format bitrates.
 
 ## HTTP error taxonomy and adversarial framing
 

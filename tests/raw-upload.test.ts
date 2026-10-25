@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { request as httpRequest } from 'node:http';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
@@ -14,11 +16,33 @@ afterAll(async () => {
   await app.close();
 });
 
-function infoMp3(): Buffer {
+function metadataMp3(kind: 'Info' | 'Xing' | 'VBRI' = 'Info'): Buffer {
   const initial = frame();
-  initial.write('Info', 36, 'ascii');
-  initial.writeUInt32BE(0x00000003, 40);
+  initial.write(kind, 36, 'ascii');
+  if (kind === 'VBRI') {
+    initial.writeUInt16BE(1, 40);
+    initial.writeUInt16BE(2, 54);
+    initial.writeUInt16BE(4, 58);
+  } else {
+    initial.writeUInt32BE(1, 40);
+    initial.writeUInt32BE(999, 44); // The HTTP count must come from traversal.
+  }
   return mp3([initial, frame(), frame()]);
+}
+
+async function expectBothUploads(bytes: Uint8Array, query: string, frameCount: number) {
+  for (const { contentType, payload } of [
+    { contentType: 'audio/mpeg', payload: bytes },
+    multipartBody(bytes),
+  ]) {
+    const response = await fetch(endpoint + '/file-upload' + query, {
+      method: 'POST',
+      headers: { 'content-type': contentType },
+      body: new Uint8Array(payload),
+    });
+    expect(response.status, contentType).toBe(200);
+    expect(await response.json(), contentType).toEqual({ frameCount });
+  }
 }
 
 describe('raw MPEG HTTP streaming', () => {
@@ -28,32 +52,47 @@ describe('raw MPEG HTTP streaming', () => {
       const response = await fetch(endpoint + '/file-upload', {
         method: 'POST',
         headers: { 'content-type': mime },
-        body: new Uint8Array(infoMp3()),
+        body: new Uint8Array(metadataMp3()),
       });
       expect(response.status).toBe(200);
       expect(response.headers.get('content-type')).toContain('application/json');
-      expect(await response.json()).toEqual({ frameCount: 3 });
+      expect(await response.json()).toEqual({ frameCount: 2 });
     },
   );
 
-  it('returns matching raw/multipart results with optional metadata exclusion', async () => {
-    const bytes = infoMp3();
-    for (const value of ['', '?includeVbrHeaderFrame=true', '?includeVbrHeaderFrame=false']) {
-      const raw = await fetch(endpoint + '/file-upload' + value, {
-        method: 'POST',
-        headers: { 'content-type': 'audio/mpeg' },
-        body: new Uint8Array(bytes),
-      });
-      const { contentType, payload } = multipartBody(bytes);
-      const multi = await fetch(endpoint + '/file-upload' + value, {
-        method: 'POST',
-        headers: { 'content-type': contentType },
-        body: new Uint8Array(payload),
-      });
-      expect(raw.status).toBe(200);
-      expect(multi.status).toBe(200);
-      expect(await raw.json()).toEqual(await multi.json());
-    }
+  it.each(['Info', 'Xing', 'VBRI'] as const)(
+    'excludes an initial %s frame by default in raw and multipart uploads',
+    async (kind) => {
+      const bytes = metadataMp3(kind);
+      await expectBothUploads(bytes, '', 2);
+      await expectBothUploads(bytes, '?includeVbrHeaderFrame=false', 2);
+      await expectBothUploads(bytes, '?includeVbrHeaderFrame=true', 3);
+    },
+  );
+
+  it.each([
+    ['cbr.mp3', 32, 33],
+    ['vbr.mp3', 32, 33],
+    ['no-xing.mp3', 51, 51],
+  ] as const)(
+    'applies both HTTP policies to the real %s fixture',
+    async (name, audio, physical) => {
+      const bytes = await readFile(new URL(`./fixtures/${name}`, import.meta.url));
+      await expectBothUploads(bytes, '', audio);
+      await expectBothUploads(bytes, '?includeVbrHeaderFrame=false', audio);
+      await expectBothUploads(bytes, '?includeVbrHeaderFrame=true', physical);
+    },
+  );
+
+  const sample = process.env['ASSESSMENT_SAMPLE_PATH'];
+  it.skipIf(!sample)('verifies both HTTP policies on the original assessment sample', async () => {
+    const bytes = await readFile(sample!);
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe(
+      '97707a18a58ba75122b1668f5ed738f090121343432d9172a6409ddfa4fc5ab3',
+    );
+    await expectBothUploads(bytes, '', 6089);
+    await expectBothUploads(bytes, '?includeVbrHeaderFrame=false', 6089);
+    await expectBothUploads(bytes, '?includeVbrHeaderFrame=true', 6090);
   });
 
   it.each(['maybe', '1', 'FALSE', 'true&includeVbrHeaderFrame=false'])(

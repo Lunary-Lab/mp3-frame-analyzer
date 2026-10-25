@@ -26,17 +26,19 @@ curl -i -X POST http://127.0.0.1:3000/file-upload \
 Expected successful result for the bundled CBR fixture:
 
 ```json
-{ "frameCount": 33 }
+{ "frameCount": 32 }
 ```
 
 The same endpoint also accepts a raw binary MP3 stream:
 
 ```bash
-curl -i -X POST http://127.0.0.1:3000/file-upload \\
+curl -i -X POST http://127.0.0.1:3000/file-upload \
   -H 'Content-Type: audio/mpeg' --data-binary @tests/fixtures/cbr.mp3
 ```
 
-Append `?includeVbrHeaderFrame=false` to either URL to exclude a **recognized first** Xing/Info/LAME or VBRI metadata header. The default is `true` (all physical MPEG frames). This option does not decode audio or blindly subtract one from files without such a frame.
+Both upload modes exclude **one recognized initial** Xing/Info or VBRI metadata frame by default. Explicit `?includeVbrHeaderFrame=false` has the same behavior; append `?includeVbrHeaderFrame=true` to count all physical MPEG frames. Files without a recognized initial metadata frame retain their full count. LAME data is recognized through its Xing/Info header, not as a separate frame.
+
+This is an owner-approved change to the HTTP default and a **breaking API contract change** from the previous physical-frame default. The low-level `countMp3Frames()` function still counts physical frames unless its caller explicitly passes `{ includeVbrHeaderFrame: false }`. The HTTP adapter always passes its selected policy.
 
 The response uses `Content-Type: application/json`. For multipart uploads, the `file` field must be a **single** part. Supported MIME types are `audio/mpeg`, `audio/mp3`, and `application/octet-stream`; MIME is checked only as a preliminary filter, and the file contents must also contain valid MPEG-1 Layer III headers.
 
@@ -44,7 +46,7 @@ The response uses `Content-Type: application/json`. For multipart uploads, the `
 
 | Situation                                      | HTTP status | Error code / behavior                                                                            |
 | ---------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------ |
-| Valid raw or multipart MPEG-1 Layer III        | 200         | `{"frameCount":33}` (example)                                                                    |
+| Valid raw or multipart MPEG-1 Layer III        | 200         | `{"frameCount":32}` (bundled CBR fixture, default policy)                                        |
 | Missing multipart file or invalid fields/query | 400         | `missing-file`, `invalid-upload`, `invalid-option`                                               |
 | Empty raw or multipart file                    | 400         | `empty-file`                                                                                     |
 | Invalid HTTP body framing / length             | 400         | `invalid-request` when the connection remains writable                                           |
@@ -61,11 +63,11 @@ All application-generated error bodies use JSON with `error` and `message` strin
 
 A rejected **raw** upload sends its JSON error with `Connection: close` rather than draining arbitrary additional bytes. Multipart uploads retain existing draining behavior for keep-alive reuse. Client disconnects, aborted/incomplete HTTP bodies, and native Node request-header timeouts may prevent any application JSON response; a client should not expect an HTTP response from a broken connection. 429 and 503 are intentionally not configured because this local assessment API has no rate limiter or load-shedding policy.
 
-## Why the frame count can differ from FFprobe and MediaInfo
+## Frame-count convention
 
-This endpoint counts **physical, complete MPEG-1 Layer III frames**. This includes a first MPEG frame containing Xing/Info/VBRI metadata. Such a frame may not carry independently decodable audio; some decoder-facing tools omit it from `nb_read_frames`. The included CBR and VBR fixtures contain 33 physical frames while `ffprobe -count_frames` reports 32 audio frames. The result is derived from frame headers **not** the Xing frame-count field.
+The endpoint traverses complete MPEG-1 Layer III frames and, by default, excludes a structurally recognized initial Xing/Info/VBRI metadata frame. The included CBR and VBR fixtures each contain 33 physical frames and return **32** by default, matching FFprobe's decoder-facing count for those files. With `?includeVbrHeaderFrame=true`, both return **33**. The count comes from traversal; encoder-declared frame counts are never used as the result.
 
-This counting convention is explicit because the task asks for the number of frames _in the file_, not only the number of decoded audio packets. **It is not yet confirmed by the evaluator.** The brief suggests MediaInfo for verification, and MediaInfo reports **6089** for the supplied sample (its Xing-declared count), as does FFprobe; this API reports **6090**. The evidence and a ready clarification question are in [the frame-count contract](docs/frame-count-contract.md). Do not silently subtract one: changing the convention is an owner decision.
+The repository owner chose this default because the assessment's suggested tool, MediaInfo, and FFprobe both report **6089** for the supplied sample. The API now also returns **6089** by default, or **6090** when physical counting is explicitly requested. The evaluator has not confirmed its intended convention; matching that intention remains an inference. This structural policy does not decode audio and does not promise agreement with every decoder or metadata tool. The evidence, exact policies and compatibility implications are in [the frame-count contract](docs/frame-count-contract.md).
 
 ## Implementation
 
@@ -107,7 +109,7 @@ ffprobe -v error -select_streams a:0 -count_frames \
   -of default=noprint_wrappers=1:nokey=1 tests/fixtures/cbr.mp3
 ```
 
-Because FFprobe reports decoder-facing frames, the expected output for the included sample is **32**, not 33. See [MP3 counting semantics](docs/architecture.md).
+The expected FFprobe output for this fixture is **32**, matching the default HTTP response. Its physical frame count is **33**. See [MP3 counting semantics](docs/architecture.md).
 
 Optional HTTP load test with [k6](https://grafana.com/docs/k6/latest/):
 
@@ -144,7 +146,7 @@ See [Releasing and repository settings](docs/releasing.md) for the verified GitH
 
 ## Authoritative format specifications and AI agent context
 
-- [Assessment-only requirements and default-count acceptance risk](docs/specifications/assessment-scope.md)
+- [Assessment-only requirements and count-policy decision](docs/specifications/assessment-scope.md)
 - [AI-agent entry point](AGENTS.md) (also discoverable by [Claude Code](CLAUDE.md) and [GitHub Copilot](.github/copilot-instructions.md))
 - [Verified standards and primary-source registry](docs/specifications/README.md)
 - [MPEG-1 Layer III header, bitrate table and free-format](docs/specifications/mpeg-1-layer-iii.md)
@@ -188,11 +190,12 @@ ASSESSMENT_SAMPLE_PATH=/path/to/assessment_sample.mp3 npm run test:coverage
 
 The sample SHA-256 is
 `97707a18a58ba75122b1668f5ed738f090121343432d9172a6409ddfa4fc5ab3`.
-The API returns `{"frameCount":6090}` by default, or 6089 with
-`?includeVbrHeaderFrame=false`, using the documented **physical
-MPEG-frame** counting contract. FFprobe and MediaInfo report **6089** because
-the first MPEG frame carries only the Xing header; whether the assessment
-expects 6089 is [an open question](docs/frame-count-contract.md).
+The API returns `{"frameCount":6089}` by default and with
+`?includeVbrHeaderFrame=false`; `?includeVbrHeaderFrame=true` returns **6090**.
+These expectations apply to both raw and multipart uploads. The first MPEG
+frame carries the Xing header. FFprobe and MediaInfo also report **6089** for
+this file. The repository owner has chosen that default; the evaluator's
+intended convention remains unconfirmed. See [the frame-count contract](docs/frame-count-contract.md).
 
 The parser modules have **100% coverage** across statements, branches, functions
 and lines using actual edge-case tests. The HTTP adapter retains defensive

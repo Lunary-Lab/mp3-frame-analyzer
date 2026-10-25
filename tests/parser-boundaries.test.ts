@@ -1,8 +1,45 @@
 import { expect, it } from 'vitest';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { AsyncByteReader } from '../src/mp3/byte-reader.js';
 import { countMp3Frames } from '../src/mp3/count-frames.js';
 import { Mp3ParseError } from '../src/mp3/errors.js';
 import { chunks, frame, id3v1, id3v2, mp3 } from './helpers/mp3-fixtures.js';
+
+it.each([1, 64])(
+  'keeps queue storage bounded with repeated %i-byte lookahead',
+  async (lookahead) => {
+    const collect = global.gc;
+    if (!collect) throw new Error('Queue lifetime verification requires --expose-gc');
+    const byte = Uint8Array.of(1);
+    async function* source(): AsyncGenerator<Uint8Array> {
+      for (;;) yield byte;
+    }
+    const reader = new AsyncByteReader(source());
+    const advance = async (count: number) => {
+      for (let index = 0; index < count; index++) {
+        await reader.has(lookahead);
+        await reader.skipExactly(1);
+      }
+    };
+    try {
+      await advance(16_000); // Warm the cursor paths before measuring live storage.
+      await nextTurn();
+      collect();
+      const before = process.memoryUsage().heapUsed;
+      await advance(400_000);
+      await nextTurn();
+      collect();
+      const growth = process.memoryUsage().heapUsed - before;
+      expect(reader.offset).toBe(416_000);
+      expect(reader.bufferedLength).toBe(lookahead - 1);
+      // Reusing one input byte isolates queue bookkeeping from payload allocation.
+      // Without compaction, 400k consumed array slots retain several MiB.
+      expect(growth).toBeLessThan(2 * 1024 * 1024);
+    } finally {
+      await reader.close();
+    }
+  },
+);
 
 it('does not read upstream for zero-byte lookahead, peek or skip', async () => {
   let calls = 0;

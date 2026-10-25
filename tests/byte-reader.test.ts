@@ -6,6 +6,27 @@ async function* asChunks(...values: number[][]): AsyncGenerator<Uint8Array> {
 }
 
 describe('incremental byte reader', () => {
+  it('preserves byte order through large lookahead, queue compaction and refill', async () => {
+    async function* sequence(): AsyncGenerator<Uint8Array> {
+      for (let index = 0; index < 10_000; index++) yield Uint8Array.of(index % 251);
+    }
+    const reader = new AsyncByteReader(sequence());
+    expect(await reader.has(6_000)).toBe(true);
+    await reader.skipExactly(2_049);
+    expect(reader.offset).toBe(2_049);
+    expect([...reader.peek(13)]).toEqual(Array.from({ length: 13 }, (_, i) => (2_049 + i) % 251));
+    expect(await reader.has(5_000)).toBe(true);
+    await reader.skipExactly(5_000);
+    expect(reader.offset).toBe(7_049);
+    expect(reader.bufferedLength).toBe(0);
+    expect(await reader.has(4)).toBe(true);
+    expect([...reader.peek(4)]).toEqual([7_049, 7_050, 7_051, 7_052].map((value) => value % 251));
+    await reader.skipExactly(2_951);
+    expect(await reader.has(1)).toBe(false);
+    expect(reader.offset).toBe(10_000);
+    await reader.close();
+  });
+
   it('peeks across chunk boundaries without consuming bytes', async () => {
     const reader = new AsyncByteReader(asChunks([0xff], [], [0xfb, 0x90], [0x00]));
     expect(await reader.has(4)).toBe(true);

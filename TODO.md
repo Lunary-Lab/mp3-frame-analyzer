@@ -35,16 +35,19 @@ make the alias obsolete cannot pass CI until this item is reassessed.
 
 ## Quality follow-ups
 
-- [x] Classify and test the 16 surviving Stryker mutants; the latest local score is
-      98.27%, with only 3 equivalent survivors and a 95% CI minimum.
+- [x] Expand mutation testing to every runtime parser module and enforce 100%
+      adjusted detection with exact, reviewed equivalence exceptions. Raw
+      counts, proof assumptions and execution scope are recorded in
+      [the mutation review](docs/mutation-review.md).
 - [ ] Reassess surviving mutants after parser/tooling changes; retain defensive
       checks and do not suppress mutants for cosmetic improvements.
 - [x] Extract shared ID3 traversal and header-error classification to make
       the counting loop easier to follow and remove its complexity warning.
-- [ ] **Owner decision:** confirm whether `frameCount` includes the Xing/Info
-      metadata frame (6090 for the sample) or counts audio frames only (6089,
-      matching MediaInfo and FFprobe). Evidence, the clarification question, and
-      the change/versioning plan are in
+- [x] **Owner decision:** default HTTP counts exclude one recognized initial
+      Xing/Info/VBRI metadata frame (6089 for the sample); explicit
+      `includeVbrHeaderFrame=true` returns 6090 physical frames. This is a
+      breaking API contract change. The evaluator's intended convention remains
+      unconfirmed. Evidence and the compatibility plan are in
       [the frame-count contract](docs/frame-count-contract.md).
 
 ## Repository settings and supported format

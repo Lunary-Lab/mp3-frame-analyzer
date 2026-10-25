@@ -2,107 +2,107 @@
   "schemaVersion": 1,
   "strykerVersion": "10.1.1",
   "target": 100,
-  "contextSha256": "dc74214fd58b26762b5a2aeda4b5c112a042b32aa2831cbc94d9afa0f865eda5",
+  "contextSha256": "87f99d8d08a80ce52efca21d0491768a3c75ca76db403dec389303542a3fd88a",
   "equivalents": [
     {
       "id": "EQ-COPY-OR",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "0a784326b878a8509b966ed31b2e869c65aed1a21d672b05a630d519722ee2ea",
+      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
       "mutatorName": "LogicalOperator",
       "original": "i < this.queued.length && written < length",
       "replacement": "i < this.queued.length || written < length",
       "location": {
-        "end": {
-          "column": 63,
-          "line": 81
-        },
         "start": {
-          "column": 21,
-          "line": 81
+          "line": 83,
+          "column": 34
+        },
+        "end": {
+          "line": 83,
+          "column": 76
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned bytes/count, typed errors, iterator lifecycle and bounded resource ownership; it does not promise identical instruction counts for bounded empty copies. Exact promise-resolution or internal microtask scheduling is not an API guarantee.",
-      "proof": "peek() has already established length <= available. Each iteration copies min(remaining chunk bytes, requested bytes still unwritten), so written cannot exceed length. Once written equals length, any remaining valid queue entries contribute a zero-length subarray and a zero-length set at offset length. The changed OR only visits these extra zero-copy entries; it exits at queue length and does not change state or output."
+      "proof": "peek() has already established length <= available. Each iteration copies min(remaining chunk bytes, requested bytes still unwritten), so written cannot exceed length. Once written equals length, any remaining valid queue entries contribute a zero-length subarray and a zero-length set at offset length. The changed OR only visits these extra zero-copy entries; it exits at queue length and does not change state or output. Re-reviewed after introducing the head cursor: the loop begins at headIndex; only indices below headIndex are cleared, so every visited entry remains defined. available equals the sum of active entries from headIndex onward, less headOffset. Prefix compaction preserves their order and these invariants. The original reasoning therefore continues to apply to the active suffix."
     },
     {
       "id": "EQ-COPY-QUEUE-GUARD",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "0a784326b878a8509b966ed31b2e869c65aed1a21d672b05a630d519722ee2ea",
+      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
       "mutatorName": "ConditionalExpression",
       "original": "i < this.queued.length",
       "replacement": "true",
       "location": {
-        "end": {
-          "column": 43,
-          "line": 81
-        },
         "start": {
-          "column": 21,
-          "line": 81
+          "line": 83,
+          "column": 34
+        },
+        "end": {
+          "line": 83,
+          "column": 56
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned bytes/count, typed errors, iterator lifecycle and bounded resource ownership; it does not promise identical instruction counts for bounded empty copies. Exact promise-resolution or internal microtask scheduling is not an API guarantee.",
-      "proof": "peek() checks length <= available, and available equals the sum of retained bytes minus the head offset. Consequently written reaches length no later than the last queue entry. The remaining written < length condition stops the loop before i can index beyond the queue even when its explicit queue-length guard is replaced by true."
+      "proof": "peek() checks length <= available, and available equals the sum of retained bytes minus the head offset. Consequently written reaches length no later than the last queue entry. The remaining written < length condition stops the loop before i can index beyond the queue even when its explicit queue-length guard is replaced by true. Re-reviewed after introducing the head cursor: the loop begins at headIndex; only indices below headIndex are cleared, so every visited entry remains defined. available equals the sum of active entries from headIndex onward, less headOffset. Prefix compaction preserves their order and these invariants. The original reasoning therefore continues to apply to the active suffix."
     },
     {
       "id": "EQ-COPY-QUEUE-BOUND",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "0a784326b878a8509b966ed31b2e869c65aed1a21d672b05a630d519722ee2ea",
+      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
       "mutatorName": "EqualityOperator",
       "original": "i < this.queued.length",
       "replacement": "i <= this.queued.length",
       "location": {
-        "end": {
-          "column": 43,
-          "line": 81
-        },
         "start": {
-          "column": 21,
-          "line": 81
+          "line": 83,
+          "column": 34
+        },
+        "end": {
+          "line": 83,
+          "column": 56
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned bytes/count, typed errors, iterator lifecycle and bounded resource ownership; it does not promise identical instruction counts for bounded empty copies. Exact promise-resolution or internal microtask scheduling is not an API guarantee.",
-      "proof": "The available-byte precondition ensures written reaches length at or before the last queue entry. At i == queue.length, written < length is already false. Changing the other bound from < to <= therefore never executes an extra out-of-range iteration."
+      "proof": "The available-byte precondition ensures written reaches length at or before the last queue entry. At i == queue.length, written < length is already false. Changing the other bound from < to <= therefore never executes an extra out-of-range iteration. Re-reviewed after introducing the head cursor: the loop begins at headIndex; only indices below headIndex are cleared, so every visited entry remains defined. available equals the sum of active entries from headIndex onward, less headOffset. Prefix compaction preserves their order and these invariants. The original reasoning therefore continues to apply to the active suffix."
     },
     {
       "id": "EQ-COPY-WRITTEN-GUARD",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "0a784326b878a8509b966ed31b2e869c65aed1a21d672b05a630d519722ee2ea",
+      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
       "mutatorName": "ConditionalExpression",
       "original": "written < length",
       "replacement": "true",
       "location": {
-        "end": {
-          "column": 63,
-          "line": 81
-        },
         "start": {
-          "column": 47,
-          "line": 81
+          "line": 83,
+          "column": 60
+        },
+        "end": {
+          "line": 83,
+          "column": 76
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned bytes/count, typed errors, iterator lifecycle and bounded resource ownership; it does not promise identical instruction counts for bounded empty copies. Exact promise-resolution or internal microtask scheduling is not an API guarantee.",
-      "proof": "The queue-length bound still protects every read. Once written reaches length, Math.min(chunk.length - start, length - written) is zero; the remaining iterations set empty subarrays at offset length without changing the result or reader state. The loop remains bounded by the retained queue."
+      "proof": "The queue-length bound still protects every read. Once written reaches length, Math.min(chunk.length - start, length - written) is zero; the remaining iterations set empty subarrays at offset length without changing the result or reader state. The loop remains bounded by the retained queue. Re-reviewed after introducing the head cursor: the loop begins at headIndex; only indices below headIndex are cleared, so every visited entry remains defined. available equals the sum of active entries from headIndex onward, less headOffset. Prefix compaction preserves their order and these invariants. The original reasoning therefore continues to apply to the active suffix."
     },
     {
       "id": "EQ-COPY-WRITTEN-BOUND",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "0a784326b878a8509b966ed31b2e869c65aed1a21d672b05a630d519722ee2ea",
+      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
       "mutatorName": "EqualityOperator",
       "original": "written < length",
       "replacement": "written <= length",
       "location": {
-        "end": {
-          "column": 63,
-          "line": 81
-        },
         "start": {
-          "column": 47,
-          "line": 81
+          "line": 83,
+          "column": 60
+        },
+        "end": {
+          "line": 83,
+          "column": 76
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned bytes/count, typed errors, iterator lifecycle and bounded resource ownership; it does not promise identical instruction counts for bounded empty copies. Exact promise-resolution or internal microtask scheduling is not an API guarantee.",
-      "proof": "When written equals length, the added iterations have take == 0, set empty subarrays at a valid offset, and leave written and the result unchanged. The queue-length condition still terminates traversal. Thus changing < to <= affects only bounded empty copies."
+      "proof": "When written equals length, the added iterations have take == 0, set empty subarrays at a valid offset, and leave written and the result unchanged. The queue-length condition still terminates traversal. Thus changing < to <= affects only bounded empty copies. Re-reviewed after introducing the head cursor: the loop begins at headIndex; only indices below headIndex are cleared, so every visited entry remains defined. available equals the sum of active entries from headIndex onward, less headOffset. Prefix compaction preserves their order and these invariants. The original reasoning therefore continues to apply to the active suffix."
     },
     {
       "id": "EQ-CLEANUP-INITIAL-FLAG",
@@ -563,6 +563,86 @@
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs. Out-of-range typed-array reads return undefined; isVbrHeaderFrame receives a frame-sized view from count-frames or a test-constructed buffer. The observable contract is the boolean result.",
       "proof": "This check runs only after textAt has established a frame of at least 40 bytes, so 10 > frame.length never holds. The mutant is the guard removal analysed in EQ-VBRI-LENGTH-GUARD."
+    },
+    {
+      "id": "EQ-QUEUE-EMPTY-FAST-PATH",
+      "file": "src/mp3/byte-reader.ts",
+      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "mutatorName": "ConditionalExpression",
+      "original": "this.headIndex === this.queued.length",
+      "replacement": "false",
+      "location": {
+        "end": {
+          "column": 50,
+          "line": 114
+        },
+        "start": {
+          "column": 13,
+          "line": 114
+        }
+      },
+      "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no private-state reflection, prototype monkey-patching or concurrent mutation. The observable contract includes returned bytes and counts, typed errors, iterator lifecycle and bounded live queue storage. It does not promise an exact compaction frequency, identical instruction counts, or a particular throughput measurement.",
+      "proof": "Every consumed head is cleared before headIndex advances. Replacing the empty-queue fast-path condition with false leaves an empty active suffix with headIndex equal to queued.length. A later non-empty input is pushed at that exact index, so the next active head is unchanged. The remaining threshold branch still compacts whenever 1024 consumed entries accumulate, including when the suffix is empty. All bytes, offsets, lifecycle calls and error paths are unchanged; live slots remain bounded by active chunks plus at most 1023 consumed slots. This only defers empty-array compaction."
+    },
+    {
+      "id": "EQ-QUEUE-EAGER-COMPACTION",
+      "file": "src/mp3/byte-reader.ts",
+      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "mutatorName": "ConditionalExpression",
+      "original": "this.headIndex >= 1_024",
+      "replacement": "true",
+      "location": {
+        "end": {
+          "column": 43,
+          "line": 117
+        },
+        "start": {
+          "column": 20,
+          "line": 117
+        }
+      },
+      "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no private-state reflection, prototype monkey-patching or concurrent mutation. The observable contract includes returned bytes and counts, typed errors, iterator lifecycle and bounded live queue storage. It does not promise an exact compaction frequency, identical instruction counts, or a particular throughput measurement.",
+      "proof": "The empty-queue branch is unchanged. For a nonempty active suffix, forcing the compaction condition true removes only cleared prefix entries and resets headIndex to zero. splice preserves the active chunks and their order; headOffset has the same value after the surrounding consume step. Immediate compaction after each completed chunk therefore preserves every public cursor result and retains no additional payload references. Live slot storage is no larger than the original. The additional bounded copying cost is outside the promised functional and memory contract and is assessed by performance measurements separately."
+    },
+    {
+      "id": "EQ-QUEUE-COMPACTION-BOUNDARY",
+      "file": "src/mp3/byte-reader.ts",
+      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "mutatorName": "EqualityOperator",
+      "original": "this.headIndex >= 1_024",
+      "replacement": "this.headIndex > 1_024",
+      "location": {
+        "end": {
+          "column": 43,
+          "line": 117
+        },
+        "start": {
+          "column": 20,
+          "line": 117
+        }
+      },
+      "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no private-state reflection, prototype monkey-patching or concurrent mutation. The observable contract includes returned bytes and counts, typed errors, iterator lifecycle and bounded live queue storage. It does not promise an exact compaction frequency, identical instruction counts, or a particular throughput measurement.",
+      "proof": "Changing >=1024 to >1024 delays nonempty-prefix compaction by one completed chunk. Consumed entries are still cleared immediately. Before either compaction, indexing starts at headIndex and available describes precisely the active suffix; afterward the same active suffix is moved to index zero. The public results, ownership and exceptions are identical, and at most one additional undefined slot is retained. Both variants have a constant storage bound independent of total stream length."
+    },
+    {
+      "id": "EQ-QUEUE-EAGER-INVERTED-BOUND",
+      "file": "src/mp3/byte-reader.ts",
+      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "mutatorName": "EqualityOperator",
+      "original": "this.headIndex >= 1_024",
+      "replacement": "this.headIndex < 1_024",
+      "location": {
+        "end": {
+          "column": 43,
+          "line": 117
+        },
+        "start": {
+          "column": 20,
+          "line": 117
+        }
+      },
+      "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no private-state reflection, prototype monkey-patching or concurrent mutation. The observable contract includes returned bytes and counts, typed errors, iterator lifecycle and bounded live queue storage. It does not promise an exact compaction frequency, identical instruction counts, or a particular throughput measurement.",
+      "proof": "headIndex starts at zero. With the mutated <1024 comparison, the first completed chunk increments it to one. If the queue empties, the unchanged empty branch resets it to zero; otherwise one is below 1024, so compaction removes the cleared prefix and resets it to zero. Induction gives the same reset on every later completed chunk. Thus this exact mutant performs eager nonempty compaction, equivalent to EQ-QUEUE-EAGER-COMPACTION for bytes, offsets, errors, lifecycle and bounded storage. It cannot reach the apparent no-compaction state at headIndex>=1024 under a single-mutant execution."
     }
   ]
 }

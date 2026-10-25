@@ -137,6 +137,7 @@ export function auditMutations(report, policy, sources) {
 
   const seen = new Set();
   const mutantIds = new Set();
+  const timedOutEquivalents = [];
   const totals = { killed: 0, timedOut: 0, equivalent: 0, total: 0 };
   const perFile = {};
   for (const file of paths) {
@@ -166,12 +167,14 @@ export function auditMutations(report, policy, sources) {
       const equivalent = exceptions.get(key);
       if (equivalent) {
         requireThat(
-          mutant.status === 'Survived',
-          `${equivalent.id} no longer survives as expected; re-review or remove the exception`,
+          mutant.status === 'Survived' || mutant.status === 'Timeout',
+          `${equivalent.id} has unexpected status ${mutant.status}; re-review or remove the exception`,
         );
+        seen.add(key);
+      }
+      if (equivalent && mutant.status === 'Survived') {
         requireThat(mutant.testsCompleted > 0, `${equivalent.id} was not tested`);
         counts.equivalent++;
-        seen.add(key);
       } else if (mutant.status === 'Killed') {
         requireThat(
           mutant.testsCompleted > 0 && mutant.killedBy?.length > 0,
@@ -185,6 +188,7 @@ export function auditMutations(report, policy, sources) {
           `Invalid timeout evidence for mutant ${mutant.id}`,
         );
         counts.timedOut++;
+        if (equivalent) timedOutEquivalents.push(equivalent.id);
       } else {
         // Includes Survived, NoCoverage, Ignored, Pending, CompileError and RuntimeError.
         throw new Error(
@@ -198,9 +202,13 @@ export function auditMutations(report, policy, sources) {
   }
   requireThat(seen.size === exceptions.size, 'Stale exception: its exact mutant was not generated');
   const detected = totals.killed + totals.timedOut;
-  const relevant = totals.total - totals.equivalent;
+  // Raw counts keep Stryker's timeout outcomes. An exact reviewed equivalent
+  // that timed out is excluded from both sides of the adjusted calculation;
+  // it must never count as evidence that a meaningful change was detected.
+  const adjustedDetected = detected - timedOutEquivalents.length;
+  const adjustedTotal = totals.total - totals.equivalent - timedOutEquivalents.length;
   requireThat(
-    relevant > 0 && detected === relevant,
+    adjustedTotal > 0 && adjustedDetected === adjustedTotal,
     'Adjusted mutation coverage is not exactly 100%',
   );
   return {
@@ -209,9 +217,12 @@ export function auditMutations(report, policy, sources) {
     strykerVersion: policy.strykerVersion,
     rawScore: (detected / totals.total) * 100,
     adjustedScore: 100,
+    adjustedDetected,
+    adjustedTotal,
     ...totals,
     perFile,
     equivalents: [...exceptions.values()].map((entry) => entry.id),
+    timedOutEquivalents,
     scope: paths,
   };
 }

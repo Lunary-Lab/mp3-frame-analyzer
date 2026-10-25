@@ -93,7 +93,7 @@ async function smokeRuntime(runtime) {
     });
     assert.equal(response.status, 200, `Packaged upload returned HTTP ${response.status}`);
     assert.match(response.headers.get('content-type') ?? '', /^application\/json(?:;|$)/);
-    assert.deepEqual(await response.json(), { frameCount: 33 });
+    assert.deepEqual(await response.json(), { frameCount: 32 });
     assert.equal(exited, false, 'Packaged server exited before shutdown');
     assert.equal(child.kill('SIGTERM'), true, 'Could not send SIGTERM to packaged server');
     const shutdown = await deadline(
@@ -102,7 +102,7 @@ async function smokeRuntime(runtime) {
       'Packaged server did not stop after SIGTERM',
     );
     assert.deepEqual(shutdown, { code: 0, signal: null }, `Unclean shutdown:\n${output}`);
-    return { frameCount: 33, shutdownExitCode: shutdown.code };
+    return { frameCount: 32, shutdownExitCode: shutdown.code };
   } finally {
     if (!exited) {
       child.kill('SIGKILL');

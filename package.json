@@ -34,7 +34,7 @@
     "fuzz:minimize": "node scripts/minimize-fuzz-crash.mjs",
     "test:fuzz-tooling": "node --test scripts/minimize-core.test.mjs",
     "typecheck:legacy": "tsc6 --project tsconfig.lint.json --noEmit",
-    "test:mutation:unit": "vitest run --no-isolate --maxWorkers=1 tests/byte-reader.test.ts tests/count-frames.test.ts tests/count-frames.property.test.ts tests/frame-header.test.ts tests/free-format.test.ts tests/free-format-real.test.ts tests/assessment-sample.test.ts tests/fuzz-regressions.test.ts tests/id3.test.ts tests/parser-boundaries.test.ts tests/vbr-header.test.ts",
+    "test:mutation:unit": "vitest run --bail=1 --no-isolate --maxWorkers=1 tests/byte-reader.test.ts tests/count-frames.test.ts tests/count-frames.property.test.ts tests/frame-header.test.ts tests/free-format.test.ts tests/free-format-real.test.ts tests/assessment-sample.test.ts tests/fuzz-regressions.test.ts tests/id3.test.ts tests/parser-boundaries.test.ts tests/vbr-header.test.ts",
     "mutation": "node scripts/run-mutations.mjs",
     "verify:sample": "npm run build --silent && node scripts/verify-sample.mjs",
     "test:tooling": "node --test scripts/*.test.mjs",

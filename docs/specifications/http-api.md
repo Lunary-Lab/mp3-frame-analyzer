@@ -28,18 +28,19 @@ RFC 7578 `4.1` mandates multipart boundary syntax and `4.2` mandates `Content-Di
 
 ## Query policy and returned counts
 
-`includeVbrHeaderFrame` (literal `true` or `false` only) controls whether to count a **recognized initial** Xing/Info/LAME/VBRI metadata-bearing MPEG frame:
+`includeVbrHeaderFrame` (literal `true` or `false` only) controls whether to count a **recognized initial** Xing/Info or VBRI metadata-bearing MPEG frame. LAME data extends Xing/Info; it is not a separate frame signature:
 
-- Omitted / `true` => count all complete physical MPEG frames (assessment sample **6090**).
-- `false` => exclude one recognized initial metadata-only MPEG frame (sample **6089**).
+- Omitted / `false` => exclude one recognized initial metadata frame (assessment sample **6089**).
+- `true` => count all complete physical MPEG frames (sample **6090**).
+- Files without a recognized initial metadata frame keep their full count under every option.
 - Other query values => client error.
 - Always determine physical frames by logical traversal, not the Xing header's declared count.
 
-**The assessment default remains unresolved and is a high-priority acceptance risk.** The brief recommends MediaInfo, which reports **6089** for the supplied sample; an evaluator uploading without query parameters may reasonably expect that result. The optional parameter is not a substitute for the evaluator's default response. Do not silently change the implementation in this documentation PR; record the owner-controlled decision and regression checks in [frame-count-contract.md](../frame-count-contract.md).
+**The owner explicitly selected this HTTP default on 2026-10-24.** It is a breaking change from the previous physical-frame default. Direct `countMp3Frames()` calls retain their physical default because the HTTP adapter passes its policy explicitly. The choice matches MediaInfo's and FFprobe's **6089** result for the supplied sample, but the evaluator's intended convention remains inferred and unconfirmed. This is structural metadata exclusion, not audio decoding. The decision and raw/multipart regressions are recorded in [frame-count-contract.md](../frame-count-contract.md).
 
 ## Success/error shape and classification
 
-Success: JSON object `{"frameCount": number}`; `frameCount` is a nonnegative safe integer (valid current files require at least one physical frame before optional first-frame exclusion). HTTP `200`.
+Success: JSON object `{"frameCount": number}`; `frameCount` is a nonnegative safe integer (accepted files require at least one physical frame before applying the selected initial-header policy). HTTP `200`.
 
 Current application-generated errors: `{"error": string, "message": string}`, JSON `Content-Type`. Distinguish at least:
 
@@ -70,8 +71,8 @@ curl -i http://127.0.0.1:3000/file-upload \
 curl -i http://127.0.0.1:3000/file-upload \
   -H 'Content-Type: audio/mpeg' --data-binary @tests/fixtures/cbr.mp3
 
-# Exclude a recognized initial encoder-header frame:
-curl -i 'http://127.0.0.1:3000/file-upload?includeVbrHeaderFrame=false' \
+# Include all physical frames, including a recognized initial encoder header:
+curl -i 'http://127.0.0.1:3000/file-upload?includeVbrHeaderFrame=true' \
   -F 'file=@tests/fixtures/vbr.mp3;type=audio/mpeg'
 ```
 

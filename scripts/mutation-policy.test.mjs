@@ -73,8 +73,73 @@ test('keeps the raw score separate and never rewrites the raw report', () => {
   const result = run(f);
   assert.equal(result.rawScore, 50);
   assert.equal(result.adjustedScore, 100);
+  assert.equal(result.adjustedDetected, 1);
+  assert.equal(result.adjustedTotal, 1);
   assert.equal(result.equivalent, 1);
+  assert.deepEqual(result.timedOutEquivalents, []);
   assert.deepEqual(f.report, before);
+});
+
+test('keeps reviewed-equivalent timeouts visible without crediting adjusted detection', () => {
+  const f = fixture();
+  f.survived.status = 'Timeout';
+  f.survived.duration = 7759;
+  delete f.survived.testsCompleted;
+  const before = structuredClone(f.report);
+  const result = run(f);
+  assert.equal(result.rawScore, 100);
+  assert.equal(result.adjustedScore, 100);
+  assert.equal(result.adjustedDetected, 1);
+  assert.equal(result.adjustedTotal, 1);
+  assert.equal(result.killed, 1);
+  assert.equal(result.timedOut, 1);
+  assert.equal(result.equivalent, 0);
+  assert.equal(result.total, 2);
+  assert.deepEqual(result.equivalents, ['EQ-example']);
+  assert.deepEqual(result.timedOutEquivalents, ['EQ-example']);
+  assert.deepEqual(result.perFile['src/mp3/example.ts'], {
+    killed: 1,
+    timedOut: 1,
+    equivalent: 0,
+    total: 2,
+  });
+  assert.deepEqual(f.report, before);
+
+  // A reviewed timeout cannot cover a separate, meaningful survivor.
+  f.killed.status = 'Survived';
+  assert.throws(() => run(f), /Unreviewed Survived/);
+});
+
+test('reviewed-equivalent timeouts require positive finite execution evidence', () => {
+  for (const duration of [undefined, null, 0, -1, NaN, Infinity, -Infinity, '7759']) {
+    const f = fixture();
+    f.survived.status = 'Timeout';
+    f.survived.duration = duration;
+    assert.throws(() => run(f), /Invalid timeout evidence/);
+  }
+});
+
+test('a failing test contradicting an equivalence proof requires re-review', () => {
+  const f = fixture();
+  f.survived.status = 'Killed';
+  f.survived.testsCompleted = 1;
+  f.survived.killedBy = ['all'];
+  assert.throws(() => run(f), /unexpected status Killed; re-review/);
+});
+
+test('reviewed equivalence never accepts an incomplete or invalid outcome', () => {
+  for (const status of [
+    'NoCoverage',
+    'Ignored',
+    'Pending',
+    'CompileError',
+    'RuntimeError',
+    'Unexpected',
+  ]) {
+    const f = fixture();
+    f.survived.status = status;
+    assert.throws(() => run(f), /unexpected status .*; re-review/);
+  }
 });
 
 test('new meaningful survivor is never covered by a neighboring exclusion', () => {
@@ -139,9 +204,6 @@ test('stale exceptions cannot survive source, location or toolchain changes', ()
   const h = fixture();
   h.report.framework.version = '11.0.0';
   assert.throws(() => run(h), /Stryker version changed/);
-  const i = fixture();
-  i.survived.status = 'Killed';
-  assert.throws(() => run(i), /no longer survives/);
   const j = fixture();
   j.report.files['src/mp3/example.ts'].mutants.pop();
   assert.throws(() => run(j), /not generated/);
@@ -208,7 +270,11 @@ test('forbids source-level ignore comments even if the policy context is rehashe
 });
 
 test('never declares vacuous 100% when every mutant is excepted', () => {
-  const f = fixture();
-  f.report.files['src/mp3/example.ts'].mutants.shift();
-  assert.throws(() => run(f), /not exactly 100%/);
+  for (const status of ['Survived', 'Timeout']) {
+    const f = fixture();
+    f.report.files['src/mp3/example.ts'].mutants.shift();
+    f.survived.status = status;
+    f.survived.duration = 7759;
+    assert.throws(() => run(f), /not exactly 100%/);
+  }
 });

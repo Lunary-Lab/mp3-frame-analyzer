@@ -6,7 +6,8 @@ import { Mp3ParseError } from './errors.js';
  */
 export class AsyncByteReader {
   private readonly iterator: AsyncIterator<Uint8Array>;
-  private readonly queued: Uint8Array[] = [];
+  private readonly queued: (Uint8Array | undefined)[] = [];
+  private headIndex = 0;
   private headOffset = 0;
   private available = 0;
   private ended = false;
@@ -29,6 +30,7 @@ export class AsyncByteReader {
   /** Stop consuming on early rejection and release any retained stream chunk. */
   async close(): Promise<void> {
     this.queued.length = 0;
+    this.headIndex = 0;
     this.available = 0;
     this.headOffset = 0;
     if (!this.ended) {
@@ -72,15 +74,15 @@ export class AsyncByteReader {
     if (!Number.isSafeInteger(length) || length < 0 || length > this.available) {
       throw new RangeError('Insufficient buffered data');
     }
-    const first = this.queued[0];
+    const first = this.queued[this.headIndex];
     if (first !== undefined && first.length - this.headOffset >= length) {
       return first.subarray(this.headOffset, this.headOffset + length);
     }
     const bytes = new Uint8Array(length);
     let written = 0;
-    for (let i = 0; i < this.queued.length && written < length; i++) {
+    for (let i = this.headIndex; i < this.queued.length && written < length; i++) {
       const chunk = this.queued[i]!;
-      const start = i === 0 ? this.headOffset : 0;
+      const start = i === this.headIndex ? this.headOffset : 0;
       const take = Math.min(chunk.length - start, length - written);
       bytes.set(chunk.subarray(start, start + take), written);
       written += take;
@@ -98,14 +100,24 @@ export class AsyncByteReader {
       if (!(await this.has(1))) {
         throw new Mp3ParseError('truncated-mp3', this.absoluteOffset, 'Unexpected end of MP3');
       }
-      const head = this.queued[0]!;
+      const head = this.queued[this.headIndex]!;
       const take = Math.min(remaining, head.length - this.headOffset);
       this.headOffset += take;
       this.absoluteOffset += take;
       this.available -= take;
       remaining -= take;
       if (this.headOffset === head.length) {
-        this.queued.shift();
+        // Release consumed chunks immediately. Compact occasionally so repeated
+        // lookahead/refill keeps queue storage bounded without shifting on every
+        // one-byte chunk during free-format discovery.
+        this.queued[this.headIndex++] = undefined;
+        if (this.headIndex === this.queued.length) {
+          this.queued.length = 0;
+          this.headIndex = 0;
+        } else if (this.headIndex >= 1_024) {
+          this.queued.splice(0, this.headIndex);
+          this.headIndex = 0;
+        }
         this.headOffset = 0;
       }
     }

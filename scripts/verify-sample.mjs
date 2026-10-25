@@ -14,7 +14,19 @@ if (!path) {
   if (digest !== '97707a18a58ba75122b1668f5ed738f090121343432d9172a6409ddfa4fc5ab3') {
     throw new Error('Sample SHA-256 does not match the assessment sample');
   }
-  const frameCount = await countMp3Frames(createReadStream(path, { highWaterMark: 4096 }));
-  if (frameCount !== 6090) throw new Error(`Expected 6090 frames, got ${frameCount}`);
-  console.log(JSON.stringify({ frameCount, bytes: bytes.length, sha256: digest }));
+  // Match the HTTP default explicitly; the low-level parser defaults to physical frames.
+  const frameCount = await countMp3Frames(createReadStream(path, { highWaterMark: 4096 }), {
+    includeVbrHeaderFrame: false,
+  });
+  const physicalFrameCount = await countMp3Frames(createReadStream(path, { highWaterMark: 4096 }), {
+    includeVbrHeaderFrame: true,
+  });
+  if (frameCount !== 6089)
+    throw new Error(`Expected 6089 frames excluding metadata, got ${frameCount}`);
+  if (physicalFrameCount !== 6090) {
+    throw new Error(`Expected 6090 physical frames, got ${physicalFrameCount}`);
+  }
+  console.log(
+    JSON.stringify({ frameCount, physicalFrameCount, bytes: bytes.length, sha256: digest }),
+  );
 }

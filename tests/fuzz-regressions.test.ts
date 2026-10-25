@@ -41,3 +41,15 @@ it('preserves the rejection type when a stored regression is parsed in small chu
     expect(error).toBeInstanceOf(Mp3ParseError);
   }
 });
+
+it('replays a valid free-format stream below the old 96-byte-per-frame fuzz bound', async () => {
+  // Three independently constructed, unpadded 24-byte mono frames at 48 kHz.
+  // Jazzer raw replay also executes this seed through its physical-count oracle.
+  const bytes = await readFile(
+    new URL('../fuzz/regressions/raw/free-format-minimum.bin', import.meta.url),
+  );
+  expect(bytes.length).toBe(72);
+  for (const size of [1, 2, 3, 4, 7, 127, 4096, 65536]) {
+    await expect(countMp3Frames(chunks(bytes, [size]))).resolves.toBe(3);
+  }
+});
