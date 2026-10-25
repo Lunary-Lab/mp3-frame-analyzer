@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.1](https://github.com/Lunary-Lab/mp3-frame-analyzer/releases/tag/v2.1.1) (2026-10-25)
+
+
+### Miscellaneous Chores
+
+* **governance:** enforce rulesets and release approval on the public repository ([#1](https://github.com/Lunary-Lab/mp3-frame-analyzer/issues/1)) ([812c7b2](https://github.com/Lunary-Lab/mp3-frame-analyzer/commit/812c7b2b22cb7f933bf423f650684e51146eb145))
+
 ## 2.1.0 (2026-10-25)
 
 
