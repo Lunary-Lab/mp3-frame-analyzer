@@ -23,7 +23,6 @@
 | `github_branch_default.analyzer`                | `main`                                                                                                             |
 | `github_actions_repository_permissions`         | Selected actions only: GitHub-owned, verified creators, two listed patterns; full-SHA pinning required             |
 | `github_workflow_repository_permissions`        | Read-only default `GITHUB_TOKEN`; Actions may create PRs (Release Please needs it)                                 |
-| `github_actions_repository_access_level`        | No other repository may use these workflows                                                                        |
 | `github_repository_vulnerability_alerts`        | On                                                                                                                 |
 | `github_repository_dependabot_security_updates` | On                                                                                                                 |
 | `github_repository_ruleset.main`                | See [Main branch rules](#main-branch-rules)                                                                        |
@@ -79,6 +78,8 @@ terraform -chdir=governance init -backend-config="path=$state_dir/terraform.tfst
 ```
 
 **Change a setting.** Edit `governance/*.tf` in a pull request and run `terraform -chdir=governance test`. After the pull request merges, run `plan`, review it, `apply`, then `chmod 600 "$state_dir"/terraform.tfstate*`.
+
+**Change visibility first.** The provider sends visibility and the secret scanning settings in one request, and GitHub refuses secret scanning on a private repository. To make a private copy public, run `gh api -X PATCH repos/Lunary-Lab/mp3-frame-analyzer -f visibility=public` before `apply`. The Actions access-level setting applies only to private repositories, so it is not managed here.
 
 **Detect drift.** Exit code 0 means no drift, 2 means GitHub differs from the configuration, and 1 means an error:
 

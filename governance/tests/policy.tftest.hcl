@@ -19,10 +19,6 @@ override_resource {
 }
 
 override_resource {
-  target = github_actions_repository_access_level.analyzer
-}
-
-override_resource {
   target = github_repository_vulnerability_alerts.analyzer
 }
 
@@ -284,8 +280,7 @@ run "adopted_settings_keep_squash_only_private_and_read_only_tokens" {
     condition = (
       github_workflow_repository_permissions.analyzer.default_workflow_permissions == "read" &&
       github_actions_repository_permissions.analyzer.allowed_actions == "selected" &&
-      github_actions_repository_permissions.analyzer.sha_pinning_required &&
-      github_actions_repository_access_level.analyzer.access_level == "none"
+      github_actions_repository_permissions.analyzer.sha_pinning_required
     )
     error_message = "Actions must default to read-only tokens and SHA-pinned, selected actions."
   }
