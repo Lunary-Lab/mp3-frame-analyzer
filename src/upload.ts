@@ -9,6 +9,11 @@ export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 /** Accepted for a raw upload's request and a multipart upload's form part alike. */
 const mp3MediaTypes = new Set(['audio/mpeg', 'audio/mp3', 'application/octet-stream']);
 
+/** Busboy lowercases media types but can leave their surrounding ASCII SP/HTAB. */
+function isMp3PartType(mediaType: string): boolean {
+  return mp3MediaTypes.has(mediaType.replace(/^[ \t]+|[ \t]+$/g, ''));
+}
+
 /** The two ways a client can send an upload. */
 export type UploadForm = 'raw' | 'multipart';
 
@@ -68,7 +73,7 @@ export async function registerUploads(
     // RFC 7578 permits file parts without filenames. Busboy otherwise treats
     // audio media types without a filename as text fields.
     isPartAFile: (_fieldName, contentType, fileName) =>
-      fileName !== undefined || mp3MediaTypes.has(contentType ?? ''),
+      fileName !== undefined || isMp3PartType(contentType ?? ''),
   });
   return {
     consume: (request, reply, consumer) =>
@@ -118,7 +123,7 @@ async function consumeMultipartUpload<T>(
       await discardPart(part.file);
       throw new ClientError(400, 'invalid-upload', 'Upload field must be named "file"');
     }
-    if (!mp3MediaTypes.has(part.mimetype)) {
+    if (!isMp3PartType(part.mimetype)) {
       await discardPart(part.file);
       throw new ClientError(415, 'unsupported-media-type', 'Expected an MP3 file');
     }

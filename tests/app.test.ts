@@ -135,6 +135,42 @@ describe('POST /file-upload', () => {
     },
   );
 
+  it.each(
+    ['audio/mpeg', 'audio/mp3', 'application/octet-stream'].flatMap((mime) => [
+      ` ${mime}`,
+      `${mime} `,
+      `\t${mime}`,
+      `${mime}\t`,
+    ]),
+  )('accepts outer SP/HTAB around the multipart media type %j', async (mime) => {
+    const form = multipartBody(frame(), { mime });
+    for (const filename of [true, false]) {
+      const payload = filename
+        ? form.payload
+        : Buffer.from(
+            form.payload.toString('latin1').replace('; filename="test.mp3"', ''),
+            'latin1',
+          );
+      const response = await app.inject({
+        method: 'POST',
+        url: '/file-upload',
+        headers: { 'content-type': form.contentType },
+        payload,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ frameCount: 1 });
+    }
+  });
+
+  it.each(['audio/mp eg', 'audio/mp\teg', ' audio/wav ', '\u00a0audio/mpeg\u00a0'])(
+    'does not normalize disallowed multipart media type %j into an allowed one',
+    async (mime) => {
+      const response = await upload(frame(), { mime });
+      expect(response.statusCode).toBe(415);
+      expect(response.json()).toHaveProperty('error', 'unsupported-media-type');
+    },
+  );
+
   it('keeps unexpected failures as sanitized HTTP 500 responses', async () => {
     const failingApp = await buildApp();
     // A failed request hook is a real framework boundary, independent of parser details.
