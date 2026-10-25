@@ -1,0 +1,20 @@
+# Native GitHub release notes are the complete engineering view, not CHANGELOG.md.
+# Do not exclude authors or labels: even unlabeled and release-only PRs are accounted for.
+changelog:
+  categories:
+    - title: Breaking changes
+      labels: [breaking-change]
+    - title: Features and behavior
+      labels: [enhancement, feature]
+    - title: Fixes and security
+      labels: [bug, security]
+    - title: Dependencies
+      labels: [dependencies]
+    - title: Documentation
+      labels: [documentation]
+    - title: Engineering maintenance
+      labels: [refactor, test, ci, build]
+    - title: Release preparation
+      labels: ['autorelease: tagged', 'autorelease: pending']
+    - title: Other changes
+      labels: ['*']

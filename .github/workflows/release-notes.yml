@@ -1,0 +1,174 @@
+name: Prepare release notes
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+      sha:
+        required: true
+        type: string
+    outputs:
+      artifact_id:
+        value: ${{ jobs.compose.outputs.artifact_id }}
+      artifact_digest:
+        value: ${{ jobs.compose.outputs.artifact_digest }}
+      body_sha256:
+        value: ${{ jobs.compose.outputs.body_sha256 }}
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag; run this workflow at that same tag (preview only)
+        required: true
+        type: string
+      sha:
+        description: Exact 40-character commit SHA of that tag
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      previous_tag: ${{ steps.plan.outputs.previous_tag }}
+      previous_sha: ${{ steps.plan.outputs.previous_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Resolve the shared release range and audit all commits and merged PRs
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_SHA: ${{ inputs.sha }}
+        run: node scripts/release-notes.mjs plan
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes-input-${{ inputs.tag }}-${{ github.run_attempt }}
+          path: .release-notes-input/plan.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+  native:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    # GitHub requires contents:write for generate-notes, although it saves nothing.
+    # This job has no checkout and executes no project code or downloaded artifacts.
+    permissions:
+      contents: write
+    steps:
+      - name: Generate native engineering notes without creating or editing a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_SHA: ${{ inputs.sha }}
+          PREVIOUS_TAG: ${{ needs.plan.outputs.previous_tag }}
+          PREVIOUS_SHA: ${{ needs.plan.outputs.previous_sha }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { mkdirSync, writeFileSync } from 'node:fs';
+          const { GH_REPO: repo, RELEASE_TAG: tag, RELEASE_SHA: sha,
+            PREVIOUS_TAG: previousTag, PREVIOUS_SHA: previousSha } = process.env;
+          const version = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+          assert.match(tag, version);
+          assert.match(previousTag, version);
+          assert.match(sha, /^[0-9a-f]{40}$/);
+          assert.match(previousSha, /^[0-9a-f]{40}$/);
+          assert.equal(sha, process.env.GITHUB_SHA);
+          assert.equal(process.env.GITHUB_REF, `refs/tags/${tag}`);
+          const api = (path) => JSON.parse(execFileSync('gh', ['api', '--method', 'GET',
+            `repos/${repo}/${path}`], { encoding: 'utf8' }));
+          assert.equal(api(`commits/${tag}`).sha, sha);
+          assert.equal(api(`commits/${previousTag}`).sha, previousSha);
+          const payload = { tag_name: tag, target_commitish: sha,
+            previous_tag_name: previousTag, configuration_file_path: '.github/release.yml' };
+          const result = JSON.parse(execFileSync('gh', ['api', '--method', 'POST',
+            `repos/${repo}/releases/generate-notes`, '--input', '-'],
+            { input: JSON.stringify(payload), encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }));
+          assert.equal(typeof result.body, 'string');
+          mkdirSync('.release-notes-native');
+          writeFileSync('.release-notes-native/native.json', JSON.stringify(result));
+          JS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes-native-${{ inputs.tag }}-${{ github.run_attempt }}
+          path: .release-notes-native/native.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+  compose:
+    needs: [plan, native]
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    outputs:
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
+      artifact_digest: ${{ steps.artifact.outputs.artifact-digest }}
+      body_sha256: ${{ steps.compose.outputs.body_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes-input-${{ inputs.tag }}-${{ github.run_attempt }}
+          path: .release-notes-input
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes-native-${{ inputs.tag }}-${{ github.run_attempt }}
+          path: .release-notes-native
+      - name: Preserve user notes and verify complete engineering coverage
+        id: compose
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: node scripts/release-notes.mjs compose
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: artifact
+        with:
+          name: release-notes-${{ inputs.tag }}-${{ github.run_attempt }}
+          path: .release-notes/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+      - name: Report the exact notes identity for the later owner decision
+        env:
+          NOTES_ID: ${{ steps.artifact.outputs.artifact-id }}
+          NOTES_DIGEST: ${{ steps.artifact.outputs.artifact-digest }}
+          BODY_SHA256: ${{ steps.compose.outputs.body_sha256 }}
+        run: |
+          {
+            echo '## Prepared release notes — not published'
+            echo "Artifact ID: \`$NOTES_ID\`"
+            echo "Artifact digest: \`$NOTES_DIGEST\`"
+            echo "Body SHA-256: \`$BODY_SHA256\`"
+            echo "Producer run/attempt: \`$GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT\`"
+            echo "Source: \`$GITHUB_SHA\`"
+            echo 'A caller must bind these identities to the same owner approval as the runtime assets.'
+          } >> "$GITHUB_STEP_SUMMARY"
