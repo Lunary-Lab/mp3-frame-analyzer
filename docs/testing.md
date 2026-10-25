@@ -146,6 +146,15 @@ expectations. See
 
 HTTP tests cover the accepted MIME types, malformed multipart classification, rejected text/additional file parts, exact file-limit boundaries, sanitized application failures, cancellation, continued service after rejection, and demonstrated keep-alive connection reuse, including pipelined requests behind a large upload that the parser rejected early. Shutdown tests exercise successful close hooks, rejected hooks, the drain deadline, invalid startup configuration, and a real child process receiving SIGTERM on POSIX. A transport abort is not asserted to produce an application JSON response.
 
+Deployment configuration tests cover the absent 50 MiB default, decimal syntax,
+positive/safe-integer boundaries, and rejected empty, malformed, signed,
+fractional, unsafe and unlimited values. Real `src/server.ts` child-process tests
+verify invalid configuration exits before listening and a configured limit accepts
+one byte below and exactly at the boundary, then rejects one byte above, for
+known-length raw, chunked raw and multipart file bytes. An unfinished declared
+oversize raw request is rejected immediately, and the server still accepts the
+next valid upload.
+
 `npm run check` includes helper-tool tests and builds the application. The build removes generated `dist/` first, so renamed or deleted source modules cannot linger in the runtime archive; a tooling regression renames a source module between two builds and verifies the obsolete output is gone. `npm run package:release` packages that existing build, verifies version agreement, and generates checksums and a production CycloneDX SBOM. `npm run test:artifact` verifies the digests, installs production dependencies in a temporary unpacked directory, starts `dist/server.js`, checks a real HTTP upload, and observes graceful shutdown. This guards against source-only npm tarballs that omit `dist/`. The GitHub Release workflow reuses the complete CI gates for the exact tagged commit and uploads the same tested artifact bytes.
 
 ## Release-hardening verification (October 24, 2026)
