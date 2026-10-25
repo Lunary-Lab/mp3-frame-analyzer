@@ -1,7 +1,3 @@
-# Proposed, not active: GitHub returns 403 for rulesets on this private
-# repository under the organization's Free plan. Enable with
-# enable_rulesets = true once the plan supports private-repository rulesets.
-#
 # No bypass actors: neither administrators nor automation can skip these
 # rules. docs/governance.md describes the audited emergency procedure.
 resource "github_repository_ruleset" "main" {

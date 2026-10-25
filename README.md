@@ -71,7 +71,7 @@ The response uses `Content-Type: application/json`. For multipart uploads, the `
 | Situation                                                         | HTTP status | Error code / behavior                                                                            |
 | ----------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------ |
 | Valid raw or multipart MPEG-1 Layer III                           | 200         | `{"frameCount":32}` (bundled CBR fixture, default policy)                                        |
-| Missing, incomplete or malformed multipart form, or invalid query | 400         | `missing-file`, `invalid-upload`, `invalid-option`                                               |
+| Observed missing/incomplete/malformed multipart, or invalid query | 400         | `missing-file`, `invalid-upload`, `invalid-option`                                               |
 | Empty raw or multipart file                                       | 400         | `empty-file`                                                                                     |
 | Invalid HTTP body framing / length                                | 400         | `invalid-request` when the connection remains writable                                           |
 | MP3 file exceeds per-file limit                                   | 413         | `file-too-large`                                                                                 |
@@ -83,7 +83,7 @@ The response uses `Content-Type: application/json`. For multipart uploads, the `
 | Wrong method on `/file-upload`                                    | 405         | `method-not-allowed` with `Allow: POST`                                                          |
 | Unexpected application failure                                    | 500         | `internal-error` (sanitized)                                                                     |
 
-All application-generated error bodies use JSON with `error` and `message` strings. Limits apply to both raw and multipart uploads. A malformed MPEG header can be rejected **before** a later size-limit violation is observable; an explicit oversized raw `Content-Length` is rejected early. Thus 413 does not always take precedence over 422 for a malicious stream.
+All application-generated error bodies use JSON with `error` and `message` strings. Limits apply to both raw and multipart uploads. Error classification follows the **first observable failure**: a malformed MPEG header can be rejected before a later size-limit violation or incomplete multipart ending is observable. An explicit oversized raw `Content-Length` is rejected early. Thus a later 413 or multipart 400 does not replace an already reported 422.
 
 A rejected **raw** upload sends its JSON error with `Connection: close` rather than draining arbitrary additional bytes. Multipart uploads retain existing draining behavior for keep-alive reuse. Client disconnects, aborted/incomplete HTTP bodies, and native Node request-header timeouts may prevent any application JSON response; a client should not expect an HTTP response from a broken connection. 429 and 503 are intentionally not configured because this local assessment API has no rate limiter or load-shedding policy.
 
@@ -150,7 +150,7 @@ k6 run bench/upload.k6.js
 ## Developer workflow / security
 
 - Node 24, native TypeScript 7 with the TypeScript 6 API compatibility alias, `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, ESM.
-- ESLint + type-aware `typescript-eslint`, maintained Node security rules for application code, JS/MJS linting for build/fuzz/benchmark scripts, cyclomatic complexity warnings, and Prettier.
+- ESLint + type-aware `typescript-eslint`, maintained Node security rules for application code, JS/MJS linting for build/fuzz/benchmark scripts, enforced production cyclomatic complexity limits (errors above 10), advisory test complexity warnings above 16, and Prettier. See [code quality limits](docs/code-quality.md).
 - Vitest/V8 coverage with enforced thresholds; fast-check properties; mutation smoke, Jazzer.js coverage-guided fuzzing, and replayable crash regressions.
 - [Lefthook](https://lefthook.dev/) optional local hooks: `npm run hooks:install`. Pre-commit checks staged formatting and [Betterleaks](https://github.com/betterleaks/betterleaks) staged secrets (v1.9.0). Pre-push runs `npm run check`.
 - GitHub Actions CI checks Node 24 and 26, a clean npm 11.9 installation, build/test/type/lint, focused mutation testing, bounded fuzzing, memory scaling, local HTTP measurements, complete and production dependency audits, workflow validation, Git-history secret scanning, focused Semgrep rules, and an unpacked release artifact. Weekly dependency audits catch newly published advisories.
@@ -162,7 +162,7 @@ The staged secrets hook needs Betterleaks installed locally; the hook fails clos
 
 [Release Please](https://github.com/googleapis/release-please) derives version bumps and a changelog from **Conventional Commit PR titles**, preserved with **Squash and merge**. `fix:` / `perf:` increment the patch version, `feat:` increments the minor version, and `!` marks a breaking change. Labels do not decide versions. The generated release PR updates the package, lockfile, version manifest, and changelog; a maintainer reviews and merges it to approve a release.
 
-[v1.1.0](https://github.com/Lunary-Lab/mp3-frame-analyzer/releases/tag/v1.1.0) was the first release published through this pipeline; see the [release record](docs/releasing.md#release-record). Release CI validates the exact tagged commit and publishes a runtime archive containing compiled JavaScript, a lockfile for production dependency installation, checksums, release metadata, and a production SBOM. It installs and runs the **unpacked archive** before those same bytes can be attached to the GitHub Release. No npm registry publication or production deployment is configured.
+Release CI validates the exact tagged commit and publishes a runtime archive containing compiled JavaScript, a lockfile for production dependency installation, checksums, release metadata, and a production SBOM. It installs and runs the **unpacked archive** before those same bytes can be attached to the GitHub Release. No npm registry publication or production deployment is configured.
 
 ```bash
 npm run check
@@ -170,7 +170,7 @@ npm run package:release    # packages the existing dist/ build; also creates SBO
 npm run test:artifact      # fresh production install, real upload, graceful shutdown
 ```
 
-See [Releasing and repository settings](docs/releasing.md) for the verified GitHub settings, what the current plan cannot enforce, permissions, artifact verification, provenance availability, and recovery of an interrupted release.
+See [Releasing and repository settings](docs/releasing.md) for the enforced GitHub settings, the release approval, permissions, artifact verification, provenance availability, and recovery of an interrupted release.
 
 ## Authoritative format specifications and AI agent context
 

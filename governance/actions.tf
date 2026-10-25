@@ -25,9 +25,3 @@ resource "github_workflow_repository_permissions" "analyzer" {
   default_workflow_permissions     = "read"
   can_approve_pull_request_reviews = true
 }
-
-# No other repository may call this repository's workflows or actions.
-resource "github_actions_repository_access_level" "analyzer" {
-  repository   = github_repository.analyzer.name
-  access_level = "none"
-}

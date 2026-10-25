@@ -62,20 +62,15 @@ Verified on 2026-10-24; details in [release setup](docs/releasing.md).
       `googleapis/release-please-action` and
       `amannn/action-semantic-pull-request`; SHA pinning is required.
 - [x] Dependabot alerts and security updates enabled.
-- [x] Immutable releases enabled; v1.1.0 rejects added assets (HTTP 422) and
-      passes `gh release verify`.
-- [x] Full release lifecycle exercised: release PR #10 → tag `v1.1.0` at
-      `82a59e5` → validated, published, independently smoke-tested assets.
-- [ ] **Blocked by plan:** require `All checks`, `Conventional Commit PR title`,
-      an independent approval, and protected release tags. Branch protection
-      and rulesets return 403 for this private repository on the organization's
-      Free plan (Team or higher, or a public repository, is required).
-      `main-policy-audit.yml` detects bypasses after the fact; it does not
-      prevent them.
-- [ ] **Blocked by plan:** build provenance attestations for this private
-      repository require GitHub Enterprise Cloud. When available, set the
-      Actions variable `ENABLE_ARTIFACT_ATTESTATIONS=true` and verify a release
-      with `gh attestation verify`.
+- [x] Immutable releases enabled; published releases reject added assets.
+- [x] Full release lifecycle exercised: release PR → tag → validated,
+      published, independently smoke-tested assets (1.1.0 through 2.1.0).
+- [x] Rulesets enforce a pull request, both required checks
+      (`All checks` and the Conventional Commit PR title), an up-to-date
+      branch, resolved conversations, signed linear history and protected
+      release tags, with no bypass (`governance/`).
+- [x] Build provenance attestations run for every release, and publication
+      waits for the release approver in the `release` environment.
 - [ ] Remove the scoped `typed-rest-client` / `qs` override (review by
       2026-12-15). `@stryker-mutator/core@10.1.1` (latest, 2026-10-23) still
       requires `typed-rest-client ~2.3.0`, whose 2.3.1 pins `qs@6.15.1`

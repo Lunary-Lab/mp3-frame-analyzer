@@ -60,6 +60,7 @@ jobs:
             sudo apt-get install -y -qq --no-install-recommends lame
           fi
           lame --version
+          node scripts/encoder-fixtures.mjs
       - run: npm run check
       - name: Exercise real mutation-cache invalidation and survivor detection
         if: matrix.node == '24'
@@ -201,6 +202,8 @@ jobs:
           else
             node scripts/run-mutations.mjs
           fi
+      - name: Require active genuine encoder mutation coverage
+        run: node scripts/verify-encoder-discovery.mjs reports/mutation/mutation.json
       # A consumer additionally requires the entire producing CI run to have
       # completed successfully. PR artifacts are never eligible baselines.
       - name: Publish audited default-branch baseline

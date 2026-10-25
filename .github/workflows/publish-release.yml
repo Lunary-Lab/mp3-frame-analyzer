@@ -96,6 +96,9 @@ jobs:
     needs: [preflight, verify, provenance]
     if: always() && needs.preflight.result == 'success' && needs.verify.result == 'success' && (needs.provenance.result == 'success' || needs.provenance.result == 'skipped')
     runs-on: ubuntu-latest
+    # The one human approval: the release environment admits only v* tags and
+    # waits for the release approver after the tag is tested and attested.
+    environment: release
     timeout-minutes: 5
     concurrency:
       group: release-publication-${{ github.repository }}

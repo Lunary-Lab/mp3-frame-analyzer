@@ -4,7 +4,7 @@ Releases distribute a versioned runtime archive through GitHub Releases. The npm
 
 ## Version authority
 
-[Release Please Action v5](https://github.com/googleapis/release-please-action/blob/v5.0.0/README.md) maintains the release PR, changelog, package version, lockfile version, and `.release-please-manifest.json`. The manifest was initialized at **1.0.0**, with bootstrap commit `fa85190d2f4ad31453c32e90cff0b76ae432526a`. That was a version baseline, not a published 1.0.0 artifact; the first nonbreaking `feat` release advanced it to **1.1.0**. For the current source version, consult the package and release manifest rather than this historical initialization record. `last-release-sha` pins the 2.0.0 release commit on `main` as the start of the next release notes; later releases are found before it, so it never needs updating.
+[Release Please Action v5](https://github.com/googleapis/release-please-action/blob/v5.0.0/README.md) maintains the release PR, changelog, package version, lockfile version, and `.release-please-manifest.json`. The manifest was initialized at **1.0.0**, with bootstrap commit `fa85190d2f4ad31453c32e90cff0b76ae432526a`. That was a version baseline, not a published 1.0.0 artifact; the first nonbreaking `feat` release advanced it to **1.1.0**. For the current source version, consult the package and release manifest rather than this historical initialization record. `last-release-sha` pins the 2.1.0 release commit on `main`, so the next release notes start after it; once a later release exists, Release Please finds that release first, so the pin never needs updating.
 
 Use Conventional Commit PR titles and **squash merge with the PR title as the commit title**. Release Please reads the resulting commits on `main`; PR labels do not provide a second versioning authority. The squash commit body defaults to **blank** because Release Please also parses commit bodies: a `BREAKING CHANGE:` note or a paragraph starting `fix:` copied from branch commits or a PR description would otherwise add releases the title did not declare. Mark breaking changes with `!` in the PR title; a deliberate `BREAKING CHANGE:` footer can still be typed into the merge dialog. Optional scopes describe the changed area without changing the bump. Dependabot uses `fix(deps):` for production dependency updates, `build(deps-dev):` for development-only updates, and `ci(deps):` for Actions updates.
 
@@ -25,7 +25,8 @@ An intentional incompatible change to the JSON shape, documented status semantic
 3. Review and squash merge the release PR. Release Please creates a **draft release** and, with `force-tag-creation`, creates its `vX.Y.Z` tag while it is still a draft.
 4. The workflow dispatches `publish-release.yml` **at that exact tag**, passing its full commit SHA. Preflight requires a matching draft, a matching tag commit already reachable from `main`, and `GITHUB_SHA` equal to the declared source commit. Dispatching from `main` is rejected.
 5. The reusable, read-only CI validates that commit. It checks Node 24 and 26, npm compatibility, formatting, lint, both TypeScript compilers, coverage, tooling, mutation testing, fuzzing, dependency audits, static analysis, secrets, and measured memory/HTTP behavior. The Node 24 release lane packages the existing compiled output and tests the unpacked artifact; the publisher never rebuilds it.
-6. Optional build-provenance attestation uses the tested asset checksums. Publication downloads those same assets, verifies their checksums, rechecks the draft/tag, attaches the files, and only then publishes the draft. A required validation or enabled attestation failure leaves it unpublished.
+6. Build-provenance attestation signs the tested asset checksums.
+7. The `publish` job waits in the `release` environment for one approval from the release approver ([Release approval](governance.md#release-approval)). After approval it downloads the same tested assets, verifies their checksums, rechecks the draft and tag, attaches the files, and only then publishes the draft. A validation, attestation or approval that does not succeed leaves it unpublished.
 
 The version verifier requires agreement between `package.json`, both lockfile root versions, the release manifest, and the supplied release tag. In CI, the recorded source commit must equal the checked-out Git HEAD. Tag-based invocation also keeps the standard attestation's workflow commit aligned with the actual build source.
 
@@ -55,32 +56,21 @@ Workflow actions are pinned by commit. Ordinary PR title validation uses `pull_r
 
 ## Repository settings
 
-Values below were read back from the GitHub API after being saved on **2026-10-24**. The repository stays private. Since 2026-10-25, Terraform in [`governance/`](../governance/) manages these settings; see [Repository governance as code](governance.md).
+Terraform in [`governance/`](../governance/) manages the repository's settings; [Repository governance as code](governance.md) lists them with their verification. In short:
 
-| Setting                                | Value                                                                                                                                           | Status                                                                                              |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Merge methods                          | Squash only; merge commits and rebase merges disabled                                                                                           | Enabled                                                                                             |
-| Squash commit                          | Title = PR title (`PR_TITLE`), body = blank (`BLANK`)                                                                                           | Enabled; used for PR #8                                                                             |
-| Delete merged branches                 | On                                                                                                                                              | Enabled; verified on PR #8                                                                          |
-| Auto-merge                             | Off (nothing would wait for checks)                                                                                                             | Unchanged                                                                                           |
-| Default `GITHUB_TOKEN` permissions     | Read-only, at both the organization and the repository                                                                                          | Unchanged                                                                                           |
-| Actions may create and approve PRs     | On, at both levels; GitHub offers one combined switch                                                                                           | Verified: Release Please opened PR #10                                                              |
-| Allowed Actions                        | GitHub-owned, plus `googleapis/release-please-action@*` and `amannn/action-semantic-pull-request@*`; SHA pinning required (organization policy) | Enabled; previously "all actions"                                                                   |
-| Fork PR workflows (private)            | Not run; no write tokens or secrets                                                                                                             | Unchanged                                                                                           |
-| Dependabot alerts and security updates | On                                                                                                                                              | Enabled; previously off                                                                             |
-| Immutable releases                     | On                                                                                                                                              | Enabled; verified on v1.1.0: adding an asset returns HTTP 422 and `gh release verify v1.1.0` passes |
-| Branch protection and rulesets         | Return **403**: "Upgrade to GitHub Pro or make this repository public" (organization rulesets: "Upgrade to GitHub Team")                        | **Blocked by plan**                                                                                 |
-| Build provenance attestations          | Private repositories require GitHub Enterprise Cloud; `ENABLE_ARTIFACT_ATTESTATIONS` is unset                                                   | **Blocked by plan**; the provenance job was skipped for v1.1.0                                      |
-
-**Nothing enforces review or required checks.** Passing workflow files do not establish a merge policy. Treat a pull request with passing `All checks` and `Conventional Commit PR title` checks and resolved conversations as the merge standard. The [merge-policy audit](#merge-policy-audit) reports departures after they happen. [`governance/rulesets.tf`](../governance/rulesets.tf) holds the `main` and `v*` tag rulesets, disabled until the plan allows them; [Main branch rules](governance.md#main-branch-rules-proposed) explains why they require checks but no approving review in a single-maintainer repository.
+- Squash merging only, titled by the PR title with a blank body; merged branches are deleted.
+- The default `GITHUB_TOKEN` is read-only; only GitHub-owned, verified-creator and the two listed third-party actions may run, each pinned to a full commit SHA.
+- The `main` ruleset requires a pull request, passing `All checks` and `Conventional Commit PR title` checks on an up-to-date branch, resolved conversations, and linear, signed history; it blocks force pushes and deletion and has no bypass.
+- `v*` tags cannot be moved or deleted, and publication waits for the release approver in the `release` environment.
+- Workflows from forks wait for approval before running, and never receive write tokens or secrets.
 
 **Immutable releases** lock a release's assets and tag once it is published. Drafts remain editable, so publication attaches every asset to the draft first and then publishes it; published versions are never overwritten. GitHub's release attestation for immutable releases is a platform feature separate from build provenance.
 
-**Build attestations** use the first-party [`actions/attest`](https://github.com/actions/attest) action, which GitHub recommends over the `attest-build-provenance` wrapper for new implementations. The job runs automatically for public repositories. For this private repository, it runs only after Enterprise Cloud is available and the Actions variable **`ENABLE_ARTIFACT_ATTESTATIONS=true`** is set. When it is skipped, a validated release still publishes with checksums and an SBOM, and must not be described as build-attested. See [attestation availability](https://github.com/actions/attest-build-provenance#usage) and [the attestation documentation](https://docs.github.com/en/actions/concepts/security/artifact-attestations).
+**Build attestations** use the first-party [`actions/attest`](https://github.com/actions/attest) action, which GitHub recommends over the `attest-build-provenance` wrapper for new implementations. See [the attestation documentation](https://docs.github.com/en/actions/concepts/security/artifact-attestations).
 
 ## Merge-policy audit
 
-GitHub returns **403** for branch protection and rulesets on this private repository under the organization's Free plan, so no merge rule is enforced. `main-policy-audit.yml` is a **detective** control, not a substitute: after every push to `main`, it reads metadata only and fails if any pushed commit:
+The `main` ruleset enforces the merge policy. `main-policy-audit.yml` remains a **detective** check behind it: after every push to `main`, it reads metadata only and fails if any pushed commit:
 
 - is not a single-parent squash commit, or has a subject that is not a Conventional Commit;
 - did not arrive through a merged pull request based on `main`;
@@ -103,48 +93,27 @@ npm run test:artifact
 
 `npm run check` produces `dist/`. Packaging reuses it; the artifact test extracts the archive into an isolated temporary directory, installs only locked runtime dependencies, and checks the compiled application. The full reusable CI adds the security, fuzzing, mutation, and performance gates described above. Release mutation validation always forces full execution and never trusts incremental result caches. Use `npm run mutation:full` for the same local guarantee.
 
-## Release record
+## Release history
 
-| Version                                                                                    | Tag commit                                                                                                   | Publication run                                                                                                | Validation                                        | Provenance     | Immutable                         |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | -------------- | --------------------------------- |
-| [v1.1.0](https://github.com/Lunary-Lab/mp3-frame-analyzer/releases/tag/v1.1.0), 2026-10-24 | `82a59e5e50c1361b7dcd8e5463bfee662a01c4bb` ([#10](https://github.com/Lunary-Lab/mp3-frame-analyzer/pull/10)) | [40115887988](https://github.com/Lunary-Lab/mp3-frame-analyzer/actions/runs/40115887988) at `refs/tags/v1.1.0` | All six reusable CI jobs passed at the tag commit | Skipped (plan) | Yes; release attestation verified |
-
-v1.1.0 was the first full exercise of the lifecycle. Release Please opened release PR #10 with `GITHUB_TOKEN` and dispatched CI and title checks for its head. After the squash merge, it created the draft and lightweight tag and dispatched publication at that tag. Publication validated the tag commit and attached the tested files. SHA-256 digests:
-
-```text
-39ea8747daa9635de8cc2e16299db07315ae9ecb556e02a1994331c4a3cda188  mp3-frame-analyzer-1.1.0.tar.gz
-4be821cce6b36b4347e7c21f65ede92763fa3e277c5cbd6f7bb8141ed349a485  mp3-frame-analyzer-1.1.0.cdx.json
-7dae839d8e0b6850ed003f2062d95b6c5a7f52daff6bb87ce03182644e9668e1  mp3-frame-analyzer-1.1.0.manifest.json
-e6f80d97044bcc6c2cfcddfd72f860cf7ca6145202ea94ca514ee4b76d4a7161  SHA256SUMS
-```
-
-Independent checks after publication:
-
-- The downloaded files pass `sha256sum --check`, equal GitHub's asset digests, and are byte-identical to the run's tested `release-assets` artifact.
-- The manifest's `sourceCommit` equals the tag commit, and the archive contains only the runtime inventory.
-- A fresh extract with production-only dependencies returned 6090 for the assessment sample and 33 for `cbr.mp3`. After a rejected 16 MiB upload it still served a pipelined request on the same connection, and it exited 0 on `SIGTERM`.
-
-Those counts describe the published v1.1.0 physical-frame default. The later
-owner-approved HTTP default returns 6089 and 32 for those files, respectively;
-an explicit `includeVbrHeaderFrame=true` retains physical counting. That source
-change does not alter the already published artifact or imply a new release.
-
-The 1.1.0 changelog heading links to the release because the 1.0.0 baseline was never tagged.
+Versions 1.1.0 to 2.1.0 are recorded in the [changelog](../CHANGELOG.md), and their `chore(main): release X.Y.Z` commits are on `main`. GitHub Releases with downloadable, attested artifacts start with the first version published after 2.1.0.
 
 ## Verify a published release
 
 Download every asset of one release into an empty directory, then check the digests, metadata, and runtime:
 
 ```bash
-tag=v1.1.0
+tag=vX.Y.Z
 mkdir "release-$tag" && cd "release-$tag"
 gh release download "$tag" --repo Lunary-Lab/mp3-frame-analyzer
 sha256sum --check SHA256SUMS
+gh release verify "$tag" --repo Lunary-Lab/mp3-frame-analyzer
+gh attestation verify "mp3-frame-analyzer-${tag#v}.tar.gz" --repo Lunary-Lab/mp3-frame-analyzer \
+  --signer-workflow Lunary-Lab/mp3-frame-analyzer/.github/workflows/publish-release.yml --source-ref "refs/tags/$tag"
 jq . "mp3-frame-analyzer-${tag#v}.manifest.json"   # version, tag, sourceCommit
 gh api "repos/Lunary-Lab/mp3-frame-analyzer/commits/$tag" --jq .sha   # must equal sourceCommit
 ```
 
-Then follow [the runtime guide](runtime.md) to extract the archive, install production dependencies, upload an MP3, and stop the server with `SIGTERM`. When build attestations are enabled, also run `gh attestation verify "mp3-frame-analyzer-${tag#v}.tar.gz" --repo Lunary-Lab/mp3-frame-analyzer` and confirm that the reported workflow is `publish-release.yml` at `refs/tags/$tag`.
+Then follow [the runtime guide](runtime.md) to extract the archive, install production dependencies, upload an MP3, and stop the server with `SIGTERM`.
 
 ## Recover from a failed release
 
@@ -157,7 +126,7 @@ Then follow [the runtime guide](runtime.md) to extract the archive, install prod
 Set the existing draft tag and obtain its full 40-character commit SHA, then dispatch from that same tag:
 
 ```bash
-release_tag=v1.1.0
+release_tag=vX.Y.Z
 release_sha="$(gh api "repos/Lunary-Lab/mp3-frame-analyzer/commits/$release_tag" --jq .sha)"
 gh workflow run publish-release.yml \
   --repo Lunary-Lab/mp3-frame-analyzer \
@@ -166,4 +135,4 @@ gh workflow run publish-release.yml \
   -f "sha=$release_sha"
 ```
 
-Replace `v1.1.0` with the actual draft tag. A `--ref main` invocation fails preflight, as does a changed tag, non-`main` source commit, mismatched SHA, or already-published release. Retrying may replace assets only while the release remains a draft. Publication is serialized and checks existing stable versions so retrying an older draft cannot move the `latest` designation backwards. For a published defect, merge a correction and release a new version.
+Replace `vX.Y.Z` with the actual draft tag. The retried run waits for approval in the `release` environment again. A `--ref main` invocation fails preflight, as does a changed tag, non-`main` source commit, mismatched SHA, or already-published release. Retrying may replace assets only while the release remains a draft. Publication is serialized and checks existing stable versions so retrying an older draft cannot move the `latest` designation backwards. For a published defect, merge a correction and release a new version.

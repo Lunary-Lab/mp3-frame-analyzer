@@ -2,13 +2,13 @@
 # Print a sanitized, read-only snapshot of the repository's GitHub settings as
 # JSON: values for settings, names only for secrets and variables. Endpoints
 # the plan or token cannot read are recorded with their HTTP status and
-# message, never as absent. Organization secrets need a token with admin:org.
+# message, never as absent. Organization-level settings and people are not
+# recorded: this snapshot is committed to a public repository.
 #   governance/snapshot.sh > /tmp/settings.json
 set -euo pipefail
 owner=Lunary-Lab
 repo=mp3-frame-analyzer
 r="repos/$owner/$repo"
-o="orgs/$owner"
 
 if ! gh api "$r" --silent; then
   echo "Cannot read $owner/$repo: check the token in GH_TOKEN" >&2
@@ -31,35 +31,29 @@ read_endpoint() { # label endpoint [jq filter]
 }
 
 {
-  read_endpoint organization "$o" '{login, plan: .plan.name, default_repository_permission, two_factor_requirement_enabled}'
   read_endpoint repository "$r" '{visibility, default_branch, archived, is_template, allow_forking, has_issues, has_projects, has_wiki, has_discussions, allow_squash_merge, allow_merge_commit, allow_rebase_merge, allow_auto_merge, allow_update_branch, delete_branch_on_merge, squash_merge_commit_title, squash_merge_commit_message, merge_commit_title, merge_commit_message, web_commit_signoff_required, description, homepage, topics, security_and_analysis}'
   read_endpoint rulesets "$r/rulesets"
-  read_endpoint organization_rulesets "$o/rulesets"
   read_endpoint branch_protection_main "$r/branches/main/protection"
   read_endpoint environments "$r/environments" '[.environments[] | {name, protection_rules, deployment_branch_policy, can_admins_bypass}]'
   read_endpoint actions_permissions "$r/actions/permissions" 'del(.selected_actions_url)'
   read_endpoint actions_selected "$r/actions/permissions/selected-actions"
   read_endpoint actions_workflow_token "$r/actions/permissions/workflow"
   read_endpoint actions_access_level "$r/actions/permissions/access"
-  read_endpoint actions_fork_pull_requests "$r/actions/permissions/fork-pr-workflows-private-repos"
+  read_endpoint actions_fork_pr_approval "$r/actions/permissions/fork-pr-contributor-approval"
   read_endpoint actions_retention "$r/actions/permissions/artifact-and-log-retention"
   read_endpoint actions_oidc_subject "$r/actions/oidc/customization/sub" '{use_default}'
-  read_endpoint organization_actions "$o/actions/permissions"
-  read_endpoint organization_actions_workflow_token "$o/actions/permissions/workflow"
   read_endpoint vulnerability_alerts "$r/vulnerability-alerts" '"enabled"'
   read_endpoint dependabot_security_updates "$r/automated-security-fixes"
   read_endpoint immutable_releases "$r/immutable-releases"
+  read_endpoint environments_release "$r/environments/release" '{name, can_admins_bypass, protection_rules: [.protection_rules[] | {type, prevent_self_review, reviewers: [.reviewers[]? | {type, login: .reviewer.login}]}], deployment_branch_policy}'
+  read_endpoint release_deployment_policies "$r/environments/release/deployment-branch-policies" '[.branch_policies[] | {name, type}]'
+  read_endpoint rulesets_detail "$r/rulesets?includes_parents=false" '[.[] | {name, target, enforcement}]'
   read_endpoint secret_scanning_alerts "$r/secret-scanning/alerts?per_page=1" 'length'
   read_endpoint code_scanning_default_setup "$r/code-scanning/default-setup"
   read_endpoint private_vulnerability_reporting "$r/private-vulnerability-reporting"
   read_endpoint actions_secret_names "$r/actions/secrets" '[.secrets[].name]'
   read_endpoint actions_variable_names "$r/actions/variables" '[.variables[].name]'
   read_endpoint dependabot_secret_names "$r/dependabot/secrets" '[.secrets[].name]'
-  read_endpoint organization_secret_names "$o/actions/secrets" '[.secrets[] | {name, visibility}]'
-  read_endpoint organization_variable_names "$o/actions/variables" '[.variables[].name]'
-  read_endpoint collaborators "$r/collaborators?affiliation=all&per_page=100" '[.[] | {login, role_name}]'
-  read_endpoint organization_owners "$o/members?role=admin&per_page=100" '[.[].login]'
-  read_endpoint teams "$r/teams" '[.[] | {slug, permission}]'
   read_endpoint webhooks "$r/hooks" '[.[] | {name, events, active}]'
   read_endpoint deploy_keys "$r/keys" '[.[] | {title, read_only}]'
   read_endpoint autolinks "$r/autolinks" 'length'
