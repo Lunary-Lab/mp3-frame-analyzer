@@ -1,0 +1,11 @@
+name: PR title
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+jobs:
+  title:
+    name: Conventional Commit PR title
+    if: github.event.action != 'edited'
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'true'

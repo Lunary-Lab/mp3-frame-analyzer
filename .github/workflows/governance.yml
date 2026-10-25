@@ -1,0 +1,47 @@
+name: Governance
+
+on:
+  pull_request:
+    paths:
+      - governance/**
+      - .github/workflows/**
+  push:
+    branches: [main]
+    paths:
+      - governance/**
+      - .github/workflows/**
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    name: Governance policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TERRAFORM_VERSION: 1.16.7
+      # From terraform_1.16.7_SHA256SUMS, whose HashiCorp signature (primary key
+      # C874011F0AB405110D02105534365D9472D7468F) was verified when pinned.
+      TERRAFORM_SHA256: 5454efcf7fc87f0c2113111b9a5c7182f0ca1c6f0f23a1e110a50770a8fe473b
+    defaults:
+      run:
+        working-directory: governance
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned Terraform release
+        run: |
+          archive="$RUNNER_TEMP/terraform.zip"
+          curl -fsSLo "$archive" "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
+          echo "${TERRAFORM_SHA256}  ${archive}" | sha256sum --check
+          unzip -q "$archive" -d "$RUNNER_TEMP/terraform"
+          echo "$RUNNER_TEMP/terraform" >> "$GITHUB_PATH"
+      - run: terraform fmt -check -recursive -diff
+      # The provider is verified against the committed lock file. No GitHub
+      # credential is available here: tests use a mocked provider.
+      - run: terraform init -backend=false -input=false -lockfile=readonly
+      - run: terraform validate
+      - name: Test policy and the required-check contract against fixtures
+        run: terraform test

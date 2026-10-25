@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/Lunary-Lab/mp3-frame-analyzer/compare/v2.0.2...v2.1.0) (2026-10-25)
+
+
+### Features
+
+* **server:** make the maximum upload size configurable ([14a6415](https://github.com/Lunary-Lab/mp3-frame-analyzer/commit/14a6415b243563acd2829bb7403b1d469ee4355d))
+
 ## [2.0.2](https://github.com/Lunary-Lab/mp3-frame-analyzer/compare/v2.0.1...v2.0.2) (2026-10-25)
 
 

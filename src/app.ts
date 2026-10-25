@@ -29,7 +29,7 @@ const errorSchema = {
   },
 } as const;
 
-/** A smaller limit can be supplied by tests without changing the production default. */
+/** One per-file upload limit for deployment configuration and focused boundary tests. */
 export async function buildApp({
   maxUploadBytes = MAX_UPLOAD_BYTES,
 }: { maxUploadBytes?: number } = {}): Promise<FastifyInstance> {

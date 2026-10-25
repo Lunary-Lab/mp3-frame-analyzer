@@ -153,7 +153,7 @@ Workflow actions are pinned by commit. Ordinary PR title validation uses `pull_r
 
 ## Repository settings
 
-Values below were read back from the GitHub API after being saved on **2026-10-24**. The repository stays private.
+Values below were read back from the GitHub API after being saved on **2026-10-24**. The repository stays private. Since 2026-10-25, Terraform in [`governance/`](../governance/) manages these settings; see [Repository governance as code](governance.md).
 
 | Setting                                | Value                                                                                                                                           | Status                                                                                              |
 | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
@@ -170,7 +170,7 @@ Values below were read back from the GitHub API after being saved on **2026-10-2
 | Branch protection and rulesets         | Return **403**: "Upgrade to GitHub Pro or make this repository public" (organization rulesets: "Upgrade to GitHub Team")                        | **Blocked by plan**                                                                                 |
 | Build provenance attestations          | Private repositories require GitHub Enterprise Cloud; `ENABLE_ARTIFACT_ATTESTATIONS` is unset                                                   | **Blocked by plan**; the provenance job was skipped for v1.1.0                                      |
 
-**Nothing enforces review or required checks.** Passing workflow files do not establish a merge policy. Treat `All checks`, `Conventional Commit PR title`, and an approval from someone other than the author as the merge standard. The [merge-policy audit](#merge-policy-audit) reports departures after they happen. When the plan allows it, add a ruleset for `main` that requires a PR, one approval with stale approvals dismissed, resolved conversations, and both checks; blocks force pushes and deletion; and grants no bypass except a documented emergency role. Add a tag ruleset protecting `v*` from updates and deletion.
+**Nothing enforces review or required checks.** Passing workflow files do not establish a merge policy. Treat a pull request with passing `All checks` and `Conventional Commit PR title` checks and resolved conversations as the merge standard. The [merge-policy audit](#merge-policy-audit) reports departures after they happen. [`governance/rulesets.tf`](../governance/rulesets.tf) holds the `main` and `v*` tag rulesets, disabled until the plan allows them; [Main branch rules](governance.md#main-branch-rules-proposed) explains why they require checks but no approving review in a single-maintainer repository.
 
 **Immutable releases** lock a release's assets and tag once it is published. Drafts remain editable, so publication attaches every asset to the draft first and then publishes it; published versions are never overwritten. GitHub's release attestation for immutable releases is a platform feature separate from build provenance.
 

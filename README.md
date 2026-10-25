@@ -16,6 +16,30 @@ npm start
 
 Default server: `http://127.0.0.1:3000`. Set `HOST` and `PORT` to override; for example `HOST=0.0.0.0 PORT=8080 npm start`.
 
+### Upload-size configuration
+
+Set `MAX_UPLOAD_BYTES` to override the **50 MiB (52,428,800 bytes)** default for the
+server started by `npm start` or `npm run dev`. For example, to allow 100 MiB per file:
+
+```bash
+MAX_UPLOAD_BYTES=104857600 npm start
+```
+
+The value must contain only decimal digits and represent a positive safe integer
+from `1` through `9007199254740991` bytes. Leading zeros are decimal, not octal.
+An absent variable uses the default; an empty value, whitespace, signs, fractions,
+exponents, units, unsafe integers, or `unlimited` fail startup before listening.
+The same inclusive limit applies to raw uploads (declared length and streamed
+bytes, including chunked transfer) and multipart **file bytes**, not multipart
+envelope overhead. Requests over the limit return `413 file-too-large` when the
+size violation is observed; an earlier malformed-file error can still win.
+
+This is a deployment resource policy, not an MPEG format restriction. Raising it
+does not change request timeouts, parser behavior, or streaming memory bounds.
+For public deployment, configure reverse-proxy aggregate body, concurrency and
+rate limits separately. Embedded callers can continue to use
+`buildApp({ maxUploadBytes })`; `buildApp()` itself does not read the environment.
+
 Upload an MP3 as multipart/form-data:
 
 ```bash
@@ -168,6 +192,7 @@ The documents distinguish actual ISO/IETF requirements, ID3 informal standards, 
 - [Testing, fuzzing, performance and reproduction](docs/testing.md)
 - [Mutation review and equivalent mutants](docs/mutation-review.md)
 - [Security assumptions and scope](docs/security.md)
+- [Repository governance as code: settings, rulesets and release approval](docs/governance.md)
 - [Release process and repository settings](docs/releasing.md)
 
 ## Native TypeScript 7 and API compatibility

@@ -1,0 +1,11 @@
+name: Matrix
+on: pull_request
+jobs:
+  test:
+    name: Matrix check
+    strategy:
+      matrix:
+        node: ['24', '26']
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'true'

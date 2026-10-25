@@ -16,6 +16,7 @@ export default defineConfig({
         'src/error-response.ts',
         'src/client-error.ts',
         'src/shutdown.ts',
+        'src/server-config.ts',
       ],
       thresholds: {
         lines: 95,

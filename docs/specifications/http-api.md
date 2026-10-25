@@ -54,7 +54,7 @@ These are **project mappings** compatible with RFC 9110 statuses, not exact erro
 
 ## Resource/security policy (project, not MPEG/HTTP normative limits)
 
-- Per-file **50 MiB** default, enforced for **raw streams, chunked transfer without `Content-Length`, and multipart file parts**.
+- Per-file **50 MiB** default, configurable at server startup with `MAX_UPLOAD_BYTES` (positive safe integer in decimal bytes; invalid values fail before listening), enforced for **raw streams, chunked transfer without `Content-Length`, and multipart file parts**.
 - One multipart part, one file, zero extra text fields; Busboy limits 32 header pairs and approximately 8 KiB for multipart header buffering.
 - Buffering/streaming must be **bounded**, using backpressure. An outer reverse proxy must apply any required aggregate HTTP body, concurrency and rate limits for public deployment; multipart per-file size is not an aggregate HTTP-body guarantee.
 - Early malformed files may receive an error before all upload bytes arrive. Ensure the rejected body drains/cancels in a bounded, connection-safe manner; do not retain unbounded background work.

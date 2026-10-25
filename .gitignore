@@ -16,6 +16,11 @@ tests/fixtures/assessment_sample.mp3
 reports/mutation/
 release/
 reports/performance/
+governance/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
 
 # Generated release-note review artifacts (not a second source changelog).
 .release-notes/

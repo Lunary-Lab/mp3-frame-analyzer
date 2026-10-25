@@ -144,7 +144,7 @@ export function engineeringNotes(plan, native) {
   for (const { line, number } of entries) {
     const pr = plan.pullRequests.find((candidate) => candidate.number === number);
     const url = `https://github.com/${plan.repository}/commit/${pr.merge_commit_sha}`;
-    body = body.replace(line, `${line} ([commit](${url}))`);
+    body = body.replace(line, () => `${line} ([commit](${url}))`);
   }
   if (plan.directCommits.length) {
     const direct = plan.directCommits.map((commit) => {

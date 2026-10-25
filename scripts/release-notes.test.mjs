@@ -378,3 +378,31 @@ test('Release Please search-depth truncation and inherited history filters requi
   ];
   await assert.rejects(prepareReleaseNotes(identity, mock.read, producer), /search depth/);
 });
+
+test('native PR titles are literal data, including every replacement-string metacharacter', () => {
+  for (const title of [
+    'Literal $& token',
+    "Literal $' token",
+    'Literal $` token',
+    'Literal $$ token',
+  ]) {
+    const source = native([1, 2]);
+    source.body = source.body.replace('Change 1', () => title);
+    const original = source.body;
+    const result = composeReleaseNotes(plan([pull(1, middle), pull(2, head)]), source);
+    const line = `* ${title} by @author in https://github.com/${repository}/pull/1`;
+    assert.ok(
+      result.body.includes(`${line} ([commit](https://github.com/${repository}/commit/${middle}))`),
+      `Title was not preserved literally: ${title}`,
+    );
+    for (const number of [1, 2]) {
+      assert.equal(
+        result.body.split(`https://github.com/${repository}/pull/${number}`).length - 1,
+        1,
+        `PR ${number} was duplicated by title interpolation`,
+      );
+    }
+    assert.equal(result.body.split('**Full Changelog**:').length - 1, 1);
+    assert.equal(source.body, original, 'Composition mutated the native input');
+  }
+});

@@ -1,6 +1,6 @@
 {
   "name": "mp3-frame-analyzer",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "description": "Streaming TypeScript API for counting MPEG-1 Layer III frames",
