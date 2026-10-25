@@ -1,4 +1,4 @@
-import { parseFrameHeader, isFreeFormatHeader } from './frame-header.js';
+import type { FrameHeader } from './frame-header.js';
 
 /** All signature offsets are positive constants determined by MPEG-1 headers. */
 const textAt = (frame: Uint8Array, offset: number, text: string): boolean =>
@@ -44,19 +44,18 @@ function vbriAt(frame: Uint8Array): boolean {
 }
 
 /**
- * Identify a genuine, initial MPEG-1 Layer III Xing/Info/LAME or VBRI frame.
- * LAME is an extension to Xing/Info, never an independent MPEG frame.
- * Do not search arbitrary payload positions or trust embedded frame counts.
+ * Whether a complete physical frame carries Xing/Info (optionally extended by
+ * LAME) or VBRI metadata at the position its header dictates. Traversal asks
+ * only about the stream's first frame, which makes such a frame its encoder
+ * frame. `frame` holds exactly the frame's span. LAME is an extension to
+ * Xing/Info, never an independent MPEG frame. Do not search arbitrary payload
+ * positions or trust embedded frame counts.
  */
-export function isVbrHeaderFrame(frame: Uint8Array): boolean {
-  const header = parseFrameHeader(frame.subarray(0, 4));
-  const freeFormat = isFreeFormatHeader(frame.subarray(0, 4));
-  if ((!header && !freeFormat) || (header && frame.length !== header.length)) return false;
-  const mono = (frame[3]! & 0xc0) === 0xc0;
-  const xingPosition = mono ? 21 : 36;
+export function isEncoderFrame(header: FrameHeader, frame: Uint8Array): boolean {
+  const xingPosition = header.mono ? 21 : 36;
   return (
     xingAt(frame, xingPosition) ||
-    ((frame[1]! & 1) === 0 && xingAt(frame, xingPosition + 2)) ||
+    (header.hasCrc && xingAt(frame, xingPosition + 2)) ||
     vbriAt(frame)
   );
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { countMp3Frames } from '../src/mp3/count-frames.js';
-import { isVbrHeaderFrame } from '../src/mp3/vbr-header.js';
+import { decodeFrameHeader } from '../src/mp3/frame-header.js';
+import { isEncoderFrame } from '../src/mp3/encoder-frame.js';
 import { chunks, frame, id3v1, id3v2, mp3 } from './helpers/mp3-fixtures.js';
 
 function tag(
@@ -20,6 +21,17 @@ function tag(
     bytes.writeUInt32BE(0x0000000f, position + 4);
   }
   return bytes;
+}
+/** Recognize a complete fixture frame, decoding its header as traversal does. */
+function recognized(frame: Uint8Array): boolean {
+  const header = decodeFrameHeader(frame);
+  if (header.kind !== 'indexed' && header.kind !== 'free-format') {
+    throw new Error('Fixture is not an MPEG-1 Layer III frame');
+  }
+  if (header.kind === 'indexed' && frame.length !== header.length) {
+    throw new Error('Fixture is not exactly one indexed frame');
+  }
+  return isEncoderFrame(header, frame);
 }
 const count = (bytes: Uint8Array, includeVbrHeaderFrame: boolean) =>
   countMp3Frames(chunks(bytes, [3, 17, 1]), { includeVbrHeaderFrame });
@@ -65,14 +77,10 @@ describe('first MPEG frame encoder header policy', () => {
     expect(await count(bytes, false)).toBe(3);
   });
 
-  it('does not trust a marker without valid flags or within a malformed frame', async () => {
+  it('does not trust a marker without valid flags', () => {
     const badFlags = tag('Xing');
     badFlags.writeUInt32BE(0x10000000, 40);
-    expect(isVbrHeaderFrame(badFlags)).toBe(false);
-    const badFrame = Buffer.from(tag('Info'));
-    badFrame[0] = 0;
-    expect(isVbrHeaderFrame(badFrame)).toBe(false);
-    expect(isVbrHeaderFrame(badFrame.subarray(0, 30))).toBe(false);
+    expect(recognized(badFlags)).toBe(false);
   });
 
   it('rejects truncated Xing optional fields and invalid VBRI TOC layout', () => {
@@ -81,11 +89,11 @@ describe('first MPEG frame encoder header policy', () => {
     const onlyMarker = frame();
     onlyMarker.write('Xing', 36, 'ascii');
     onlyMarker.writeUInt32BE(0x00000010, 40);
-    expect(isVbrHeaderFrame(onlyMarker)).toBe(false);
+    expect(recognized(onlyMarker)).toBe(false);
     const vbri = tag('VBRI');
     vbri.writeUInt16BE(999, 36 + 18);
-    expect(isVbrHeaderFrame(vbri)).toBe(false);
-    expect(isVbrHeaderFrame(xing)).toBe(true);
+    expect(recognized(vbri)).toBe(false);
+    expect(recognized(xing)).toBe(true);
   });
 
   it('preserves counts when leading ID3 metadata precedes the Xing header', async () => {
@@ -101,7 +109,7 @@ describe('first MPEG frame encoder header policy', () => {
     const bytes = frame();
     bytes.write('Xing', 36, 'ascii');
     bytes.writeUInt32BE(flags, 40);
-    expect(isVbrHeaderFrame(bytes)).toBe(true);
+    expect(recognized(bytes)).toBe(true);
   });
 
   it('rejects Xing flags whose declared optional fields cannot fit the frame', () => {
@@ -109,40 +117,40 @@ describe('first MPEG frame encoder header policy', () => {
     const short = frame({ bitrateIndex: 1, sampleRateIndex: 1 });
     short.write('Xing', 36, 'ascii');
     short.writeUInt32BE(4, 40);
-    expect(isVbrHeaderFrame(short)).toBe(false);
+    expect(recognized(short)).toBe(false);
   });
 
   it('rejects a free-format Xing signature with no room for its flags', () => {
     const short = Buffer.alloc(25, 0x11);
     short.set([0xff, 0xfb, 0x00, 0xc4]);
     short.write('Xing', 21, 'ascii');
-    expect(isVbrHeaderFrame(short)).toBe(false);
+    expect(recognized(short)).toBe(false);
   });
 
   it('validates VBRI version and independent TOC bounds', () => {
     const wrongVersion = tag('VBRI');
     wrongVersion.writeUInt16BE(2, 40);
-    expect(isVbrHeaderFrame(wrongVersion)).toBe(false);
+    expect(recognized(wrongVersion)).toBe(false);
     const noEntries = tag('VBRI');
     noEntries.writeUInt16BE(0, 36 + 18);
-    expect(isVbrHeaderFrame(noEntries)).toBe(false);
+    expect(recognized(noEntries)).toBe(false);
     const zeroWidth = tag('VBRI');
     zeroWidth.writeUInt16BE(0, 36 + 22);
-    expect(isVbrHeaderFrame(zeroWidth)).toBe(false);
+    expect(recognized(zeroWidth)).toBe(false);
     const invalidWidth = tag('VBRI');
     invalidWidth.writeUInt16BE(5, 36 + 22);
-    expect(isVbrHeaderFrame(invalidWidth)).toBe(false);
+    expect(recognized(invalidWidth)).toBe(false);
     const tooLong = tag('VBRI');
     tooLong.writeUInt16BE(99, 36 + 18);
     tooLong.writeUInt16BE(4, 36 + 22);
-    expect(isVbrHeaderFrame(tooLong)).toBe(false);
+    expect(recognized(tooLong)).toBe(false);
   });
 
   it('does not read outside short free-format VBRI headers', () => {
     const short = Buffer.alloc(40, 0x11);
     short.set([0xff, 0xfb, 0, 0x04]);
     short.write('VBRI', 36);
-    expect(isVbrHeaderFrame(short)).toBe(false);
+    expect(recognized(short)).toBe(false);
   });
 
   it.each([0, 1, 2, 4, 8, 15])(
@@ -150,48 +158,49 @@ describe('first MPEG frame encoder header policy', () => {
     (flags) => {
       const required = 36 + 8 + xingFieldBytes(flags);
       const exact = freeFormatXing(required, flags);
-      expect(isVbrHeaderFrame(exact)).toBe(true);
-      expect(isVbrHeaderFrame(exact.subarray(0, required - 1))).toBe(false);
+      expect(recognized(exact)).toBe(true);
+      expect(recognized(exact.subarray(0, required - 1))).toBe(false);
     },
   );
 
   it('requires every Xing signature byte, not a partial match', () => {
     const partial = tag('Xing');
     partial.write('Xyyy', 36, 'ascii');
-    expect(isVbrHeaderFrame(partial)).toBe(false);
+    expect(recognized(partial)).toBe(false);
   });
 
   it('requires the exact VBRI signature', () => {
     const wrongSignature = tag('VBRI');
     wrongSignature.write('VBRX', 36, 'ascii');
-    expect(isVbrHeaderFrame(wrongSignature)).toBe(false);
+    expect(recognized(wrongSignature)).toBe(false);
   });
 
   it('reads VBRI version and TOC fields at their offsets despite filled side information', () => {
-    expect(isVbrHeaderFrame(withSideInformation(tag('VBRI')))).toBe(true);
+    expect(recognized(withSideInformation(tag('VBRI')))).toBe(true);
   });
 
   it('accepts a one-byte VBRI TOC entry width and a TOC that exactly fills the frame', () => {
     const exact = tag('VBRI');
     exact.writeUInt16BE(1, 36 + 22);
     exact.writeUInt16BE(exact.length - 62, 36 + 18);
-    expect(isVbrHeaderFrame(exact)).toBe(true);
+    expect(recognized(exact)).toBe(true);
     exact.writeUInt16BE(exact.length - 61, 36 + 18);
-    expect(isVbrHeaderFrame(exact)).toBe(false);
+    expect(recognized(exact)).toBe(false);
   });
 
-  it('requires the buffer to span exactly one indexed MPEG frame', () => {
+  it('only recognizes a complete first frame; a truncated one is rejected', async () => {
     const genuine = tag('Xing');
-    expect(isVbrHeaderFrame(genuine)).toBe(true);
-    expect(isVbrHeaderFrame(Buffer.concat([genuine, Buffer.alloc(1)]))).toBe(false);
-    expect(isVbrHeaderFrame(genuine.subarray(0, genuine.length - 1))).toBe(false);
+    expect(recognized(genuine)).toBe(true);
+    await expect(count(genuine.subarray(0, genuine.length - 1), false)).rejects.toMatchObject({
+      kind: 'truncated-mp3',
+    });
   });
 
   it('looks for Xing after a CRC only in CRC-protected frames', () => {
     const unprotected = frame();
     unprotected.write('Xing', 38, 'ascii');
-    expect(isVbrHeaderFrame(unprotected)).toBe(false);
-    expect(isVbrHeaderFrame(frame({ hasCrc: true }))).toBe(false);
+    expect(recognized(unprotected)).toBe(false);
+    expect(recognized(frame({ hasCrc: true }))).toBe(false);
   });
 
   it('excludes the header frame when the stream ends with ID3v1 metadata', async () => {

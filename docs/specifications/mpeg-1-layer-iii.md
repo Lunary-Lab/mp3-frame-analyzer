@@ -66,7 +66,7 @@ frameLength(i) = baseLength + paddingBit(i)
 
 This is a structural inference from frame starts, not a reconstructed bitrate table. With LAME's documented upper rate and 32 kHz sample rate, `floor(144000 * 640 / 32000) + 1 = 2881` bytes. **2881 is a project interoperability/DoS bound inferred from LAME's ceiling, not a universal ISO-defined maximum**. See [LAME VbrTag.c](https://github.com/lameproject/lame/blob/master/libmp3lame/VbrTag.c) (the encoder has a 2880-byte free-frame constant), [mpg123 inference](https://github.com/libsdl-org/mpg123/blob/main/src/libmpg123/parse.c), and [GStreamer free-rate inference](https://github.com/GStreamer/gstreamer/blob/main/subprojects/gst-plugins-good/gst/audioparsers/gstmpegaudioparse.c).
 
-Current code `src/mp3/free-format.ts`:
+Current code: discovery in `src/mp3/free-format.ts`; the lock and mixing rules in `src/mp3/frame-spans.ts`:
 
 - Reads a bounded 8,647-byte initial probe, tests compatible Layer III/free-format/sample-rate headers, requires at least three sequential candidate headers, and selects the span with the unique greatest header-match count. Equal best scores and insufficient evidence reject. This does not prove that the bytes admit only one plausible framing; a lower-scoring alternative can remain possible.
 - Caches the inferred **unpadded** span, adds each frame's padding bit thereafter, and rejects mixing free-format and indexed frames or changing free-format sample rate after acquisition.
@@ -84,4 +84,4 @@ A test's expected value must be explicit about whether it means (1) physically p
 
 Assert all table indices 1–14, all three rates, both padding settings, both CRC-protection bits and all four channel modes. Test mixed-bitrate indexed streams, free-format exact span with alternating padding, high-rate 640 kbps/32 kHz, 1-byte chunks, payload sync decoys, competing candidate alignments, short/ambiguous free-format, truncated frame/header, ID3 before/after, and first-frame metadata inclusion/exclusion. Derive independently known counts from generated frame offsets and encoder fixtures; FFprobe/MediaInfo alone are **not** physical-frame ground truth.
 
-Relevant files: [header](../../src/mp3/frame-header.ts), [free format](../../src/mp3/free-format.ts), [frame traversal](../../src/mp3/count-frames.ts), [tests](../../tests/free-format.test.ts), [real LAME test](../../tests/free-format-real.test.ts), [conformance](conformance.md).
+Relevant files: [header](../../src/mp3/frame-header.ts), [frame spans](../../src/mp3/frame-spans.ts), [free format](../../src/mp3/free-format.ts), [frame traversal](../../src/mp3/count-frames.ts), [tests](../../tests/free-format.test.ts), [real LAME test](../../tests/free-format-real.test.ts), [conformance](conformance.md).

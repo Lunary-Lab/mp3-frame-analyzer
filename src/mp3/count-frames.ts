@@ -1,10 +1,8 @@
 import { AsyncByteReader } from './byte-reader.js';
 import { Mp3ParseError } from './errors.js';
-import { parseFrameHeader, looksLikeUnsupportedMpeg, isFreeFormatHeader } from './frame-header.js';
-import type { FrameHeader } from './frame-header.js';
+import { FrameSpans } from './frame-spans.js';
 import { skipLeadingTags, skipTrailingMetadata, startsTrailingMetadata } from './id3.js';
-import { inferFreeFormatBaseLength } from './free-format.js';
-import { isVbrHeaderFrame } from './vbr-header.js';
+import { isEncoderFrame } from './encoder-frame.js';
 
 /**
  * Count complete, structurally valid MPEG-1 Layer III frames.
@@ -53,11 +51,9 @@ async function countFrames(
 ): Promise<number> {
   await skipLeadingTags(reader);
 
+  const spans = new FrameSpans(reader);
   let frames = 0;
-  let excludedVbrFrame = 0;
-  let bitrateMode: 'free' | 'indexed' | undefined;
-  let freeBaseLength: number | undefined;
-  let freeSampleRateBits: number | undefined;
+  let excludedEncoderFrame = 0;
   for (;;) {
     const position = reader.offset;
     if (!(await reader.has(4))) {
@@ -67,59 +63,18 @@ async function countFrames(
       if (await reader.has(1)) {
         throw new Mp3ParseError('truncated-mp3', position, 'Incomplete trailing frame header');
       }
-      return frames - excludedVbrFrame;
+      return frames - excludedEncoderFrame;
     }
-
-    const bytes = reader.peek(4);
-    if (frames > 0 && startsTrailingMetadata(bytes)) {
+    if (frames > 0 && startsTrailingMetadata(reader.peek(4))) {
       await skipTrailingMetadata(reader);
-      return frames - excludedVbrFrame;
+      return frames - excludedEncoderFrame;
     }
 
-    let frameLength: number;
-    if (isFreeFormatHeader(bytes)) {
-      if (bitrateMode === 'indexed') {
-        throw new Mp3ParseError(
-          'invalid-mp3',
-          position,
-          'Cannot mix free-format and indexed MPEG frames',
-        );
-      }
-      bitrateMode = 'free';
-      const sampleRateBits = bytes[2]! & 0x0c;
-      if (freeBaseLength === undefined) {
-        freeSampleRateBits = sampleRateBits;
-        freeBaseLength = await inferFreeFormatBaseLength(reader);
-      }
-      if (sampleRateBits !== freeSampleRateBits) {
-        throw new Mp3ParseError('invalid-mp3', position, 'Free-format sample rate changed');
-      }
-      frameLength = freeBaseLength + ((bytes[2]! >>> 1) & 1);
-    } else {
-      if (bitrateMode === 'free') {
-        throw new Mp3ParseError(
-          'invalid-mp3',
-          position,
-          'Cannot mix indexed and free-format MPEG frames',
-        );
-      }
-      bitrateMode = 'indexed';
-      frameLength = requireFrameHeader(bytes, position).length;
+    const { header, length } = await spans.resolve();
+    if (frames === 0 && !includeVbrHeaderFrame && (await reader.has(length))) {
+      if (isEncoderFrame(header, reader.peek(length))) excludedEncoderFrame = 1;
     }
-
-    if (frames === 0 && !includeVbrHeaderFrame && (await reader.has(frameLength))) {
-      if (isVbrHeaderFrame(reader.peek(frameLength))) excludedVbrFrame = 1;
-    }
-    await reader.skipExactly(frameLength);
+    await reader.skipExactly(length);
     frames++;
   }
-}
-
-function requireFrameHeader(bytes: Uint8Array, offset: number): FrameHeader {
-  const frame = parseFrameHeader(bytes);
-  if (frame !== null) return frame;
-  if (looksLikeUnsupportedMpeg(bytes)) {
-    throw new Mp3ParseError('unsupported-format', offset, 'Only MPEG-1 Layer III is supported');
-  }
-  throw new Mp3ParseError('invalid-mp3', offset, 'Invalid MPEG-1 Layer III frame header');
 }

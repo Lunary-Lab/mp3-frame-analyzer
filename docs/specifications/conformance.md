@@ -14,7 +14,7 @@ Legend: **Required** = assessment's format; **Supported** = implemented structur
 | 321–640 kbps free-format                                         | Extended interoperability, Limited               | Project length limit 2881 bytes                                                              | [LAME USAGE](https://github.com/lameproject/lame/blob/master/USAGE); real encoder tests cover selected configurations |
 | Free-format 1–2 frame streams                                    | Validity ambiguity, Limited                      | Reject for fewer than three compatible headers; **not declared invalid by ISO**              | `free-format.test.ts`                                                                                                 |
 | Reserved index 15 / reserved sample rate                         | Required, Supported                              | Reject                                                                                       | [MPEG syntax](mpeg-1-layer-iii.md)                                                                                    |
-| Mono, stereo, joint stereo, dual channel                         | Required, Supported structurally                 | Header mode accepted; side info not decoded                                                  | `frame-header.ts` and VBR header detection                                                                            |
+| Mono, stereo, joint stereo, dual channel                         | Required, Supported structurally                 | Header mode accepted; side info not decoded                                                  | `frame-header.ts` and encoder-frame recognition                                                                       |
 | Padding and CRC-protected frames                                 | Required, Supported structurally                 | Padding affects length; CRC bytes included, **CRC not validated**                            | `frame-header.test.ts`                                                                                                |
 | Bit reservoir, Huffman, side-information validity, CRC integrity | Full-decoder conformance, Out of scope           | Not decoded/verified; cannot claim full bitstream validity                                   | [ISO/IEC 11172-4](https://webstore.iec.ch/en/publication/9590)                                                        |
 | Leading ID3v2.2 / .3 / .4                                        | Metadata interoperability, Supported with limits | Skip encoded length; at most 8 leading tags                                                  | [ID3 author specifications](tags-and-encoder-headers.md), `id3.ts`                                                    |
@@ -44,10 +44,11 @@ Legend: **Required** = assessment's format; **Supported** = implemented structur
 ## Related implementation files
 
 - Header and bitrate: [`src/mp3/frame-header.ts`](../../src/mp3/frame-header.ts)
+- Frame spans and bitrate-mode rules: [`src/mp3/frame-spans.ts`](../../src/mp3/frame-spans.ts)
 - Free-format inference: [`src/mp3/free-format.ts`](../../src/mp3/free-format.ts)
 - Stream traversal: [`src/mp3/count-frames.ts`](../../src/mp3/count-frames.ts)
 - Leading tags and trailing metadata: [`src/mp3/id3.ts`](../../src/mp3/id3.ts)
-- VBR signature detection: [`src/mp3/vbr-header.ts`](../../src/mp3/vbr-header.ts)
+- Encoder-frame recognition: [`src/mp3/encoder-frame.ts`](../../src/mp3/encoder-frame.ts)
 - Bounded buffering: [`src/mp3/byte-reader.ts`](../../src/mp3/byte-reader.ts)
 - Upload policies: [`src/upload.ts`](../../src/upload.ts)
 - Error responses: [`src/error-response.ts`](../../src/error-response.ts)

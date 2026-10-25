@@ -103,4 +103,4 @@ VBRI is a Fraunhofer-associated encoder header convention, **not part of ISO MPE
 
 ## 7. Relevant source and tests
 
-[`id3.ts`](../../src/mp3/id3.ts), [`count-frames.ts`](../../src/mp3/count-frames.ts), [`vbr-header.ts`](../../src/mp3/vbr-header.ts), [`id3.test.ts`](../../tests/id3.test.ts), [`count-frames.test.ts`](../../tests/count-frames.test.ts), and [`frame-count-contract.md`](../frame-count-contract.md).
+[`id3.ts`](../../src/mp3/id3.ts), [`count-frames.ts`](../../src/mp3/count-frames.ts), [`encoder-frame.ts`](../../src/mp3/encoder-frame.ts), [`id3.test.ts`](../../tests/id3.test.ts), [`count-frames.test.ts`](../../tests/count-frames.test.ts), and [`frame-count-contract.md`](../frame-count-contract.md).

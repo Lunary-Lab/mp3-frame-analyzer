@@ -128,6 +128,21 @@ describe('free-format MPEG-1 Layer III', () => {
     });
   });
 
+  it.each([
+    ['a header cut off at the end of the stream', [0xff, 0xfb, 0x00]],
+    ['an indexed header at the same sample rate', [0xff, 0xfb, 0x90, 0xc4]],
+  ])('does not extend a candidate span with %s', async (_, lastHeader) => {
+    // Spans 100 and 140 each chain three free-format headers: a tie that must
+    // fail closed. Counting the header at offset 300 would let span 100 win.
+    const bytes = Buffer.alloc(300 + lastHeader.length, 0x11);
+    for (const offset of [0, 100, 200, 140, 280]) bytes.set([0xff, 0xfb, 0x00, 0xc4], offset);
+    bytes.set(lastHeader, 300);
+    await expect(count(bytes, 4096)).rejects.toMatchObject({
+      kind: 'unsupported-format',
+      message: 'Cannot infer a unique free-format MPEG frame size from consecutive headers',
+    });
+  });
+
   it('rejects competing equally plausible frame spacing candidates', async () => {
     // Two independent aligned patterns share only the first header. Neither is
     // authoritative, so choosing the first encountered candidate is incorrect.

@@ -118,6 +118,24 @@ entry, parser source, test selection, mutation scope or timeout setting changes
 for this accounting correction. A fresh CI run must still complete and audit
 its own full report before merge.
 
+### Frame-span refactor
+
+[ADR 0004](adr/0004-frame-spans-resolve-from-one-header-decode.md) replaced the
+header predicates with one decoder, added `frame-spans.ts`, renamed
+`vbr-header.ts` to `encoder-frame.ts` and changed `free-format.ts`,
+`encoder-frame.ts` and `count-frames.ts`. A local campaign
+generated **655 mutants: 604 killed, 24 timed out and 27 reviewed
+equivalents**, for **95.88% raw** and **628/628 adjusted**. The new decoder and
+resolver have no equivalents. `EQ-FREE-COMPAT-LENGTH-GUARD` and
+`EQ-FREE-COMPAT-LENGTH-SUBTRACT` disappeared: the probe-window bound is now the
+only guard against reading a cut-off header, and decoding no longer implies
+the free-format check. Two tests kill the new mutants: a header cut off by the
+end of the stream (the bound) and an indexed header (the free-format check)
+must not break a tie between candidate spans. The other 17 entries in changed files were re-reviewed: the cleanup and
+free-format proofs hold with renamed variables, and the ten `encoder-frame.ts`
+proofs now state that `isEncoderFrame` receives a decoded header and exactly
+one frame's span.
+
 ### ID3 placement refactor
 
 [ADR 0003](adr/0003-the-id3-module-owns-tag-placement.md) moved tag placement

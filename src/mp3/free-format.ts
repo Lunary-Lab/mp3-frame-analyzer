@@ -1,6 +1,6 @@
 import type { AsyncByteReader } from './byte-reader.js';
 import { Mp3ParseError } from './errors.js';
-import { isFreeFormatHeader } from './frame-header.js';
+import { decodeFrameHeader, type FreeFormatFrameHeader } from './frame-header.js';
 
 /**
  * Free-format MPEG-1 Layer III uses bitrate index zero and a fixed base length
@@ -11,12 +11,13 @@ export const MAX_FREE_FORMAT_FRAME_BYTES = 2_881;
 const MIN_FREE_FORMAT_FRAME_BYTES = 24;
 const MAX_PROBE_BYTES = MAX_FREE_FORMAT_FRAME_BYTES * 3 + 4;
 
-function compatible(bytes: Uint8Array, offset: number, sampleRateBits: number): boolean {
-  return (
-    offset + 4 <= bytes.length &&
-    isFreeFormatHeader(bytes.subarray(offset, offset + 4)) &&
-    (bytes[offset + 2]! & 0x0c) === sampleRateBits
-  );
+/** The padding bit of a free-format header at `offset` with the stream's sample rate, if any. */
+function paddingAt(window: Uint8Array, offset: number, sampleRateIndex: number): 0 | 1 | undefined {
+  if (offset + 4 > window.length) return undefined;
+  const header = decodeFrameHeader(window.subarray(offset, offset + 4));
+  return header.kind === 'free-format' && header.sampleRateIndex === sampleRateIndex
+    ? header.padding
+    : undefined;
 }
 
 /**
@@ -28,25 +29,30 @@ function compatible(bytes: Uint8Array, offset: number, sampleRateBits: number): 
  * multiples of the true span also land on frame boundaries, but they visit
  * fewer headers; capping chains would turn them into false ties.
  */
-export async function inferFreeFormatBaseLength(reader: AsyncByteReader): Promise<number> {
+export async function inferFreeFormatBaseLength(
+  reader: AsyncByteReader,
+  first: FreeFormatFrameHeader,
+): Promise<number> {
   const start = reader.offset;
   await reader.has(MAX_PROBE_BYTES);
   const window = reader.peek(Math.min(reader.bufferedLength, MAX_PROBE_BYTES));
-  const rateBits = window[2]! & 0x0c;
-  const initialPadding = (window[2]! >>> 1) & 1;
+  const { sampleRateIndex } = first;
   let bestBase = 0;
   let bestMatches = 0;
   let tied = false;
   for (let second = MIN_FREE_FORMAT_FRAME_BYTES; second <= MAX_FREE_FORMAT_FRAME_BYTES; second++) {
-    if (!compatible(window, second, rateBits)) continue;
-    const base = second - initialPadding;
+    if (paddingAt(window, second, sampleRateIndex) === undefined) continue;
+    const base = second - first.padding;
     if (base < MIN_FREE_FORMAT_FRAME_BYTES || base > MAX_FREE_FORMAT_FRAME_BYTES - 1) continue;
     let matches = 1;
     let position = 0;
+    let padding = first.padding;
     for (;;) {
-      const next = position + base + ((window[position + 2]! >>> 1) & 1);
-      if (!compatible(window, next, rateBits)) break;
+      const next = position + base + padding;
+      const nextPadding = paddingAt(window, next, sampleRateIndex);
+      if (nextPadding === undefined) break;
       position = next;
+      padding = nextPadding;
       matches++;
     }
     if (matches < 3) continue;

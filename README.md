@@ -71,7 +71,8 @@ The repository owner chose this default because the assessment's suggested tool,
 
 ## Implementation
 
-- `src/mp3/frame-header.ts`: pure MPEG-1 Layer III bit-field decoder and frame-size formula.
+- `src/mp3/frame-header.ts`: pure MPEG-1 Layer III header decoder: indexed, free-format, unsupported or invalid, with the indexed frame-span formula.
+- `src/mp3/frame-spans.ts`: resolves each physical frame's span, discovering and locking a free-format stream's base length.
 - `src/mp3/id3.ts`: skips leading ID3v2.2/2.3/2.4 tags and trailing metadata by their encoded lengths, enforcing where each may appear.
 - `src/mp3/byte-reader.ts`: incremental lookahead and skipping over any `AsyncIterable<Uint8Array>`.
 - `src/mp3/count-frames.ts`: sequential frame traversal with no full-file buffering.

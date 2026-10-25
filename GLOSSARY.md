@@ -20,6 +20,20 @@ _Avoid_: form upload, file part
 The part of an upload the service has not read yet when it decides to reject that upload.
 _Avoid_: leftover body, rejected body
 
+## Frames
+
+**Physical frame**:
+One complete MPEG-1 Layer III frame present in the stream, whatever its payload carries.
+_Avoid_: audio frame, packet
+
+**Frame span**:
+A physical frame's length in bytes: from the bitrate table for an indexed frame, or a free-format stream's base length plus the frame's padding.
+_Avoid_: frame size, frame length (in prose)
+
+**Encoder frame**:
+An initial physical frame whose payload carries Xing/Info or VBRI encoder metadata instead of audio; the HTTP default count excludes it.
+_Avoid_: VBR header, Xing header, metadata frame
+
 ## Metadata
 
 **Leading tag**:
