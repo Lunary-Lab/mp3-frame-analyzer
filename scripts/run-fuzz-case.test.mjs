@@ -66,3 +66,13 @@ test('a successfully loaded target can still complete cleanly', async () => {
     assert.equal(classifyReplayProcess(result), null);
   });
 });
+
+test('an unknown fuzz failure keeps its error name and message family', async () => {
+  await replay(
+    "export async function fuzz() { throw new TypeError('Unexpected oracle result'); }",
+    (result) => {
+      assert.equal(result.status, 1);
+      assert.equal(classifyReplayProcess(result), 'TypeError:Unexpected oracle result');
+    },
+  );
+});

@@ -23,9 +23,11 @@ try {
     ? 'chunk-invariance'
     : message.startsWith('Valid MPEG-1 Layer III structure:')
       ? 'incorrect-frame-count'
-      : message.startsWith('Impossible physical frame count:')
-        ? 'impossible-frame-count'
-        : message.slice(0, 90);
+      : message.startsWith('Excluding the initial encoder frame:')
+        ? 'incorrect-audio-frame-count'
+        : message.startsWith('Impossible frame count:')
+          ? 'impossible-frame-count'
+          : message.slice(0, 90);
   stderr.write(`FUZZ_FAILURE ${JSON.stringify({ name, family })}\n`);
   process.exitCode = 1;
 }
