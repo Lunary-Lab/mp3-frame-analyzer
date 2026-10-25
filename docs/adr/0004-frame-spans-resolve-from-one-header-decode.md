@@ -11,3 +11,7 @@ Answering "how long is this physical frame?" used to take four views of the same
 - **`vbr-header.ts` becomes `encoder-frame.ts`.** The glossary's term is encoder frame; only the public `includeVbrHeaderFrame` option keeps the old wording, because renaming it would break clients.
 - **Free-format discovery keeps its algorithm.** It reads headers through the decoder; its bounds check is now the only guard against reading past the probe window, rather than a duplicate of the decoder's.
 - **Tests sit at the new interfaces.** Header tests drive `decodeFrameHeader`; encoder-frame tests drive `isEncoderFrame` with decoded headers of complete frames, and through `countMp3Frames` where traversal guarantees the frame. The structured fuzz target checks exclusion against an independent oracle, including CRC-shifted placements and decoy signatures in later frames.
+
+## Later note (2026-10-25)
+
+A follow-up fix reversed the preserved precedence on purpose: an invalid or unsupported header after free-format frames now reports itself, as it always did after indexed frames. Mixing needs two valid MPEG-1 Layer III headers. The rule lives in [the MPEG-1 Layer III specification notes](../specifications/mpeg-1-layer-iii.md).

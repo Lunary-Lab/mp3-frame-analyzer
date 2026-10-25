@@ -87,6 +87,47 @@ describe('free-format MPEG-1 Layer III', () => {
     });
   });
 
+  it.each([
+    [
+      'an invalid',
+      Buffer.from([0x12, 0x34, 0x56, 0x78]),
+      'invalid-mp3',
+      'Invalid MPEG-1 Layer III frame header',
+    ],
+    [
+      'a reserved-bitrate MPEG-1 Layer III',
+      Buffer.from([0xff, 0xfb, 0xf0, 0xc4]),
+      'invalid-mp3',
+      'Invalid MPEG-1 Layer III frame header',
+    ],
+    [
+      'an MPEG-2',
+      Buffer.from([0xff, 0xf3, 0x90, 0xc4]),
+      'unsupported-format',
+      'Only MPEG-1 Layer III is supported',
+    ],
+    [
+      'an MPEG-1 Layer II',
+      Buffer.from([0xff, 0xfd, 0x90, 0xc4]),
+      'unsupported-format',
+      'Only MPEG-1 Layer III is supported',
+    ],
+  ] as const)(
+    'reports %s header after free-format frames as itself, not as mixing',
+    async (_, header, kind, message) => {
+      const frames = Array.from({ length: 4 }, () => freeFrame(800));
+      const restOfFrame = Buffer.alloc(400, 0x11);
+      const bytes = mp3([...frames, header, restOfFrame]);
+      for (const chunkSize of [1, 4096]) {
+        await expect(count(bytes, chunkSize)).rejects.toMatchObject({
+          kind,
+          offset: 3_200,
+          message,
+        });
+      }
+    },
+  );
+
   it('accepts the documented minimum of exactly three consecutive frames', async () => {
     await expect(count(mp3([freeFrame(730), freeFrame(730), freeFrame(730)]))).resolves.toBe(3);
   });

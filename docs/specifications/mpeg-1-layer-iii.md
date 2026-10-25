@@ -69,7 +69,7 @@ This is a structural inference from frame starts, not a reconstructed bitrate ta
 Current code: discovery in `src/mp3/free-format.ts`; the lock and mixing rules in `src/mp3/frame-spans.ts`:
 
 - Reads a bounded 8,647-byte initial probe, tests compatible Layer III/free-format/sample-rate headers, requires at least three sequential candidate headers, and selects the span with the unique greatest header-match count. Equal best scores and insufficient evidence reject. This does not prove that the bytes admit only one plausible framing; a lower-scoring alternative can remain possible.
-- Caches the inferred **unpadded** span, adds each frame's padding bit thereafter, and rejects mixing free-format and indexed frames or changing free-format sample rate after acquisition.
+- Caches the inferred **unpadded** span, adds each frame's padding bit thereafter, and rejects mixing free-format and indexed frames or changing free-format sample rate after acquisition. Mixing needs two valid MPEG-1 Layer III headers: an invalid or unsupported header after free-format frames is reported as itself (HTTP 422 or 415), exactly as after indexed frames.
 - Cannot confidently count truly short ambiguous one-/two-frame free-format streams. **Do not equate this limitation with the ISO declaring such streams invalid.**
 - False sync words **can occur inside compressed payload**. A three-header chain is evidence, not proof of a unique possible framing. Fuzz competing candidate spans and prefer bounded rejection over an incorrect positive count.
 - Avoid arbitrary unbounded re-synchronization, recursive search, and zero-progress loops. Free-format probing must not affect the indexed-bitrate steady-state path.

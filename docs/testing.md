@@ -207,6 +207,9 @@ The frame-span refactor generated 655 mutants: 604 killed, 24 timed out and
 27 reviewed equivalents (95.88% raw, 628/628 adjusted); see the
 [mutation review](mutation-review.md).
 
+The free-format header precedence fix then generated 644 mutants: 593 killed,
+24 timed out and 27 reviewed equivalents (95.81% raw, 617/617 adjusted).
+
 ## Free-format, raw upload and metadata-header policy
 
 The same `POST /file-upload` endpoint accepts raw `audio/mpeg` (also `audio/mp3` and `application/octet-stream`) or single-file multipart bodies. HTTP tests cover both modes, default/optional counting, 413 errors for known-length and chunked streams, and invalid query values. The owner-selected HTTP default and explicit `includeVbrHeaderFrame=false` exclude only a structurally recognized initial Xing/Info or VBRI encoder header; `true` requests physical counting. No arbitrary payload match or declared VBR count changes the answer. The supplied sample's HTTP expectations are 6089 for omitted/`false` and 6090 for `true`; the low-level parser's default remains 6090.

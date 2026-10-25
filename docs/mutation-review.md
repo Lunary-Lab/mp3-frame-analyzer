@@ -118,6 +118,15 @@ entry, parser source, test selection, mutation scope or timeout setting changes
 for this accounting correction. A fresh CI run must still complete and audit
 its own full report before merge.
 
+### Free-format header precedence fix
+
+Checking invalid and unsupported headers before the bitrate-mode mixing rule
+changed only `frame-spans.ts`, which had no equivalents. A local campaign
+generated **644 mutants: 593 killed, 24 timed out and 27 reviewed
+equivalents**, for **95.81% raw** and **617/617 adjusted**. All 55
+`frame-spans.ts` mutants are killed; the 27 entries cover unchanged files and
+were reused verbatim, so only the context hash changed.
+
 ### Frame-span refactor
 
 [ADR 0004](adr/0004-frame-spans-resolve-from-one-header-decode.md) replaced the

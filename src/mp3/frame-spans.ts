@@ -38,26 +38,22 @@ export class FrameSpans {
   async resolve(): Promise<FrameSpan> {
     const offset = this.reader.offset;
     const header = decodeFrameHeader(this.reader.peek(4));
-    // Mixing is reported before an invalid or unsupported header.
-    if (this.mode?.kind === 'indexed' && header.kind === 'free-format') {
-      throw new Mp3ParseError(
-        'invalid-mp3',
-        offset,
-        'Cannot mix free-format and indexed MPEG frames',
-      );
-    }
-    if (this.mode?.kind === 'free-format' && header.kind !== 'free-format') {
-      throw new Mp3ParseError(
-        'invalid-mp3',
-        offset,
-        'Cannot mix indexed and free-format MPEG frames',
-      );
-    }
     if (header.kind === 'unsupported') {
       throw new Mp3ParseError('unsupported-format', offset, 'Only MPEG-1 Layer III is supported');
     }
     if (header.kind === 'invalid') {
       throw new Mp3ParseError('invalid-mp3', offset, 'Invalid MPEG-1 Layer III frame header');
+    }
+    // Mixing needs two valid MPEG-1 Layer III headers; invalid and unsupported
+    // headers report themselves first, after free-format and indexed frames alike.
+    if (this.mode !== undefined && this.mode.kind !== header.kind) {
+      throw new Mp3ParseError(
+        'invalid-mp3',
+        offset,
+        header.kind === 'free-format'
+          ? 'Cannot mix free-format and indexed MPEG frames'
+          : 'Cannot mix indexed and free-format MPEG frames',
+      );
     }
     if (header.kind === 'indexed') {
       this.mode = INDEXED;
