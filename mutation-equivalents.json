@@ -2,22 +2,22 @@
   "schemaVersion": 1,
   "strykerVersion": "10.1.1",
   "target": 100,
-  "contextSha256": "e0bab054d7fe7f63e8c109ffd7e4df8561288fa103fbba7e38f54d1fcb10d1a3",
+  "contextSha256": "cc527975cd642a9a3293d09866a4cf6be948ac634f21da3b2d4aeec2cd7ecf4c",
   "equivalents": [
     {
       "id": "EQ-COPY-OR",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "LogicalOperator",
       "original": "i < this.queued.length && written < length",
       "replacement": "i < this.queued.length || written < length",
       "location": {
         "start": {
-          "line": 83,
+          "line": 84,
           "column": 34
         },
         "end": {
-          "line": 83,
+          "line": 84,
           "column": 76
         }
       },
@@ -27,17 +27,17 @@
     {
       "id": "EQ-COPY-QUEUE-GUARD",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "ConditionalExpression",
       "original": "i < this.queued.length",
       "replacement": "true",
       "location": {
         "start": {
-          "line": 83,
+          "line": 84,
           "column": 34
         },
         "end": {
-          "line": 83,
+          "line": 84,
           "column": 56
         }
       },
@@ -47,17 +47,17 @@
     {
       "id": "EQ-COPY-QUEUE-BOUND",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "EqualityOperator",
       "original": "i < this.queued.length",
       "replacement": "i <= this.queued.length",
       "location": {
         "start": {
-          "line": 83,
+          "line": 84,
           "column": 34
         },
         "end": {
-          "line": 83,
+          "line": 84,
           "column": 56
         }
       },
@@ -67,17 +67,17 @@
     {
       "id": "EQ-COPY-WRITTEN-GUARD",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "ConditionalExpression",
       "original": "written < length",
       "replacement": "true",
       "location": {
         "start": {
-          "line": 83,
+          "line": 84,
           "column": 60
         },
         "end": {
-          "line": 83,
+          "line": 84,
           "column": 76
         }
       },
@@ -87,17 +87,17 @@
     {
       "id": "EQ-COPY-WRITTEN-BOUND",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "EqualityOperator",
       "original": "written < length",
       "replacement": "written <= length",
       "location": {
         "start": {
-          "line": 83,
+          "line": 84,
           "column": 60
         },
         "end": {
-          "line": 83,
+          "line": 84,
           "column": 76
         }
       },
@@ -107,17 +107,17 @@
     {
       "id": "EQ-CLEANUP-INITIAL-FLAG",
       "file": "src/mp3/count-frames.ts",
-      "sourceSha256": "16f689c4141b8f841352cc4b449a8a8a9c81a7d89d57c36c3a3cab79003ab336",
+      "sourceSha256": "055a441db1d911bdf148704de6c28bb113ac3397eb93554cdf9f5bee6848e529",
       "mutatorName": "BooleanLiteral",
       "original": "false",
       "replacement": "true",
       "location": {
         "start": {
-          "line": 27,
+          "line": 28,
           "column": 16
         },
         "end": {
-          "line": 27,
+          "line": 28,
           "column": 21
         }
       },
@@ -127,17 +127,17 @@
     {
       "id": "EQ-CLEANUP-CONDITION",
       "file": "src/mp3/count-frames.ts",
-      "sourceSha256": "16f689c4141b8f841352cc4b449a8a8a9c81a7d89d57c36c3a3cab79003ab336",
+      "sourceSha256": "055a441db1d911bdf148704de6c28bb113ac3397eb93554cdf9f5bee6848e529",
       "mutatorName": "ConditionalExpression",
       "original": "failed",
       "replacement": "true",
       "location": {
         "start": {
-          "line": 34,
+          "line": 35,
           "column": 9
         },
         "end": {
-          "line": 34,
+          "line": 35,
           "column": 15
         }
       },
@@ -147,17 +147,17 @@
     {
       "id": "EQ-CLEANUP-SUCCESS",
       "file": "src/mp3/count-frames.ts",
-      "sourceSha256": "16f689c4141b8f841352cc4b449a8a8a9c81a7d89d57c36c3a3cab79003ab336",
+      "sourceSha256": "055a441db1d911bdf148704de6c28bb113ac3397eb93554cdf9f5bee6848e529",
       "mutatorName": "BlockStatement",
       "original": "{\n      await reader.close();\n    }",
       "replacement": "{}",
       "location": {
         "start": {
-          "line": 42,
+          "line": 43,
           "column": 12
         },
         "end": {
-          "line": 44,
+          "line": 45,
           "column": 6
         }
       },
@@ -167,17 +167,17 @@
     {
       "id": "EQ-FREE-TIED-INITIAL",
       "file": "src/mp3/free-format.ts",
-      "sourceSha256": "385f13c15377c97296ae4ee2474eeb4bdaa0ea01d2eb1984a091d4dec04bb4c5",
+      "sourceSha256": "c848d4e2633b7b48a55f576305602aed40f8307140b37ab3ccf23915d653bf10",
       "mutatorName": "BooleanLiteral",
       "original": "false",
       "replacement": "true",
       "location": {
         "start": {
-          "line": 114,
+          "line": 115,
           "column": 14
         },
         "end": {
-          "line": 114,
+          "line": 115,
           "column": 19
         }
       },
@@ -187,7 +187,7 @@
     {
       "id": "EQ-ID3V2-FOOTER-VERSION",
       "file": "src/mp3/id3.ts",
-      "sourceSha256": "f5b0ef96ead14677a315fe3b91df47765d1d7912a4079b720a5f38eefecc1623",
+      "sourceSha256": "f13877e703b53e693eac737adf407af71eee039155000b7bef728ec8a96fbfa1",
       "mutatorName": "ConditionalExpression",
       "original": "version === 4",
       "replacement": "true",
@@ -207,7 +207,7 @@
     {
       "id": "EQ-VBR-TEXT-GUARD",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "ConditionalExpression",
       "original": "offset + text.length <= frame.length",
       "replacement": "true",
@@ -227,7 +227,7 @@
     {
       "id": "EQ-VBR-TEXT-BOUND",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "EqualityOperator",
       "original": "offset + text.length <= frame.length",
       "replacement": "offset + text.length < frame.length",
@@ -247,7 +247,7 @@
     {
       "id": "EQ-VBR-TEXT-SUBTRACT",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "ArithmeticOperator",
       "original": "offset + text.length",
       "replacement": "offset - text.length",
@@ -267,7 +267,7 @@
     {
       "id": "EQ-VBR-U32-SUBTRACT-B",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "ArithmeticOperator",
       "original": "a * 0x1000000 + (b << 16)",
       "replacement": "a * 0x1000000 - (b << 16)",
@@ -287,7 +287,7 @@
     {
       "id": "EQ-VBR-U32-SUBTRACT-C",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "ArithmeticOperator",
       "original": "a * 0x1000000 + (b << 16) + (c << 8)",
       "replacement": "a * 0x1000000 + (b << 16) - (c << 8)",
@@ -307,7 +307,7 @@
     {
       "id": "EQ-XING-FLAGS-GUARD",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "ConditionalExpression",
       "original": "position + 8 > frame.length",
       "replacement": "false",
@@ -327,7 +327,7 @@
     {
       "id": "EQ-XING-FLAGS-SUBTRACT",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "ArithmeticOperator",
       "original": "position + 8",
       "replacement": "position - 8",
@@ -347,7 +347,7 @@
     {
       "id": "EQ-VBRI-LENGTH-GUARD",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "ConditionalExpression",
       "original": "position + 26 > frame.length",
       "replacement": "false",
@@ -367,7 +367,7 @@
     {
       "id": "EQ-VBRI-LENGTH-BOUND",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "EqualityOperator",
       "original": "position + 26 > frame.length",
       "replacement": "position + 26 >= frame.length",
@@ -387,7 +387,7 @@
     {
       "id": "EQ-VBRI-LENGTH-SUBTRACT",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "ArithmeticOperator",
       "original": "position + 26",
       "replacement": "position - 26",
@@ -407,17 +407,17 @@
     {
       "id": "EQ-QUEUE-EMPTY-FAST-PATH",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "ConditionalExpression",
       "original": "this.headIndex === this.queued.length",
       "replacement": "false",
       "location": {
         "start": {
-          "line": 114,
+          "line": 115,
           "column": 13
         },
         "end": {
-          "line": 114,
+          "line": 115,
           "column": 50
         }
       },
@@ -427,17 +427,17 @@
     {
       "id": "EQ-QUEUE-EAGER-COMPACTION",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "ConditionalExpression",
       "original": "this.headIndex >= 1_024",
       "replacement": "true",
       "location": {
         "start": {
-          "line": 117,
+          "line": 118,
           "column": 20
         },
         "end": {
-          "line": 117,
+          "line": 118,
           "column": 43
         }
       },
@@ -447,17 +447,17 @@
     {
       "id": "EQ-QUEUE-COMPACTION-BOUNDARY",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "EqualityOperator",
       "original": "this.headIndex >= 1_024",
       "replacement": "this.headIndex > 1_024",
       "location": {
         "start": {
-          "line": 117,
+          "line": 118,
           "column": 20
         },
         "end": {
-          "line": 117,
+          "line": 118,
           "column": 43
         }
       },
@@ -467,17 +467,17 @@
     {
       "id": "EQ-QUEUE-EAGER-INVERTED-BOUND",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "EqualityOperator",
       "original": "this.headIndex >= 1_024",
       "replacement": "this.headIndex < 1_024",
       "location": {
         "start": {
-          "line": 117,
+          "line": 118,
           "column": 20
         },
         "end": {
-          "line": 117,
+          "line": 118,
           "column": 43
         }
       },
@@ -491,15 +491,15 @@
       "original": "end > window.length",
       "replacement": "false",
       "proof": "When end exceeds the fixed probe length, the original breaks after appending the current frame descriptor. Without that early guard, probeMetadata(window, end) inspects only empty subarrays and returns the same offset, zero tags and canEnd=true; neither ID3 signature can match. Adding zero tags does not change metadataMatches or anchored. The offset is strictly beyond, not equal to, the probe end, so the EOF branch is not taken. headerAt then returns undefined at its offset+4>length guard and the loop terminates. The returned base, frame descriptors, matches, anchored and metadataMatches are identical. Candidate positions and spans are bounded finite nonnegative integers. No reader method, iterator operation or payload decoder is invoked on the extra path. It allocates only a fixed number of temporary empty views within the already bounded candidate loop; retained input, lookahead, cursor movement and resource ownership do not change.",
-      "sourceSha256": "385f13c15377c97296ae4ee2474eeb4bdaa0ea01d2eb1984a091d4dec04bb4c5",
+      "sourceSha256": "c848d4e2633b7b48a55f576305602aed40f8307140b37ab3ccf23915d653bf10",
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and offsets/messages, iterator lifecycle, bounded lookahead and resource ownership. Exact internal instruction counts or promise/microtask scheduling are not API guarantees.",
       "location": {
         "start": {
-          "line": 46,
+          "line": 47,
           "column": 9
         },
         "end": {
-          "line": 46,
+          "line": 47,
           "column": 28
         }
       }
@@ -511,7 +511,7 @@
       "original": "true",
       "replacement": "false",
       "proof": "This return is reached only after atEnd is true or a complete final ID3v1 has been skipped, and after reader.has(1) has returned false. The reader is therefore at zero available bytes with its iterator-done state cached. countFrames calls this helper only after at least one MPEG frame. Returning false instead of true makes countFrames continue once: its has(4) returns false from cached EOF, validateFrameSequenceEnd observes frames>0 and its has(1) also returns false, then traversal returns the identical frames-minus-excludedEncoderFrame value. Neither has call invokes the iterator, consumes bytes or allocates a larger buffer; the offset and typed error behavior are unchanged. The same finally block closes the reader once; cached completion prevents an additional iterator.return call. The only difference is bounded control flow and internal promise scheduling after EOF, which is not part of the public contract.",
-      "sourceSha256": "f5b0ef96ead14677a315fe3b91df47765d1d7912a4079b720a5f38eefecc1623",
+      "sourceSha256": "f13877e703b53e693eac737adf407af71eee039155000b7bef728ec8a96fbfa1",
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and offsets/messages, iterator lifecycle, bounded lookahead and resource ownership. Exact internal instruction counts or promise/microtask scheduling are not API guarantees.",
       "location": {
         "start": {
@@ -527,7 +527,7 @@
     {
       "id": "EQ-ID3-PREFIX-COMPLETENESS",
       "file": "src/mp3/id3.ts",
-      "sourceSha256": "f5b0ef96ead14677a315fe3b91df47765d1d7912a4079b720a5f38eefecc1623",
+      "sourceSha256": "f13877e703b53e693eac737adf407af71eee039155000b7bef728ec8a96fbfa1",
       "mutatorName": "ConditionalExpression",
       "original": "bytes.length < ID3V2_HEADER_BYTES",
       "replacement": "false",

@@ -10,7 +10,7 @@ MPEG parser directly. There are two targets:
 - `structured.fuzz.mjs`: mutation bytes construct independently known frame
   boundaries for indexed and free-format MPEG-1 Layer III streams. Free-format
   uses one fixed bitrate and sample rate per stream, variable per-frame padding,
-  CRC/channel flags, and 8–640 kbps cases at all three MPEG-1 sample rates.
+  CRC/channel flags, and 7–640 kbps cases at all three MPEG-1 sample rates.
   Optional ID3 and initial Xing/Info/VBRI metadata never supply the expected
   count. The generator records frame offsets and lengths during construction;
   its known physical-frame count makes **incorrect positive counts** detectable. It also
@@ -20,19 +20,19 @@ MPEG parser directly. There are two targets:
   Signatures shifted without a CRC, and valid signatures planted in a later
   frame, must stay counted.
 
-Generated fixtures validate the structural counting contract. Their synthetic
+Structured fixtures validate the structural counting contract. Their synthetic
 payloads are not asserted to decode, and CRC values are not calculated. Free-format
 payloads exclude sync bytes and ID3/TAG markers so this known-count oracle remains unambiguous;
 arbitrary payload mutations and ambiguous short streams belong to the raw target.
 A control bit also constructs one-/two-frame free-format cases. Separate flags insert complete ID3 title tags between frames and repeated footer-bearing tags before final ID3v1. Metadata headers inside MPEG frames are only inserted when a frame can hold them. The oracle tracks actual constructed boundaries rather than inferring them.
 
 The raw target's sanity bound uses the parser's supported minimum free-format
-span of 24 bytes. The previous indexed-bitrate minimum of 96 bytes incorrectly
+physical span of 21 bytes (4-byte header plus 17-byte mono side information). The former 24-byte assumption and earlier indexed-bitrate minimum of 96 bytes incorrectly
 rejected successful counts on shorter free-format frames. The fuzzer-found
 `regressions/raw/free-format-three-short-frames.bin` contains three 55-byte frames;
 the independently constructed 72-byte `regressions/raw/free-format-minimum.bin`
-contains three 24-byte frames. Both are replayed through that oracle. Structured
-seeds cover 24-byte and 2,880-byte base spans, including padding, and the
+contains three 24-byte frames. Original prefix-only and protected regressions contain three 21-byte and three 23-byte silent frames respectively, including a checked CRC in the protected fixture. All are replayed through that oracle. Structured
+seeds cover 21-byte, 24-byte and 2,880-byte base spans, including padding, and the
 encoder-frame policy: an initial Xing frame, a lone VBRI frame (zero audio
 frames), Info shifted past a CRC, the same shift without a CRC (not metadata)
 and a valid Xing signature in a later frame (still counted).

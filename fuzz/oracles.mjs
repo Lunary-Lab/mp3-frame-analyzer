@@ -11,11 +11,11 @@ export async function* chunks(bytes, size) {
 export async function outcome(bytes, chunkSize, options = {}) {
   try {
     const count = await countMp3Frames(chunks(bytes, chunkSize), options);
-    // Indexed frames are at least 96 bytes, but a free-format frame can be as
-    // small as 24 bytes (8 kbps at 48 kHz), the parser's minimum inferred span.
+    // A complete mono free-format frame can contain only its 4-byte header
+    // and 17-byte side information (21 bytes); bitrate-table minima do not apply.
     // Excluding a lone initial encoder frame can leave zero audio frames.
     const fewestValidFrames = options.includeVbrHeaderFrame === false ? 0 : 1;
-    if (!Number.isSafeInteger(count) || count < fewestValidFrames || count * 24 > bytes.length) {
+    if (!Number.isSafeInteger(count) || count < fewestValidFrames || count * 21 > bytes.length) {
       throw new Error(`Impossible frame count: ${count} for ${bytes.length} bytes`);
     }
     return { kind: 'success', count };

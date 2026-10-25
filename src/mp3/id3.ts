@@ -24,7 +24,7 @@ export async function skipLeadingTags(reader: AsyncByteReader): Promise<void> {
   }
 }
 
-/** Whether bytes at a known MPEG boundary begin supported metadata. */
+/** Whether bytes at a known MPEG boundary begin an ID3 signature. */
 export function startsMetadata(bytes: Uint8Array): boolean {
   return isId3v2Tag(bytes) || isId3v1Tag(bytes);
 }
@@ -161,7 +161,7 @@ function decodeTagHeader(bytes: Uint8Array, offset: number): TagHeader | undefin
   return { bytes, bodyLength, hasFooter: version === 4 && (flags & 0x10) !== 0 };
 }
 
-/** Skip an ID3v2 tag whose header has been read: its body, then any footer, verified. */
+/** Skip the already-inspected ID3v2 header and body, then verify and skip any footer. */
 async function skipTag(reader: AsyncByteReader, header: TagHeader): Promise<void> {
   await reader.skipExactly(ID3V2_HEADER_BYTES + header.bodyLength);
   if (!header.hasFooter) return;

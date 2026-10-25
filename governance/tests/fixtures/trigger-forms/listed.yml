@@ -1,0 +1,8 @@
+name: Listed
+on: [push, pull_request]
+jobs:
+  check:
+    name: Listed check
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'true'

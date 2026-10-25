@@ -16,3 +16,8 @@ tests/fixtures/assessment_sample.mp3
 reports/mutation/
 release/
 reports/performance/
+governance/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log

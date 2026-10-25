@@ -1,0 +1,7 @@
+name: Manual
+on: workflow_dispatch
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'true'

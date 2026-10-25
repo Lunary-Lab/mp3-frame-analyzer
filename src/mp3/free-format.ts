@@ -5,7 +5,8 @@ import { hasPossibleMetadataPrefix, probeMetadata } from './id3.js';
 
 /** LAME's interoperability ceiling, not an ISO maximum or a decoded-audio guarantee. */
 export const MAX_FREE_FORMAT_FRAME_BYTES = 2_881;
-const MIN_FREE_FORMAT_FRAME_BYTES = 24;
+// The smallest physical prefix is 21 bytes; one padding byte can make base 20 fit.
+const MIN_FREE_FORMAT_FRAME_BYTES = 20;
 const MAX_PROBE_BYTES = MAX_FREE_FORMAT_FRAME_BYTES * 3 + 4;
 
 function headerAt(

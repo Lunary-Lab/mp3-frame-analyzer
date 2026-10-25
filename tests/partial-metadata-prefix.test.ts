@@ -23,7 +23,7 @@ describe('available-byte evidence in short-frame metadata lookalikes', () => {
       .map((byte) => byte.toString(2).padStart(8, '0'))
       .join('');
     // MPEG-1 mono: 9 reservoir bits, 5 private bits, 4 scfsi bits; then two
-    // 59-bit granules starting with 12 part2+part2_3-length bits, corroborated
+    // 59-bit granules starting with the 12-bit part2_3_length field, corroborated
     // independently against LAME encodeSideInfo2, not our parser implementation.
     for (const [start, end] of [
       [0, 9],

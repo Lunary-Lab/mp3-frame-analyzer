@@ -9,7 +9,7 @@
  */
 const BITRATE_KBPS = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0];
 const SAMPLE_RATE_HZ = [44_100, 48_000, 32_000];
-const FREE_BITRATE_KBPS = [8, 32, 128, 137, 256, 320, 384, 400, 500, 640];
+const FREE_BITRATE_KBPS = [8, 32, 128, 137, 256, 320, 384, 400, 500, 640, 7];
 
 function synchsafe(value) {
   return Buffer.from([
@@ -114,11 +114,11 @@ function createFrame(at, i, { freeFormat, freeSampleRateIndex, freeBaseLength })
   const bitrateIndex = freeFormat ? 0 : 1 + (bits % 14);
   const sampleRateIndex = freeFormat ? freeSampleRateIndex : at(10 + 5 * i) % 3;
   const padding = at(11 + 5 * i) & 1;
-  const hasCrc = Boolean(at(12 + 5 * i) & 1);
   const bitrate = BITRATE_KBPS[bitrateIndex];
   const sampleRate = SAMPLE_RATE_HZ[sampleRateIndex];
   const length =
     (freeFormat ? freeBaseLength : Math.floor((144000 * bitrate) / sampleRate)) + padding;
+  const hasCrc = length >= 23 && Boolean(at(12 + 5 * i) & 1);
   const block = Buffer.alloc(length);
   // The smallest free-format spans have room for mono side information only.
   const channelMode = length < 38 ? 3 : at(14 + 5 * i) % 4;

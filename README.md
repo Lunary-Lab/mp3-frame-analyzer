@@ -182,7 +182,7 @@ See [Releasing and repository settings](docs/releasing.md) for the verified GitH
 - [HTTP media types and the upload contract](docs/specifications/http-api.md)
 - [Supported, limited and out-of-scope conformance matrix](docs/specifications/conformance.md)
 
-The documents distinguish actual ISO/IETF requirements, ID3 informal standards, de facto encoder conventions and deliberate assessment implementation limits. They are concise original summaries with links to original publishers, **not** a copy of a paid ISO standard or a claim of full MPEG audio-decoder conformance.
+The documents distinguish actual ISO/IETF requirements, ID3 informal standards, de facto encoder conventions and deliberate assessment implementation limits. They are concise original summaries with links to original publishers, **not** a copy of the ISO standard or a claim of full MPEG audio-decoder conformance.
 
 ## More detail
 
@@ -192,6 +192,7 @@ The documents distinguish actual ISO/IETF requirements, ID3 informal standards, 
 - [Testing, fuzzing, performance and reproduction](docs/testing.md)
 - [Mutation review and equivalent mutants](docs/mutation-review.md)
 - [Security assumptions and scope](docs/security.md)
+- [Repository governance as code: settings, rulesets and release approval](docs/governance.md)
 - [Release process and repository settings](docs/releasing.md)
 
 ## Native TypeScript 7 and API compatibility

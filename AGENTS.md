@@ -40,6 +40,8 @@ Read this file before changing parser, API, fixtures, fuzzers, or counts. This f
 `src/client-error.ts`: the one deliberate, client-facing failure type.
 `src/app.ts`: route, query option and Fastify wiring.
 
+`governance/`: Terraform for the repository's GitHub settings and proposed rulesets; read [`docs/governance.md`](docs/governance.md) before changing settings, required check names, or release approval.
+
 Domain terms live in [`GLOSSARY.md`](GLOSSARY.md); architecture decisions live in [`docs/adr/`](docs/adr/).
 
 Add focused tests in `tests/` and independent generated encoder fixtures; expand `fuzz/` oracles when widening format acceptance. Run `npm run check`, `npm run fuzz:regression`, `npm run mutation` and relevant memory/HTTP benchmarks. Do not use FFprobe/MediaInfo decoded counts as an oracle for physical counts without reconciling the leading metadata frame.

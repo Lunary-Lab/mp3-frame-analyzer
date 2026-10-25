@@ -12,8 +12,9 @@ import { isEncoderFrame } from './encoder-frame.js';
  * encoder-declared counts.
  * Boundary-aligned ID3v2, appended ID3v2.4 with footers, and final ID3v1 are skipped.
  *
- * Processing is O(input bytes), with one bounded free-format probe (8.7 KiB),
- * and memory O(largest input chunk plus probe bytes).
+ * Processing is O(input bytes), with bounded free-format lookahead (< 9 KiB),
+ * and queued byte lengths O(largest input chunk plus probe bytes). Input views
+ * can retain larger upstream backing buffers.
  */
 export interface Mp3CountOptions {
   readonly includeVbrHeaderFrame?: boolean;

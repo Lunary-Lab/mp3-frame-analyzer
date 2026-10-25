@@ -132,14 +132,14 @@ describe('free-format MPEG-1 Layer III', () => {
   });
 
   it('accepts the smallest and largest supported spans', async () => {
-    await expect(count(mp3(Array.from({ length: 4 }, () => freeFrame(24))))).resolves.toBe(4);
+    await expect(count(mp3(Array.from({ length: 4 }, () => freeFrame(21))))).resolves.toBe(4);
     // A padded 2,881-byte first frame puts the second header at the last candidate offset.
     const largest = mp3(Array.from({ length: 4 }, () => freeFrame(2_880, 1)));
     await expect(count(largest, 4096)).resolves.toBe(4);
   });
 
   it('rejects spans just outside the supported range despite consecutive headers', async () => {
-    const belowMinimum = mp3([freeFrame(23, 1), freeFrame(23), freeFrame(23)]);
+    const belowMinimum = mp3([freeFrame(19, 1), freeFrame(19), freeFrame(19)]);
     await expect(count(belowMinimum)).rejects.toMatchObject({ kind: 'unsupported-format' });
     const aboveMaximum = mp3(Array.from({ length: 3 }, () => freeFrame(2_881)));
     await expect(count(aboveMaximum, 4096)).rejects.toMatchObject({ kind: 'unsupported-format' });
@@ -197,9 +197,9 @@ describe('free-format MPEG-1 Layer III', () => {
   });
 
   it('does not infer a free-format base outside the configured size range', async () => {
-    const tooShort = Buffer.alloc(52, 0x11);
-    tooShort.set([0xff, 0xfb, 2, 0xc4], 0); // Initial padding makes 24 -> base 23.
-    tooShort.set([0xff, 0xfb, 0, 0xc4], 24);
+    const tooShort = Buffer.alloc(40, 0x11);
+    tooShort.set([0xff, 0xfb, 2, 0xc4], 0); // Initial padding makes 20 -> base 19.
+    tooShort.set([0xff, 0xfb, 0, 0xc4], 20);
     await expect(count(tooShort)).rejects.toMatchObject({ kind: 'unsupported-format' });
 
     const tooLong = Buffer.alloc(2_885, 0x11);
@@ -267,7 +267,7 @@ it.each(
 
 it.each([0, 1, 2, 3])('preserves complete mandatory prefixes for mode %i', async (mode) => {
   for (const crc of [false, true]) {
-    const length = mode === 3 ? 24 : crc ? 38 : 36;
+    const length = (mode === 3 ? 21 : 36) + (crc ? 2 : 0);
     for (const chunkSize of [1, 127]) {
       await expect(
         countPrefixFrames(

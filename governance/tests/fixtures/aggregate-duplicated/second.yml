@@ -1,0 +1,14 @@
+name: Second
+on: pull_request
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'true'
+  all-checks:
+    name: All checks
+    if: always()
+    needs: [lint]
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'true'
