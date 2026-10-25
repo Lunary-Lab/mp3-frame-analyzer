@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { countMp3Frames } from '../src/mp3/count-frames.js';
 import { chunks } from './helpers/mp3-fixtures.js';
 import { metadataTag, metadataV1 } from './helpers/metadata-fixtures.js';
+import { singleton } from './helpers/partial-metadata-prefix-fixtures.js';
 
 function free(base = 417, padding = 0, channel = 3, crc = false): Buffer {
   const bytes = Buffer.alloc(base + padding, 0x11);
@@ -35,6 +36,81 @@ describe('bounded free-format metadata acquisition', () => {
         ).toBe(number);
       }
     }
+  });
+
+  it('distinguishes real ID3v1 EOF at and beyond the searched probe edge', async () => {
+    for (const length of [8_646, 8_647, 8_648, 8_649]) {
+      const tag = metadataTag(3, { padding: length - 2 * 417 - 128 - metadataTag(3).length });
+      const bytes = Buffer.concat([free(), tag, free(), metadataV1()]);
+      expect(bytes.length).toBe(length);
+      for (const sizes of [[1], [1, 97], [bytes.length]]) {
+        expect(await countMp3Frames(chunks(bytes, sizes))).toBe(2);
+      }
+    }
+  });
+
+  it('retains prior validated tag anchors when final ID3v1 extends beyond the probe', async () => {
+    for (const frames of [1, 2]) {
+      for (const precedingTags of [0, 1, 9]) {
+        const audio = Array.from({ length: frames }, () => Buffer.from(singleton));
+        const earlier = Array.from({ length: precedingTags }, () =>
+          metadataTag(4, { footer: true }),
+        );
+        const prefix = Buffer.concat([...audio, ...earlier]);
+        // Sweep both sides of a complete/partial TAG signature and all 128
+        // possible tag bytes crossing the searched window, not only one edge.
+        for (let total = 8_644; total <= 8_778; total++) {
+          const body = sizedTag(total - prefix.length - 128);
+          const bytes = Buffer.concat([prefix, body, metadataV1()]);
+          for (const sizes of [[1, 97], [bytes.length]]) {
+            expect(await countMp3Frames(chunks(bytes, sizes))).toBe(frames);
+          }
+        }
+      }
+    }
+  });
+
+  it('retains anchors without forgiving truncated or overlong ID3v1 tails at the probe edge', async () => {
+    for (const tagStart of [8_519, 8_520, 8_644, 8_645, 8_647, 8_648]) {
+      const prefix = Buffer.concat([singleton, sizedTag(tagStart - singleton.length)]);
+      for (const tailLength of [3, 127, 129]) {
+        const tail = Buffer.concat([metadataV1(), Buffer.of(1)]).subarray(0, tailLength);
+        const bytes = Buffer.concat([prefix, tail]);
+        for (const sizes of [[1, 97], [bytes.length]]) {
+          await expect(countMp3Frames(chunks(bytes, sizes))).rejects.toMatchObject({
+            kind: tailLength < 128 ? 'truncated-mp3' : 'invalid-mp3',
+            offset: tagStart + Math.min(tailLength, 128),
+          });
+        }
+      }
+    }
+  });
+
+  it('reads only one EOF-witness byte beyond the probe and closes early rejection', async () => {
+    const bytes = Buffer.alloc(10_000, 0x11);
+    bytes.set([255, 251, 0, 192]);
+    let nextCalls = 0;
+    let returned = 0;
+    const source: AsyncIterable<Uint8Array> = {
+      [Symbol.asyncIterator]() {
+        return {
+          async next() {
+            const offset = nextCalls++;
+            return { done: false, value: bytes.subarray(offset, offset + 1) };
+          },
+          async return() {
+            returned++;
+            return { done: true, value: undefined };
+          },
+        };
+      },
+    };
+    await expect(countMp3Frames(source)).rejects.toMatchObject({
+      kind: 'unsupported-format',
+      offset: 0,
+    });
+    expect(nextCalls).toBe(8_648);
+    expect(returned).toBe(1);
   });
 
   it('validates each short frame prefix and preserves the acquisition error offset', async () => {

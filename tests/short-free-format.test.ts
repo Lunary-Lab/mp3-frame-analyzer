@@ -92,6 +92,110 @@ describe('genuine normally flushed short free-format files', () => {
     }
   });
 
+  it('does not mistake the fixed probe end for EOF around ancillary TAG bytes', async () => {
+    const fixture = manifest.fixtures.find(
+      (item) =>
+        item.rate === 44100 &&
+        item.channels === 1 &&
+        !item.crc &&
+        item.kbps === 128 &&
+        item.pcmSamples === 0,
+    )!;
+    const original = Buffer.from(fixture.base64, 'base64');
+    const side = [...original.subarray(4, 21)]
+      .map((byte) => byte.toString(2).padStart(8, '0'))
+      .join('');
+    expect(Number.parseInt(side.slice(0, 9), 2)).toBe(0);
+    expect(Number.parseInt(side.slice(18, 30), 2)).toBe(0);
+    expect(Number.parseInt(side.slice(77, 89), 2)).toBe(0);
+    expect(original.length).toBe(417);
+    const probeEnd = 8_647;
+    for (const secondStart of [8_380, 8_400, 8_420]) {
+      const tag = metadataTag(3, {
+        padding: secondStart - original.length - metadataTag(3).length,
+      });
+      for (const distanceToProbeEnd of [127, 128, 129]) {
+        const markerOffset = probeEnd - distanceToProbeEnd - secondStart;
+        expect(markerOffset).toBeGreaterThanOrEqual(21);
+        const last = Buffer.from(original);
+        last.write('TAG', markerOffset, 'ascii');
+        const bytes = Buffer.concat([original, tag, last]);
+        expect(original.length + tag.length).toBe(secondStart);
+        // The independent encoder span puts EOF well beyond the bounded
+        // probe. This TAG is ancillary, not a complete or truncated ID3v1 tail.
+        expect(bytes.length - secondStart - markerOffset).toBeGreaterThan(128);
+        for (const sizes of [[1, 97], [bytes.length]]) {
+          expect(await count(bytes, sizes)).toBe(2);
+        }
+      }
+    }
+    // An exactly full probe does not yet establish whether the iterator ends.
+    // Do not discard plausible tails just because reader.has(probeEnd) succeeds.
+    const exactEndTag = metadataTag(3, {
+      padding: probeEnd - 2 * original.length - metadataTag(3).length,
+    });
+    for (const distanceToEnd of [127, 128, 129]) {
+      const last = Buffer.from(original);
+      last.write('TAG', last.length - distanceToEnd, 'ascii');
+      const bytes = Buffer.concat([original, exactEndTag, last]);
+      expect(bytes.length).toBe(probeEnd);
+      for (const sizes of [[1, 97], [bytes.length]]) {
+        if (distanceToEnd > 128) expect(await count(bytes, sizes)).toBe(2);
+        else
+          await expect(count(bytes, sizes)).rejects.toMatchObject({ kind: 'unsupported-format' });
+      }
+    }
+    const beforeTail = metadataTag(3, {
+      padding: probeEnd - 128 - 2 * original.length - metadataTag(3).length,
+    });
+    for (const tailLength of [3, 127, 128]) {
+      const bytes = Buffer.concat([
+        original,
+        beforeTail,
+        original,
+        metadataV1().subarray(0, tailLength),
+      ]);
+      for (const sizes of [[1, 97], [bytes.length]]) {
+        if (tailLength === 128) expect(await count(bytes, sizes)).toBe(2);
+        else await expect(count(bytes, sizes)).rejects.toMatchObject({ kind: 'truncated-mp3' });
+      }
+    }
+  });
+
+  it('does not award final-tag evidence to a bounded-probe payload decoy', async () => {
+    const fixture = manifest.fixtures.find(
+      (item) =>
+        item.rate === 44100 &&
+        item.channels === 1 &&
+        !item.crc &&
+        item.kbps === 128 &&
+        item.pcmSamples === 0,
+    )!;
+    const original = Buffer.from(fixture.base64, 'base64');
+    // Independent ID3v2.4 PRIV envelope: owner x\0, then opaque binary data.
+    // The three decoy headers are inside that record, not MPEG boundaries.
+    const tag = Buffer.alloc(7_023, 0x11);
+    const size = (value: number) => [
+      value >>> 21,
+      (value >>> 14) & 127,
+      (value >>> 7) & 127,
+      value & 127,
+    ];
+    tag.set([73, 68, 51, 4, 0, 0, ...size(tag.length - 10)]);
+    tag.set([80, 82, 73, 86, ...size(tag.length - 20), 0, 0, 120, 0], 10);
+    const bytes = Buffer.concat([original, tag, original, original, original]);
+    expect(bytes.length).toBe(8_691);
+    for (const offset of [2_129, 4_259, 6_389]) {
+      bytes.set([255, 251, 2, 192], offset);
+    }
+    for (const sizes of [[1, 97], [bytes.length]]) expect(await count(bytes, sizes)).toBe(4);
+    // The last frame starts at 8274; its main-data length is zero (proved
+    // above), so this replacement at local offset 245 is ancillary only.
+    bytes.write('TAG', 8_519, 'ascii');
+    expect(bytes.length - 8_519).toBe(172);
+    for (const sizes of [[1, 97], [bytes.length]]) expect(await count(bytes, sizes)).toBe(4);
+  });
+
   it.each([2, 3, 4] as const)(
     'crosses ID3v2.%i before free-format length acquisition, without retaining large bodies',
     async (version) => {

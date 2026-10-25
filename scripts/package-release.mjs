@@ -2,6 +2,7 @@ import { cp, lstat, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadVersionMetadata } from './verify-version.mjs';
+import { productionSbom } from './production-sbom.mjs';
 import { isMain, releaseNames, repositoryRoot, runFile, runNpm, sha256 } from './release-utils.mjs';
 
 async function checkCompiledFiles(directory) {
@@ -62,14 +63,7 @@ export async function packageRelease() {
   const npmVersion = (await runNpm(['--version'])).stdout.trim();
   const metadata = { ...version, node: process.version, npm: npmVersion };
   const serialized = `${JSON.stringify(metadata, null, 2)}\n`;
-  const sbomResult = await runNpm([
-    'sbom',
-    '--omit=dev',
-    '--package-lock-only',
-    '--sbom-format=cyclonedx',
-    '--sbom-type=application',
-  ]);
-  const sbom = normalizeApplicationSbom(JSON.parse(sbomResult.stdout), metadata);
+  const sbom = normalizeApplicationSbom(await productionSbom(repositoryRoot), metadata);
 
   const stage = await mkdtemp(join(tmpdir(), 'mp3-release-stage-'));
   try {

@@ -35,9 +35,14 @@ export function startsMetadata(bytes: Uint8Array): boolean {
  * partial envelope may be truncated; known invalid bytes are not evidence
  * of supported metadata. ID3v1 can only occupy the final 128 bytes (or
  * less if truncated), so an earlier TAG string cannot be a supported tail.
+ * The lower bound includes the candidate frame's end: a bounded probe's
+ * end alone is not EOF when that frame must extend beyond the probe.
  */
-export function hasPossibleMetadataPrefix(bytes: Uint8Array): boolean {
-  if (isId3v1Tag(bytes)) return bytes.length <= ID3V1_TAG_BYTES;
+export function hasPossibleMetadataPrefix(
+  bytes: Uint8Array,
+  minimumRemainingBytes: number,
+): boolean {
+  if (isId3v1Tag(bytes)) return minimumRemainingBytes <= ID3V1_TAG_BYTES;
   if (!isId3v2Tag(bytes)) return false;
   try {
     const header = decodeTagHeader(bytes.subarray(0, ID3V2_HEADER_BYTES), 0);
@@ -195,7 +200,11 @@ interface MetadataProbe {
  * Undefined means this candidate cannot cross the metadata, not that
  * arbitrary payload is a malformed tag.
  */
-export function probeMetadata(bytes: Uint8Array, start: number): MetadataProbe | undefined {
+export function probeMetadata(
+  bytes: Uint8Array,
+  start: number,
+  ended: boolean,
+): MetadataProbe | undefined {
   let offset = start;
   let tags = 0;
   let canEnd = true;
@@ -210,7 +219,9 @@ export function probeMetadata(bytes: Uint8Array, start: number): MetadataProbe |
     offset = envelope.end;
   }
   if (isId3v1Tag(bytes.subarray(offset, offset + SIGNATURE_BYTES))) {
-    if (offset + ID3V1_TAG_BYTES !== bytes.length) return undefined;
+    // An unproved tail adds no evidence, but must not erase preceding
+    // validated ID3v2 anchors. Streaming traversal validates this tail later.
+    if (!ended || offset + ID3V1_TAG_BYTES !== bytes.length) return { offset, canEnd, tags };
     offset += ID3V1_TAG_BYTES;
     tags++;
   }

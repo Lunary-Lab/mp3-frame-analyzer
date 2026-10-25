@@ -40,10 +40,19 @@ describe('source-backed ID3 layouts', () => {
 
   it('accepts the recommended prepend/append pair with an accurate SEEK record', async () => {
     const audio = [frame(), frame({ padding: 1 })];
-    const embedded = metadataTag(4);
-    const leading = metadataTag(4, { seek: audio[0]!.length + embedded.length + audio[1]!.length });
+    const embedded = metadataTag(4, { seek: audio[1]!.length });
+    const leading = metadataTag(4, { seek: audio[0]!.length });
     const appended = metadataTag(4, { footer: true, extended: true, update: true });
     const bytes = Buffer.concat([leading, audio[0]!, embedded, audio[1]!, appended, metadataV1(7)]);
+    // SEEK's unsigned 32-bit offset is measured from this tag's end to the
+    // next tag's beginning (ID3v2.4 Frames §4.29), not past intervening tags.
+    const nextFromLeading = leading.length + leading.readUInt32BE(leading.indexOf('SEEK') + 10);
+    expect(nextFromLeading).toBe(leading.length + audio[0]!.length);
+    const nextFromEmbedded =
+      nextFromLeading + embedded.length + embedded.readUInt32BE(embedded.indexOf('SEEK') + 10);
+    expect(nextFromEmbedded).toBe(bytes.length - metadataV1(7).length - appended.length);
+    expect(bytes.subarray(nextFromLeading, nextFromLeading + embedded.length)).toEqual(embedded);
+    expect(bytes.subarray(nextFromEmbedded, nextFromEmbedded + appended.length)).toEqual(appended);
     for (const sizes of partitions) expect(await count(bytes, sizes)).toBe(2);
   });
 

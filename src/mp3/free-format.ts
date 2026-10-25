@@ -44,7 +44,7 @@ function followCandidate(
     const end = position + base + header.padding;
     frames.push({ start: position, end, header });
     if (end > window.length) break;
-    const metadata = probeMetadata(window, end);
+    const metadata = probeMetadata(window, end, ended);
     if (metadata === undefined) break;
     metadataMatches += metadata.tags;
     if (metadata.tags > 0) anchored = true;
@@ -67,14 +67,21 @@ function followCandidate(
  * for its mandatory prefix. This is a
  * conservative ambiguity check, not compressed-audio or CRC validation.
  */
-function shortCandidateIsUnambiguous(window: Uint8Array, candidate: Candidate): boolean {
+function shortCandidateIsUnambiguous(
+  window: Uint8Array,
+  candidate: Candidate,
+  minimumStreamLength: number,
+): boolean {
   for (const { start, end, header } of candidate.frames) {
     const minimum = 4 + (header.hasCrc ? 2 : 0) + (header.mono ? 17 : 32);
     if (end - start < minimum) return false;
     for (let offset = start + 4; offset + 3 <= end; offset++) {
       if (
         (offset + 4 <= end && headerAt(window, offset, header.sampleRateIndex) !== undefined) ||
-        hasPossibleMetadataPrefix(window.subarray(offset))
+        hasPossibleMetadataPrefix(
+          window.subarray(offset),
+          Math.max(minimumStreamLength, end) - offset,
+        )
       )
         return false;
     }
@@ -96,7 +103,10 @@ export async function inferFreeFormatBaseLength(
   first: FreeFormatFrameHeader,
 ): Promise<number> {
   const start = reader.offset;
-  const ended = !(await reader.has(MAX_PROBE_BYTES));
+  // One unsearched byte distinguishes an exactly full probe at EOF from a
+  // longer stream. Never award a final-tag anchor merely at the probe edge.
+  const ended = !(await reader.has(MAX_PROBE_BYTES + 1));
+  const minimumStreamLength = Math.min(reader.bufferedLength, MAX_PROBE_BYTES + 1);
   const window = reader.peek(Math.min(reader.bufferedLength, MAX_PROBE_BYTES));
   let bestBase = 0;
   let bestMatches = 0;
@@ -106,7 +116,7 @@ export async function inferFreeFormatBaseLength(
     const candidate = followCandidate(window, first, base, ended);
     if (
       candidate.matches < 3 &&
-      (!candidate.anchored || !shortCandidateIsUnambiguous(window, candidate))
+      (!candidate.anchored || !shortCandidateIsUnambiguous(window, candidate, minimumStreamLength))
     )
       continue;
     const strength = compareCandidateEvidence(candidate, bestMatches, bestMetadata);

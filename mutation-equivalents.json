@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "strykerVersion": "10.1.1",
   "target": 100,
-  "contextSha256": "87d950ed1bba5dfb286901e10f400ca027ff3233f4ea24b8efde045c67e3652a",
+  "contextSha256": "e0bab054d7fe7f63e8c109ffd7e4df8561288fa103fbba7e38f54d1fcb10d1a3",
   "equivalents": [
     {
       "id": "EQ-COPY-OR",
@@ -167,17 +167,17 @@
     {
       "id": "EQ-FREE-TIED-INITIAL",
       "file": "src/mp3/free-format.ts",
-      "sourceSha256": "0640504f009afacb7b70204fffbb970564e275ab2fc7f0393aa86496d6976d9d",
+      "sourceSha256": "385f13c15377c97296ae4ee2474eeb4bdaa0ea01d2eb1984a091d4dec04bb4c5",
       "mutatorName": "BooleanLiteral",
       "original": "false",
       "replacement": "true",
       "location": {
         "start": {
-          "line": 104,
+          "line": 114,
           "column": 14
         },
         "end": {
-          "line": 104,
+          "line": 114,
           "column": 19
         }
       },
@@ -187,17 +187,17 @@
     {
       "id": "EQ-ID3V2-FOOTER-VERSION",
       "file": "src/mp3/id3.ts",
-      "sourceSha256": "1ad7bcca94a40d772704919a697180cf7c0ae549996b347a2e28beed4820b79f",
+      "sourceSha256": "f5b0ef96ead14677a315fe3b91df47765d1d7912a4079b720a5f38eefecc1623",
       "mutatorName": "ConditionalExpression",
       "original": "version === 4",
       "replacement": "true",
       "location": {
         "start": {
-          "line": 156,
+          "line": 161,
           "column": 42
         },
         "end": {
-          "line": 156,
+          "line": 161,
           "column": 55
         }
       },
@@ -491,7 +491,7 @@
       "original": "end > window.length",
       "replacement": "false",
       "proof": "When end exceeds the fixed probe length, the original breaks after appending the current frame descriptor. Without that early guard, probeMetadata(window, end) inspects only empty subarrays and returns the same offset, zero tags and canEnd=true; neither ID3 signature can match. Adding zero tags does not change metadataMatches or anchored. The offset is strictly beyond, not equal to, the probe end, so the EOF branch is not taken. headerAt then returns undefined at its offset+4>length guard and the loop terminates. The returned base, frame descriptors, matches, anchored and metadataMatches are identical. Candidate positions and spans are bounded finite nonnegative integers. No reader method, iterator operation or payload decoder is invoked on the extra path. It allocates only a fixed number of temporary empty views within the already bounded candidate loop; retained input, lookahead, cursor movement and resource ownership do not change.",
-      "sourceSha256": "0640504f009afacb7b70204fffbb970564e275ab2fc7f0393aa86496d6976d9d",
+      "sourceSha256": "385f13c15377c97296ae4ee2474eeb4bdaa0ea01d2eb1984a091d4dec04bb4c5",
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and offsets/messages, iterator lifecycle, bounded lookahead and resource ownership. Exact internal instruction counts or promise/microtask scheduling are not API guarantees.",
       "location": {
         "start": {
@@ -511,15 +511,15 @@
       "original": "true",
       "replacement": "false",
       "proof": "This return is reached only after atEnd is true or a complete final ID3v1 has been skipped, and after reader.has(1) has returned false. The reader is therefore at zero available bytes with its iterator-done state cached. countFrames calls this helper only after at least one MPEG frame. Returning false instead of true makes countFrames continue once: its has(4) returns false from cached EOF, validateFrameSequenceEnd observes frames>0 and its has(1) also returns false, then traversal returns the identical frames-minus-excludedEncoderFrame value. Neither has call invokes the iterator, consumes bytes or allocates a larger buffer; the offset and typed error behavior are unchanged. The same finally block closes the reader once; cached completion prevents an additional iterator.return call. The only difference is bounded control flow and internal promise scheduling after EOF, which is not part of the public contract.",
-      "sourceSha256": "1ad7bcca94a40d772704919a697180cf7c0ae549996b347a2e28beed4820b79f",
+      "sourceSha256": "f5b0ef96ead14677a315fe3b91df47765d1d7912a4079b720a5f38eefecc1623",
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and offsets/messages, iterator lifecycle, bounded lookahead and resource ownership. Exact internal instruction counts or promise/microtask scheduling are not API guarantees.",
       "location": {
         "start": {
-          "line": 88,
+          "line": 93,
           "column": 12
         },
         "end": {
-          "line": 88,
+          "line": 93,
           "column": 16
         }
       }
@@ -527,17 +527,17 @@
     {
       "id": "EQ-ID3-PREFIX-COMPLETENESS",
       "file": "src/mp3/id3.ts",
-      "sourceSha256": "1ad7bcca94a40d772704919a697180cf7c0ae549996b347a2e28beed4820b79f",
+      "sourceSha256": "f5b0ef96ead14677a315fe3b91df47765d1d7912a4079b720a5f38eefecc1623",
       "mutatorName": "ConditionalExpression",
       "original": "bytes.length < ID3V2_HEADER_BYTES",
       "replacement": "false",
       "location": {
         "start": {
-          "line": 152,
+          "line": 157,
           "column": 7
         },
         "end": {
-          "line": 152,
+          "line": 157,
           "column": 40
         }
       },
