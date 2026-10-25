@@ -5,18 +5,28 @@ export const tagPattern = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 export const shaPattern = /^[0-9a-f]{40}$/;
 export const digest = (value) => createHash('sha256').update(value).digest('hex');
 
-export function validateIdentity({ repository, tag, sha }) {
+export function validateIdentity({ repository, repositoryId, tag, sha }) {
+  assert.match(repositoryId, /^[1-9]\d*$/);
   assert.match(repository, /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/);
   assert.match(tag, tagPattern);
   assert.match(sha, shaPattern);
 }
 
 export function changelogEntry(changelog, repository, tag) {
-  const entries = changelog.split(/(?=^## \[\d+\.\d+\.\d+\]\()/m);
-  const matches = entries.filter((entry) => entry.startsWith(`## [${tag.slice(1)}](`));
+  // Historical imported entries can have plain headings without a tag link.
+  const entries = changelog.split(/(?=^## (?:\[\d+\.\d+\.\d+\]\(|\d+\.\d+\.\d+(?:[ \t]|$)))/m);
+  const matches = entries.filter(
+    (entry) => /^## \[?(\d+\.\d+\.\d+)(?:\]|\s|$)/.exec(entry)?.[1] === tag.slice(1),
+  );
   assert.equal(matches.length, 1, 'Expected exactly one Release Please entry for this version');
   const notes = matches[0].trim();
   const header = notes.split('\n')[0];
+  const initialPrefix = `## [${tag.slice(1)}](https://github.com/${repository}/releases/tag/${tag})`;
+  // A genuine first Release Please entry links to its own tag, not a fabricated
+  // previous tag. Only the separately verified initialization may supply a base.
+  if (header === initialPrefix || header.startsWith(`${initialPrefix} `)) {
+    return { userNotes: notes, previousTag: null };
+  }
   const prefix = `## [${tag.slice(1)}](https://github.com/${repository}/compare/`;
   assert.ok(header.startsWith(prefix), 'Release notes require an explicit previous release tag');
   const range = header.slice(prefix.length).split(')')[0].split('...');
@@ -132,15 +142,30 @@ export function engineeringNotes(plan, native) {
     'Native notes have missing or extra PRs',
   );
   const compare = `https://github.com/${plan.repository}/compare/${plan.previousTag}...${plan.tag}`;
-  const fullComparison = native.body
+  const fullComparisons = native.body
     .split('\n')
-    .find((line) => line.startsWith('**Full Changelog**: '));
-  assert.equal(
-    fullComparison?.trim(),
-    `**Full Changelog**: ${compare}`,
-    'Native release range does not match',
-  );
+    .filter((line) => line.startsWith('**Full Changelog**: '));
+  assert.ok(fullComparisons.length <= 1, 'Native notes contain duplicate comparison links');
+  const fullComparison = fullComparisons[0];
   let body = native.body.trim();
+  if (plan.initialRelease) {
+    // The native API has no commit-baseline input. Its first-release output
+    // is usable only when its entire PR set equals our independently audited
+    // range. Never label its repository-wide link as the bounded comparison.
+    assert.ok(
+      !fullComparison ||
+        fullComparison.trim() ===
+          `**Full Changelog**: https://github.com/${plan.repository}/commits/${plan.tag}`,
+      'Native initial-release range is unexpected',
+    );
+    if (fullComparison) body = body.replace(fullComparison, '').trim();
+  } else {
+    assert.equal(
+      fullComparison?.trim(),
+      `**Full Changelog**: ${compare}`,
+      'Native release range does not match',
+    );
+  }
   for (const { line, number } of entries) {
     const pr = plan.pullRequests.find((candidate) => candidate.number === number);
     const url = `https://github.com/${plan.repository}/commit/${pr.merge_commit_sha}`;
@@ -163,15 +188,18 @@ export function engineeringNotes(plan, native) {
 export function composeReleaseNotes(plan, native) {
   validateIdentity(plan);
   assert.match(plan.previousSha, shaPattern);
-  assert.match(plan.previousTag, tagPattern);
-  assert.equal(
-    changelogEntry(plan.userNotes, plan.repository, plan.tag).previousTag,
-    plan.previousTag,
-  );
+  assert.match(plan.initialRelease ? plan.initialVersionTag : plan.previousTag, tagPattern);
+  const sourcePreviousTag = changelogEntry(plan.userNotes, plan.repository, plan.tag).previousTag;
+  if (plan.initialRelease) {
+    assert.ok(sourcePreviousTag === null || sourcePreviousTag === plan.initialVersionTag);
+  } else {
+    assert.equal(sourcePreviousTag, plan.previousTag);
+  }
   const engineering = engineeringNotes(plan, native);
   const count = plan.pullRequests.length;
+  const userNotes = publishedUserNotes(plan);
   const body =
-    `${plan.userNotes}\n\n## Engineering changes\n\n<details>\n` +
+    `${userNotes}\n\n## Engineering changes\n\n<details>\n` +
     `<summary>All ${count} merged pull requests and additional commits</summary>\n\n${engineering}\n\n</details>\n`;
   // GitHub release bodies have a size limit; never silently truncate the complete view.
   assert.ok(
@@ -179,8 +207,11 @@ export function composeReleaseNotes(plan, native) {
     'Combined release notes exceed the supported body size',
   );
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     repository: plan.repository,
+    repositoryId: plan.repositoryId,
+    initialRelease: Boolean(plan.initialRelease),
+    initialVersionTag: plan.initialVersionTag ?? null,
     tag: plan.tag,
     sha: plan.sha,
     previousTag: plan.previousTag,
@@ -193,4 +224,16 @@ export function composeReleaseNotes(plan, native) {
     producer: plan.producer,
   };
   return { body, manifest };
+}
+
+function publishedUserNotes(plan) {
+  if (!plan.initialRelease) return plan.userNotes;
+  const exact = `https://github.com/${plan.repository}/compare/${plan.previousSha}...${plan.sha}`;
+  const lines = plan.userNotes.split('\n');
+  lines[0] = lines[0].replace(/\]\([^)]*\)/, `](${exact})`);
+  return (
+    `${lines.join('\n')}\n\n` +
+    `First release in this repository. The comparison starts after initialization commit ` +
+    `\`${plan.previousSha}\`; no earlier release tag was created.`
+  );
 }

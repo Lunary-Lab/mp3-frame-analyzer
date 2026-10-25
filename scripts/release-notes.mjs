@@ -3,6 +3,12 @@ import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isMain, runFile } from './release-utils.mjs';
 import {
+  readTaggedFile,
+  resolveNotesBoundary,
+  verifyInitialInventory,
+  verifyRepository,
+} from './release-notes-boundary.mjs';
+import {
   auditPullRequests,
   changelogEntry,
   compareCommits,
@@ -20,13 +26,6 @@ export function githubReader(repository, run = runFile) {
     const result = await run('gh', args);
     return JSON.parse(result.stdout);
   };
-}
-
-async function readRepositoryFile(read, path, sha) {
-  const file = await read(`contents/${path}?ref=${sha}`);
-  assert.equal(file.encoding, 'base64');
-  assert.equal(typeof file.content, 'string');
-  return Buffer.from(file.content, 'base64').toString('utf8');
 }
 
 async function verifyReleasePleaseBoundary(read, config, previousSha, commitCount) {
@@ -63,17 +62,18 @@ async function verifyReleasePleaseBoundary(read, config, previousSha, commitCoun
 export async function prepareReleaseNotes(identity, read, producer) {
   validateIdentity(identity);
   const { repository, tag, sha } = identity;
+  await verifyRepository(read, identity);
   assert.equal((await read(`commits/${tag}`)).sha, sha, 'Release tag moved or input SHA is wrong');
-  const changelog = await readRepositoryFile(read, 'CHANGELOG.md', sha);
-  const { userNotes, previousTag } = changelogEntry(changelog, repository, tag);
-  const previousSha = (await read(`commits/${previousTag}`)).sha;
-  assert.match(previousSha, shaPattern);
+  const changelog = await readTaggedFile(read, 'CHANGELOG.md', sha);
+  const { userNotes, previousTag: sourcePreviousTag } = changelogEntry(changelog, repository, tag);
+  const config = JSON.parse(await readTaggedFile(read, 'release-please-config.json', sha));
+  const boundary = await resolveNotesBoundary(read, identity, sourcePreviousTag, config);
+  const { previousSha } = boundary;
   const pages = await read(`compare/${previousSha}...${sha}?per_page=100`, true);
   const commits = compareCommits(pages, previousSha, sha);
-  const config = JSON.parse(await readRepositoryFile(read, 'release-please-config.json', sha));
   await verifyReleasePleaseBoundary(read, config, previousSha, commits.length);
   // The native API uses this repository path. Require it at the release source.
-  await readRepositoryFile(read, '.github/release.yml', sha);
+  await readTaggedFile(read, '.github/release.yml', sha);
   const associations = {};
   for (const commit of commits) {
     const prPages = await read(`commits/${commit.sha}/pulls?per_page=100`, true);
@@ -86,15 +86,17 @@ export async function prepareReleaseNotes(identity, read, producer) {
   const audit = auditPullRequests(commits, associations, repository);
   const closed = await read('pulls?state=closed&sort=created&direction=asc&per_page=100', true);
   verifyPullRequestInventory(commits, audit.pullRequests, closed, repository);
-  return { ...identity, previousTag, previousSha, userNotes, ...audit, producer };
+  return { ...identity, ...boundary, userNotes, ...audit, producer };
 }
 
 export async function verifyTags(read, plan) {
+  await verifyRepository(read, plan);
   assert.equal(
     (await read(`commits/${plan.tag}`)).sha,
     plan.sha,
     'Release tag moved during generation',
   );
+  if (plan.initialRelease) return verifyInitialInventory(read, plan.tag);
   assert.equal(
     (await read(`commits/${plan.previousTag}`)).sha,
     plan.previousSha,
@@ -109,6 +111,7 @@ async function output(name, value) {
 async function planCommand() {
   const identity = {
     repository: process.env.GH_REPO,
+    repositoryId: process.env.GITHUB_REPOSITORY_ID,
     tag: process.env.RELEASE_TAG,
     sha: process.env.RELEASE_SHA,
   };
@@ -126,7 +129,8 @@ async function planCommand() {
   const plan = await prepareReleaseNotes(identity, githubReader(identity.repository), producer);
   await mkdir('.release-notes-input', { recursive: true });
   await writeFile('.release-notes-input/plan.json', `${JSON.stringify(plan, null, 2)}\n`);
-  await output('previous_tag', plan.previousTag);
+  await output('previous_tag', plan.previousTag ?? '');
+  await output('initial_release', String(plan.initialRelease));
   await output('previous_sha', plan.previousSha);
 }
 
@@ -134,6 +138,7 @@ async function composeCommand() {
   const plan = JSON.parse(await readFile('.release-notes-input/plan.json', 'utf8'));
   const native = JSON.parse(await readFile('.release-notes-native/native.json', 'utf8'));
   assert.equal(plan.repository, process.env.GH_REPO);
+  assert.equal(plan.repositoryId, process.env.GITHUB_REPOSITORY_ID);
   assert.equal(plan.sha, process.env.GITHUB_SHA);
   assert.equal(plan.tag, process.env.RELEASE_TAG);
   assert.equal(plan.producer.runId, process.env.GITHUB_RUN_ID);

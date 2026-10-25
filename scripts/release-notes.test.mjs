@@ -18,7 +18,7 @@ const head = 'b'.repeat(40);
 const middle = 'c'.repeat(40);
 const tag = 'v2.0.0';
 const previousTag = 'v1.2.0';
-const identity = { repository, tag, sha: head };
+const identity = { repository, repositoryId: '12345', tag, sha: head };
 const compareUrl = `https://github.com/${repository}/compare/${previousTag}...${tag}`;
 const userNotes =
   `## [2.0.0](${compareUrl}) (2026-10-25)\n\n` +
@@ -208,6 +208,10 @@ function fakeReader({ anchor = base, status = 'identical', associations = [[pull
   const config = { 'last-release-sha': anchor, packages: { '.': { 'release-type': 'node' } } };
   const requests = [];
   const routes = {
+    '': { full_name: repository, id: 12345 },
+    'git/matching-refs/tags/?per_page=100': [
+      [{ ref: `refs/tags/${previousTag}` }, { ref: `refs/tags/${tag}` }],
+    ],
     [`commits/${tag}`]: { sha: head },
     [`commits/${previousTag}`]: { sha: base },
     [`contents/CHANGELOG.md?ref=${head}`]: encoded(userNotes),
@@ -235,7 +239,7 @@ test('preparation uses exact file SHAs, paginated endpoints and recorded previou
   );
   assert.equal(prepared.previousSha, base);
   assert.equal(prepared.userNotes, userNotes);
-  assert.equal(requests.filter((request) => request.paginate).length, 3);
+  assert.equal(requests.filter((request) => request.paginate).length, 4);
   assert.ok(requests.every((request) => !request.path.includes('latest')));
 });
 
@@ -311,8 +315,10 @@ test('config hides ordinary maintenance from user notes but includes every PR in
     sections.filter((section) => !section.hidden).map((section) => section.type),
     ['feat', 'fix', 'perf', 'revert'],
   );
-  assert.equal(config['last-release-sha'], '4fa60de8f36ed7d44a463959226b275c61189208');
-  assert.equal(config['bootstrap-sha'], 'fa85190d2f4ad31453c32e90cff0b76ae432526a');
+  // Anchors are repository state, not a changelog-type invariant.
+  for (const key of ['last-release-sha', 'bootstrap-sha']) {
+    if (config[key] !== undefined) assert.match(config[key], /^[0-9a-f]{40}$/);
+  }
   const nativeConfig = await readFile(new URL('../.github/release.yml', import.meta.url), 'utf8');
   assert.ok(nativeConfig.includes("labels: ['*']"));
   assert.ok(nativeConfig.includes('Release preparation'));
@@ -405,4 +411,161 @@ test('native PR titles are literal data, including every replacement-string meta
     assert.equal(result.body.split('**Full Changelog**:').length - 1, 1);
     assert.equal(source.body, original, 'Composition mutated the native input');
   }
+});
+
+test('plain historical version headings delimit one entry without swallowing old releases', () => {
+  const historical = '\n\n## 1.2.0 (2026-10-24)\n\nDo not repeat.\n\n## 1.1.0 (2026-10-23)\nOld.';
+  const migration = `${userNotes}\n\n## Migration example\n\nKeep the migration.`;
+  assert.equal(
+    changelogEntry(`# Changelog\n\n${migration}${historical}`, repository, tag).userNotes,
+    migration,
+  );
+});
+
+function initialReader() {
+  const mock = fakeReader();
+  const encode = (value) => ({
+    encoding: 'base64',
+    content: Buffer.from(JSON.stringify(value)).toString('base64'),
+  });
+  mock.routes['git/matching-refs/tags/?per_page=100'] = [[{ ref: `refs/tags/${tag}` }]];
+  mock.routes['releases?per_page=100'] = [[]];
+  mock.routes[`contents/.github/release-notes-initial.json?ref=${head}`] = encode({
+    schemaVersion: 1,
+    repositoryId: identity.repositoryId,
+    baseSha: base,
+    previousVersionTag: previousTag,
+  });
+  mock.routes[`contents/.release-please-manifest.json?ref=${base}`] = encode({
+    '.': previousTag.slice(1),
+  });
+  return { ...mock, encode };
+}
+
+test('initial release requires a reviewed commit baseline without creating historical tags', async () => {
+  const mock = initialReader();
+  const prepared = await prepareReleaseNotes(identity, mock.read, producer);
+  assert.equal(prepared.initialRelease, true);
+  assert.equal(prepared.previousTag, null);
+  assert.equal(prepared.previousSha, base);
+  assert.equal(prepared.initialVersionTag, previousTag);
+  assert.equal(prepared.repositoryId, identity.repositoryId);
+  assert.ok(!mock.requests.some(({ path }) => path === `commits/${previousTag}`));
+  await verifyTags(mock.read, prepared);
+  const source = native();
+  source.body = source.body.replace(
+    `**Full Changelog**: ${compareUrl}`,
+    `**Full Changelog**: https://github.com/${repository}/commits/${tag}`,
+  );
+  const result = composeReleaseNotes(prepared, source);
+  assert.ok(result.body.includes(`compare/${base}...${head}`));
+  assert.ok(!result.body.includes(`compare/${previousTag}...${tag}`));
+  assert.ok(result.body.includes('Set `includeHeader=true` to retain the old behavior.'));
+  assert.ok(result.body.includes('no earlier release tag was created'));
+  assert.equal(result.manifest.previousTag, null);
+  assert.equal(result.manifest.initialRelease, true);
+  assert.equal(result.manifest.userNotesSha256, digest(userNotes));
+  assert.equal(result.manifest.repositoryId, identity.repositoryId);
+  assert.throws(() => composeReleaseNotes(prepared, native()), /initial-release range/);
+  assert.throws(() => composeReleaseNotes(prepared, native([1, 2])), /missing or extra/);
+});
+
+test('missing or changed first-release initialization fails closed rather than guessing', async () => {
+  for (const change of [
+    (m) => delete m.routes[`contents/.github/release-notes-initial.json?ref=${head}`],
+    (m) => {
+      m.routes[''].id = 98765;
+    },
+    (m) => {
+      m.routes['git/matching-refs/tags/?per_page=100'][0].push({ ref: 'refs/tags/unexpected' });
+    },
+    (m) => {
+      m.routes['releases?per_page=100'] = [[{ tag_name: previousTag, draft: false }]];
+    },
+    (m) => {
+      m.routes['releases?per_page=100'] = [[{ tag_name: 'v9.0.0', draft: true }]];
+    },
+    (m) => delete m.routes[`contents/.release-please-manifest.json?ref=${base}`],
+    (m) => {
+      m.routes[`compare/${base}...${head}?per_page=100`][0].status = 'diverged';
+    },
+  ]) {
+    const mock = initialReader();
+    change(mock);
+    await assert.rejects(prepareReleaseNotes(identity, mock.read, producer));
+  }
+  for (const override of [
+    { schemaVersion: 0 },
+    { repositoryId: '999' },
+    { baseSha: middle },
+    { previousVersionTag: 'v0.1.0' },
+  ]) {
+    const mock = initialReader();
+    const path = `contents/.github/release-notes-initial.json?ref=${head}`;
+    const original = JSON.parse(Buffer.from(mock.routes[path].content, 'base64').toString());
+    mock.routes[path] = mock.encode({ ...original, ...override });
+    await assert.rejects(prepareReleaseNotes(identity, mock.read, producer));
+  }
+});
+
+test('bootstrap must not truncate the initial baseline and no new boundary may appear', async () => {
+  const mock = initialReader();
+  const path = `contents/release-please-config.json?ref=${head}`;
+  const config = JSON.parse(Buffer.from(mock.routes[path].content, 'base64').toString());
+  mock.routes[path] = mock.encode({ ...config, 'bootstrap-sha': middle });
+  mock.routes[`compare/${middle}...${base}?per_page=1`] = {
+    status: 'behind',
+    merge_base_commit: { sha: base },
+  };
+  await assert.rejects(prepareReleaseNotes(identity, mock.read, producer), /Bootstrap/);
+  const valid = initialReader();
+  const prepared = await prepareReleaseNotes(identity, valid.read, producer);
+  valid.routes['git/matching-refs/tags/?per_page=100'][0].push({ ref: `refs/tags/${previousTag}` });
+  await assert.rejects(verifyTags(valid.read, prepared), /exactly its own tag/);
+});
+
+test('duplicate linked and plain headings for the requested version fail closed', () => {
+  assert.throws(
+    () => changelogEntry(`${userNotes}\n\n## 2.0.0 (2026-10-25)\nDuplicate.`, repository, tag),
+    /exactly one/,
+  );
+});
+
+test('observed initial Release Please tag-link header requires an explicit verified baseline', async () => {
+  const initialNotes = userNotes.replace(
+    compareUrl,
+    `https://github.com/${repository}/releases/tag/${tag}`,
+  );
+  assert.deepEqual(changelogEntry(initialNotes, repository, tag), {
+    userNotes: initialNotes,
+    previousTag: null,
+  });
+  const mock = initialReader();
+  mock.routes[`contents/CHANGELOG.md?ref=${head}`].content =
+    Buffer.from(initialNotes).toString('base64');
+  const prepared = await prepareReleaseNotes(identity, mock.read, producer);
+  assert.equal(prepared.initialVersionTag, previousTag);
+  assert.equal(prepared.previousSha, base);
+  const source = native();
+  source.body = source.body.replace(`**Full Changelog**: ${compareUrl}`, '');
+  const result = composeReleaseNotes(prepared, source);
+  assert.ok(result.body.includes(`compare/${base}...${head}`));
+  assert.equal(result.manifest.userNotesSha256, digest(initialNotes));
+  delete mock.routes[`contents/.github/release-notes-initial.json?ref=${head}`];
+  await assert.rejects(prepareReleaseNotes(identity, mock.read, producer));
+  assert.throws(() =>
+    composeReleaseNotes({ ...prepared, initialRelease: false, previousTag }, native()),
+  );
+  assert.throws(() =>
+    changelogEntry(initialNotes.replace(`/tag/${tag}`, '/tag/v9.9.9'), repository, tag),
+  );
+});
+
+test('duplicate native comparison lines cannot conceal a different release boundary', async () => {
+  const duplicate = `${native().body}\n**Full Changelog**: https://github.com/${repository}/compare/v0.0.1...${tag}`;
+  assert.throws(() => composeReleaseNotes(plan(), { body: duplicate }), /duplicate comparison/);
+  const mock = initialReader();
+  const prepared = await prepareReleaseNotes(identity, mock.read, producer);
+  const initial = duplicate.replace(compareUrl, `https://github.com/${repository}/commits/${tag}`);
+  assert.throws(() => composeReleaseNotes(prepared, { body: initial }), /duplicate comparison/);
 });

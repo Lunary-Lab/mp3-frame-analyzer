@@ -40,6 +40,7 @@ jobs:
     outputs:
       previous_tag: ${{ steps.plan.outputs.previous_tag }}
       previous_sha: ${{ steps.plan.outputs.previous_sha }}
+      initial_release: ${{ steps.plan.outputs.initial_release }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -81,26 +82,50 @@ jobs:
           RELEASE_SHA: ${{ inputs.sha }}
           PREVIOUS_TAG: ${{ needs.plan.outputs.previous_tag }}
           PREVIOUS_SHA: ${{ needs.plan.outputs.previous_sha }}
+          INITIAL_RELEASE: ${{ needs.plan.outputs.initial_release }}
         run: |
           node --input-type=module <<'JS'
           import assert from 'node:assert/strict';
           import { execFileSync } from 'node:child_process';
           import { mkdirSync, writeFileSync } from 'node:fs';
           const { GH_REPO: repo, RELEASE_TAG: tag, RELEASE_SHA: sha,
-            PREVIOUS_TAG: previousTag, PREVIOUS_SHA: previousSha } = process.env;
+            PREVIOUS_TAG: previousTag, PREVIOUS_SHA: previousSha, INITIAL_RELEASE: initial } = process.env;
           const version = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
           assert.match(tag, version);
-          assert.match(previousTag, version);
+          assert.ok(['true', 'false'].includes(initial));
+          if (initial === 'false') assert.match(previousTag, version);
+          else assert.equal(previousTag, '');
           assert.match(sha, /^[0-9a-f]{40}$/);
           assert.match(previousSha, /^[0-9a-f]{40}$/);
           assert.equal(sha, process.env.GITHUB_SHA);
           assert.equal(process.env.GITHUB_REF, `refs/tags/${tag}`);
           const api = (path) => JSON.parse(execFileSync('gh', ['api', '--method', 'GET',
             `repos/${repo}/${path}`], { encoding: 'utf8' }));
+          const repository = api('');
+          assert.equal(repository.full_name, repo);
+          assert.equal(String(repository.id), process.env.GITHUB_REPOSITORY_ID);
           assert.equal(api(`commits/${tag}`).sha, sha);
-          assert.equal(api(`commits/${previousTag}`).sha, previousSha);
+          if (initial === 'true') {
+            const pages = (path) => JSON.parse(execFileSync('gh', ['api', '--method', 'GET',
+              '--paginate', '--slurp', `repos/${repo}/${path}`], { encoding: 'utf8' }));
+            const tags = pages('git/matching-refs/tags/?per_page=100');
+            assert.ok(Array.isArray(tags) && tags.length > 0 && tags.every(Array.isArray));
+            assert.deepEqual(tags.flat().map((ref) => ref.ref), [`refs/tags/${tag}`]);
+            const releases = pages('releases?per_page=100');
+            assert.ok(Array.isArray(releases) && releases.length > 0 && releases.every(Array.isArray));
+            assert.ok(releases.flat().every((release) => release.tag_name === tag && release.draft === true));
+            const source = api(`contents/.github/release-notes-initial.json?ref=${sha}`);
+            assert.equal(source.encoding, 'base64');
+            const initialization = JSON.parse(Buffer.from(source.content, 'base64').toString());
+            assert.equal(initialization.schemaVersion, 1);
+            assert.equal(initialization.repositoryId, process.env.GITHUB_REPOSITORY_ID);
+            assert.equal(initialization.baseSha, previousSha);
+          } else {
+            assert.equal(api(`commits/${previousTag}`).sha, previousSha);
+          }
           const payload = { tag_name: tag, target_commitish: sha,
-            previous_tag_name: previousTag, configuration_file_path: '.github/release.yml' };
+            configuration_file_path: '.github/release.yml' };
+          if (initial === 'false') payload.previous_tag_name = previousTag;
           const result = JSON.parse(execFileSync('gh', ['api', '--method', 'POST',
             `repos/${repo}/releases/generate-notes`, '--input', '-'],
             { input: JSON.stringify(payload), encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }));
