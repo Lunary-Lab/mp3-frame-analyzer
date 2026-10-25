@@ -34,19 +34,16 @@ describe('streaming MP3 frame counting', () => {
     }
   });
 
-  it.each([2, 3, 4] as const)(
-    'requires a footer on appended ID3v2.%i metadata',
-    async (version) => {
-      const audio = frame();
-      await expect(
-        count(mp3([audio], undefined, id3v2(Buffer.alloc(12), version))),
-      ).rejects.toMatchObject({
-        kind: 'invalid-mp3',
-        offset: audio.length,
-        message: 'Appended ID3v2 tags must use version 2.4 with a footer',
-      });
-    },
-  );
+  it.each([2, 3, 4] as const)('rejects footerless appended ID3v2.%i metadata', async (version) => {
+    const audio = frame();
+    await expect(
+      count(mp3([audio], undefined, id3v2(Buffer.alloc(12), version))),
+    ).rejects.toMatchObject({
+      kind: 'invalid-mp3',
+      offset: audio.length,
+      message: 'Appended ID3v2 tags must use version 2.4 with a footer',
+    });
+  });
 
   it('requires appended metadata to follow all audio and precede final ID3v1', async () => {
     const tag = id3v2(Buffer.alloc(12), 4, true);

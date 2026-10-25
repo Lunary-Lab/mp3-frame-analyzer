@@ -24,7 +24,7 @@ it.each<[string, unknown, UploadForm, ErrorResponse]>([
     response(413, 'file-too-large', 'File exceeds configured upload limit'),
   ],
   [
-    'a deliberate failure raised before the upload is read closes the connection',
+    'a deliberate pre-read failure requests connection closure',
     new ClientError(400, 'invalid-option', 'bad option', { closeConnection: true }),
     'multipart',
     response(400, 'invalid-option', 'bad option', { closeConnection: true }),
@@ -42,13 +42,13 @@ it.each<[string, unknown, UploadForm, ErrorResponse]>([
     response(422, 'truncated-mp3', 'Truncated final frame'),
   ],
   [
-    'a typed framework failure on a raw upload closes the connection',
+    'a typed framework failure on a raw upload requests connection closure',
     failure('internal detail', { code: 'FST_ERR_CTP_INVALID_MEDIA_TYPE', statusCode: 415 }),
     'raw',
     response(415, 'unsupported-media-type', 'Expected an MP3 upload', { closeConnection: true }),
   ],
   [
-    'a typed framework failure on a multipart upload keeps the connection',
+    'a typed framework failure on a multipart upload does not request connection closure',
     failure('internal detail', { code: 'FST_PARTS_LIMIT', statusCode: 413 }),
     'multipart',
     response(413, 'too-many-parts', 'Only one multipart part is allowed'),
@@ -84,7 +84,7 @@ it.each<[string, unknown, UploadForm, ErrorResponse]>([
     response(413, 'request-too-large', 'Request exceeds configured limits'),
   ],
   [
-    'an unknown framework 415 on a raw upload closes the connection',
+    'an unknown framework 415 on a raw upload requests connection closure',
     failure('internal detail', { statusCode: 415 }),
     'raw',
     response(415, 'unsupported-media-type', 'Expected an MP3 upload', { closeConnection: true }),

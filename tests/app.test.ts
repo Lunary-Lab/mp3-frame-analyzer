@@ -98,7 +98,7 @@ describe('POST /file-upload', () => {
     },
   );
 
-  it('closes the connection after rejecting an invalid option, before reading the upload', async () => {
+  it('requests connection closure for an invalid option before reading the upload', async () => {
     const form = multipartBody(frame());
     for (const [contentType, payload] of [
       ['audio/mpeg', frame()],

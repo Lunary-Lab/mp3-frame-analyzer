@@ -9,7 +9,7 @@ function seed(flags = 8) {
   return bytes;
 }
 
-test('free-format manifests cover the supported bitrate/sample-rate combinations', () => {
+test('free-format manifests match independently tabulated bitrate/sample-rate spans', () => {
   // Independently tabulated unpadded spans at 44.1, 48 and 32 kHz.
   const spans = [
     [26, 24, 36],

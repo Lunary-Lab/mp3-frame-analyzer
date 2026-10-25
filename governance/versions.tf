@@ -8,8 +8,8 @@ terraform {
     }
   }
 
-  # State stays on the operator's machine, outside the repository. Pass its
-  # location at init with -backend-config=path=...; see docs/governance.md.
+  # Keep local state outside the repository by passing its location at init
+  # with -backend-config=path=...; see docs/governance.md.
   backend "local" {}
 }
 
