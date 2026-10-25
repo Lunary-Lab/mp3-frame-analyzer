@@ -22,10 +22,9 @@ MPEG parser directly. There are two targets:
 
 Generated fixtures validate the structural counting contract. Their synthetic
 payloads are not asserted to decode, and CRC values are not calculated. Free-format
-payloads exclude sync bytes so this known-count oracle remains unambiguous;
+payloads exclude sync bytes and ID3/TAG markers so this known-count oracle remains unambiguous;
 arbitrary payload mutations and ambiguous short streams belong to the raw target.
-Free-format fixtures contain at least three headers, matching the supported
-discovery contract. Metadata headers are only inserted when a frame can hold them.
+A control bit also constructs one-/two-frame free-format cases. Separate flags insert complete ID3 title tags between frames and repeated footer-bearing tags before final ID3v1. Metadata headers inside MPEG frames are only inserted when a frame can hold them. The oracle tracks actual constructed boundaries rather than inferring them.
 
 The raw target's sanity bound uses the parser's supported minimum free-format
 span of 24 bytes. The previous indexed-bitrate minimum of 96 bytes incorrectly

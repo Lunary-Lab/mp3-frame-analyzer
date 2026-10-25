@@ -113,3 +113,21 @@ test('only first-frame metadata at a recognized position is an expected exclusio
     assert.equal(fixture.bytes.subarray(start, start + 4).toString(), signature, name);
   }
 });
+
+test('short free-format and inserted metadata retain independent frame geometry', () => {
+  for (const count of [1, 2]) {
+    const input = seed(8 | 64 | 128 | 4);
+    input[0] = count - 1;
+    input[2] = 64;
+    input[4] = 2; // 128 kbps at 44.1 kHz = 417 bytes, no padding.
+    const fixture = createStructuredMp3(input);
+    assert.equal(fixture.expectedCount, count);
+    assert.deepEqual(fixture.frameLengths, Array(count).fill(417));
+    assert.deepEqual(fixture.frameOffsets, count === 1 ? [0] : [0, 435]);
+    if (count === 2) assert.equal(fixture.bytes.subarray(417, 420).toString(), 'ID3');
+    const tail = fixture.frameOffsets.at(-1) + 417;
+    assert.equal(fixture.bytes.subarray(tail, tail + 3).toString(), 'ID3');
+    assert.equal(fixture.bytes.subarray(-138, -135).toString(), '3DI');
+    assert.equal(fixture.bytes.subarray(-128, -125).toString(), 'TAG');
+  }
+});

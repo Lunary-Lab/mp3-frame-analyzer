@@ -1,7 +1,7 @@
 import { AsyncByteReader } from './byte-reader.js';
 import { Mp3ParseError } from './errors.js';
 import { FrameSpans } from './frame-spans.js';
-import { skipLeadingTags, skipTrailingMetadata, startsTrailingMetadata } from './id3.js';
+import { skipLeadingTags, skipFrameBoundaryMetadata, startsMetadata } from './id3.js';
 import { isEncoderFrame } from './encoder-frame.js';
 
 /**
@@ -10,7 +10,7 @@ import { isEncoderFrame } from './encoder-frame.js';
  * Counts physical MPEG frames by default. An optional policy excludes a
  * recognized first Xing/Info/VBRI frame; it does not decode MP3 audio or trust
  * encoder-declared counts.
- * Leading ID3v2, appended ID3v2.4 with a footer, and trailing ID3v1 are excluded.
+ * Boundary-aligned ID3v2, appended ID3v2.4 with footers, and final ID3v1 are skipped.
  *
  * Processing is O(input bytes), with one bounded free-format probe (8.7 KiB),
  * and memory O(largest input chunk plus probe bytes).
@@ -60,9 +60,9 @@ async function countFrames(
       await validateFrameSequenceEnd(reader, frames, position);
       return frames - excludedEncoderFrame;
     }
-    if (frames > 0 && startsTrailingMetadata(reader.peek(4))) {
-      await skipTrailingMetadata(reader);
-      return frames - excludedEncoderFrame;
+    if (frames > 0 && startsMetadata(reader.peek(4))) {
+      if (await skipFrameBoundaryMetadata(reader)) return frames - excludedEncoderFrame;
+      continue;
     }
 
     const { header, length } = await spans.resolve();

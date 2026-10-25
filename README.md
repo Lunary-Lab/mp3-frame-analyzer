@@ -73,7 +73,7 @@ The repository owner chose this default because the assessment's suggested tool,
 
 - `src/mp3/frame-header.ts`: pure MPEG-1 Layer III header decoder: indexed, free-format, unsupported or invalid, with the indexed frame-span formula.
 - `src/mp3/frame-spans.ts`: resolves each physical frame's span, discovering and locking a free-format stream's base length.
-- `src/mp3/id3.ts`: skips leading ID3v2.2/2.3/2.4 tags and trailing metadata by their encoded lengths, enforcing where each may appear.
+- `src/mp3/id3.ts`: skips boundary-aligned ID3v2.2/2.3/2.4 tags and final ID3v1 by their encoded lengths, enforcing where each may appear.
 - `src/mp3/byte-reader.ts`: incremental lookahead and skipping over any `AsyncIterable<Uint8Array>`.
 - `src/mp3/count-frames.ts`: sequential frame traversal with no full-file buffering.
 - `src/upload.ts`: raw and multipart uploads behind one interface: media types, per-upload limits, empty uploads, and the unread remainder of a rejected upload.
@@ -83,7 +83,7 @@ The repository owner chose this default because the assessment's suggested tool,
 
 Complexity: **O(n)** time and **O(max upstream chunk size)** additional memory. Frame headers require only four bytes of lookahead, and metadata content is streamed past rather than accumulated.
 
-The parser detects free-format frame spacing using multiple consecutive compatible MPEG headers instead of a bitrate-table lookup. The parser rejects invalid data at the next required frame boundary. It does not resynchronize after corrupt frames or arbitrarily skip noise before the first header: doing so can silently turn a malformed upload into a plausible but wrong count. It supports up to eight leading ID3v2 tags, one appended ID3v2.4 tag with a matching footer, then an optional final ID3v1 tag. **Free-format MPEG-1 Layer III** (bitrate index zero) is supported with bounded inference of fixed frame spacing and per-frame padding; ambiguous streams with too few verifiable frames return 415. Table-defined bitrates 32–320 kbps remain supported. Other unsupported scope includes MPEG-2/2.5, Layers I/II, APE/Lyrics3 trailers, audio decoding, and CRC validation.
+The parser detects free-format frame spacing using multiple consecutive compatible MPEG headers instead of a bitrate-table lookup. The parser rejects invalid data at the next required frame boundary. It does not resynchronize after corrupt frames or arbitrarily skip noise before the first header: doing so can silently turn a malformed upload into a plausible but wrong count. It supports consecutive ID3v2 tags at each MPEG boundary, including embedded tags; every appended tag must be v2.4 with a matching footer, followed by an optional final ID3v1. **Free-format MPEG-1 Layer III** (bitrate index zero) is supported with bounded inference of fixed frame spacing and per-frame padding; one-/two-frame streams can use bounded EOF or metadata-boundary evidence, while tied or conservatively ambiguous candidates return 415. This structural heuristic cannot distinguish every truncated or extended singleton from a complete frame; see the [precise inference contract](docs/specifications/mpeg-1-layer-iii.md#4-free-format-layer-iii-bitrate-index-zero). Table-defined bitrates 32–320 kbps remain supported. Other unsupported scope includes MPEG-2/2.5, Layers I/II, APE/Lyrics3 trailers, audio decoding, and CRC validation.
 
 ## Verification
 

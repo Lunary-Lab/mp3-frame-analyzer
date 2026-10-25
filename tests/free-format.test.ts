@@ -54,10 +54,9 @@ describe('free-format MPEG-1 Layer III', () => {
     await expect(count(bytes, 1)).resolves.toBe(4);
   });
 
-  it('fails closed for ambiguous streams containing fewer than three headers', async () => {
-    for (const bytes of [freeFrame(730), mp3([freeFrame(730), freeFrame(730)])]) {
-      await expect(count(bytes)).rejects.toMatchObject({ kind: 'unsupported-format' });
-    }
+  it('uses exact EOF closure for unambiguous one- and two-frame streams', async () => {
+    expect(await count(freeFrame(730))).toBe(1);
+    expect(await count(mp3([freeFrame(730), freeFrame(730)]))).toBe(2);
   });
 
   it('rejects free-format streams whose subsequent sample rate changes', async () => {
@@ -128,7 +127,7 @@ describe('free-format MPEG-1 Layer III', () => {
     },
   );
 
-  it('accepts the documented minimum of exactly three consecutive frames', async () => {
+  it('accepts a three-header acquisition chain ending at EOF', async () => {
     await expect(count(mp3([freeFrame(730), freeFrame(730), freeFrame(730)]))).resolves.toBe(3);
   });
 
@@ -161,7 +160,7 @@ describe('free-format MPEG-1 Layer III', () => {
   });
   it('rejects changes of free-format sample rate after successful frame inference', async () => {
     const blocks = Array.from({ length: 7 }, () => freeFrame(730));
-    blocks[5]![2] = 4; // Beyond the three headers required to establish frame length.
+    blocks[5]![2] = 4; // Beyond the initial three-header acquisition chain.
     await expect(count(mp3(blocks), 1)).rejects.toMatchObject({
       kind: 'invalid-mp3',
       offset: 5 * 730,
