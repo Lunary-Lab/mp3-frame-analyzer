@@ -192,6 +192,7 @@ The documents distinguish actual ISO/IETF requirements, ID3 informal standards, 
 - [Testing, fuzzing, performance and reproduction](docs/testing.md)
 - [Mutation review and equivalent mutants](docs/mutation-review.md)
 - [Security assumptions and scope](docs/security.md)
+- [Repository governance as code: settings, rulesets and release approval](docs/governance.md)
 - [Release process and repository settings](docs/releasing.md)
 
 ## Native TypeScript 7 and API compatibility

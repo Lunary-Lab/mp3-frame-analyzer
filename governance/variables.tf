@@ -1,0 +1,45 @@
+locals {
+  owner      = "Lunary-Lab"
+  repository = "mp3-frame-analyzer"
+}
+
+variable "enable_rulesets" {
+  description = "Create the main-branch and release-tag rulesets. GitHub returns 403 for rulesets on this private repository under the organization's Free plan, so enable this only after the plan supports them."
+  type        = bool
+  default     = false
+}
+
+variable "require_signed_commits" {
+  description = "Require verified signatures on main. GitHub signs squash merges, but unsigned commits on a pull request branch can still block its squash merge, so enable this only once every contributor signs their commits."
+  type        = bool
+  default     = false
+}
+
+variable "required_status_checks" {
+  description = "Check runs every pull request into main must pass. Each must be a job name in a workflow that runs for every pull request."
+  type        = list(string)
+  default     = ["All checks", "Conventional Commit PR title"]
+
+  validation {
+    condition     = length(var.required_status_checks) > 0
+    error_message = "Require at least one status check."
+  }
+}
+
+variable "status_check_app_id" {
+  description = "GitHub App that must report the required checks: GitHub Actions (15368), as observed on this repository's check runs."
+  type        = number
+  default     = 15368
+}
+
+variable "aggregate_status_check" {
+  description = "Required check that fails unless every validation job in its workflow succeeded."
+  type        = string
+  default     = "All checks"
+}
+
+variable "workflow_directory" {
+  description = "Workflows that the required checks are verified against."
+  type        = string
+  default     = "../.github/workflows"
+}

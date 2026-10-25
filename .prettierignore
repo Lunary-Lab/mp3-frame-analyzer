@@ -14,3 +14,5 @@ fuzz/tmp/
 CHANGELOG.md
 
 .cache/
+governance/.terraform/
+governance/snapshots/

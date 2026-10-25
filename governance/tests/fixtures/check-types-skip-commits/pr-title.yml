@@ -1,0 +1,10 @@
+name: PR title
+on:
+  pull_request_target:
+    types: [opened, edited]
+jobs:
+  title:
+    name: Conventional Commit PR title
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'true'
