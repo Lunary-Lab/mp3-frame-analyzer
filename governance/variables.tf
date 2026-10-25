@@ -38,6 +38,12 @@ variable "aggregate_status_check" {
   default     = "All checks"
 }
 
+variable "title_status_check" {
+  description = "Required check that validates PR metadata and must rerun when the title is edited."
+  type        = string
+  default     = "Conventional Commit PR title"
+}
+
 variable "workflow_directory" {
   description = "Workflows that the required checks are verified against."
   type        = string

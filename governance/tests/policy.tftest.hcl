@@ -146,7 +146,7 @@ run "aggregate_running_only_on_success_is_rejected" {
   expect_failures = [output.required_status_checks, output.aggregate_status_check]
 }
 
-# Two jobs named "All checks" would let the weaker one satisfy the requirement.
+# Duplicate check names make required-check resolution ambiguous.
 run "duplicate_aggregate_is_rejected" {
   command = plan
 
@@ -154,7 +154,7 @@ run "duplicate_aggregate_is_rejected" {
     workflow_directory = "tests/fixtures/aggregate-duplicated"
   }
 
-  expect_failures = [output.aggregate_status_check]
+  expect_failures = [output.required_status_checks, output.aggregate_status_check]
 }
 
 run "aggregate_must_be_required" {
@@ -166,6 +166,51 @@ run "aggregate_must_be_required" {
   }
 
   expect_failures = [output.aggregate_status_check]
+}
+
+run "duplicate_required_name_in_any_workflow_is_rejected" {
+  command = plan
+  variables { workflow_directory = "tests/fixtures/required-check-duplicated" }
+  expect_failures = [output.required_status_checks]
+}
+
+run "filtered_duplicate_aggregate_is_rejected" {
+  command = plan
+  variables { workflow_directory = "tests/fixtures/filtered-aggregate-duplicated" }
+  expect_failures = [output.required_status_checks, output.aggregate_status_check]
+}
+
+run "title_check_must_report_after_edits" {
+  command = plan
+  variables { workflow_directory = "tests/fixtures/title-without-edited" }
+  expect_failures = [output.required_status_checks]
+}
+
+run "main_only_branch_filters_are_accepted" {
+  command = plan
+  variables { workflow_directory = "tests/fixtures/main-only-branches" }
+}
+
+run "filters_excluding_main_are_rejected" {
+  command = plan
+  variables { workflow_directory = "tests/fixtures/wrong-branch" }
+  expect_failures = [output.required_status_checks, output.aggregate_status_check]
+}
+
+run "ignoring_main_is_rejected" {
+  command = plan
+  variables { workflow_directory = "tests/fixtures/ignored-main" }
+  expect_failures = [output.required_status_checks]
+}
+
+run "compact_always_expression_is_accepted" {
+  command = plan
+  variables { workflow_directory = "tests/fixtures/always-compact" }
+}
+
+run "spaced_always_expression_is_accepted" {
+  command = plan
+  variables { workflow_directory = "tests/fixtures/always-spaced" }
 }
 
 run "rulesets_can_be_disabled_in_an_emergency" {

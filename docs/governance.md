@@ -31,7 +31,7 @@
 
 Description, homepage, topics, Pages and template settings are deliberately unmanaged (`ignore_changes`). Organization policies are outside this configuration.
 
-The provider has no resources for these settings, which were set once through the REST API and are recorded in the [snapshot](../governance/snapshots/baseline.json):
+The provider has no resources for these settings, which were set once through the REST API. Keep a reviewed local/private baseline for [snapshot comparison](#procedures); no snapshot JSON is committed here:
 
 | Setting                         | Value                                           |
 | ------------------------------- | ----------------------------------------------- |
@@ -89,21 +89,24 @@ terraform -chdir=governance plan -detailed-exitcode
 
 Run it before each settings change and after any change made in the GitHub UI.
 
-**Compare with the snapshot.** [`snapshot.sh`](../governance/snapshot.sh) records repository-level settings as JSON, with names only for secrets and variables. It records unavailable endpoints with their status and message, never as empty, and exits non-zero if it cannot read the repository:
+**Compare with the snapshot.** [`snapshot.sh`](../governance/snapshot.sh) records repository-level settings as JSON, with names only for secrets and variables. Organization-level settings and people inventories remain excluded. It uses repository security metadata without requesting secret-scanning alerts. Collections are fully paginated and their page shapes checked before sanitizing and sorting the output. Unavailable endpoints retain their status and message, never an empty collection. An unreadable repository, failed pagination or malformed collection exits non-zero:
+
+Set `SNAPSHOT_BASELINE` to the absolute path of your previously reviewed local/private snapshot, outside this repository. No baseline is supplied in the checkout.
 
 ```bash
+: "${SNAPSHOT_BASELINE:?Set SNAPSHOT_BASELINE to your reviewed local/private snapshot path}"
 governance/snapshot.sh > /tmp/settings.json
-normalize='del(.captured_at) | .settings.repository.value.homepage |= (. // "")'
-diff <(jq -S "$normalize" governance/snapshots/baseline.json) <(jq -S "$normalize" /tmp/settings.json)
+normalize='del(.captured_at, .settings.secret_scanning_alerts) | .settings.repository.value.homepage |= (. // "") | walk(if type == "array" then sort else . end)'
+diff <(jq -S "$normalize" "$SNAPSHOT_BASELINE") <(jq -S "$normalize" /tmp/settings.json)
 ```
 
-The filter treats an empty homepage as `null`, as GitHub displays both the same way.
+The filter ignores capture time, normalizes null/empty homepages and inventory ordering, and removes the legacy alert-count entry that the collector no longer requests. Release and tag inventories change with releases, so differences there are expected.
 
 ### Recovery
 
 - **State lost or corrupted:** delete it and run `init`, `plan` and `apply` again. The import blocks re-adopt the seven imported resources. A fresh import also plans provider-local fields that GitHub never returns, such as `archive_on_destroy`; the rulesets and environment must be imported by ID (`terraform import 'github_repository_ruleset.main[0]' mp3-frame-analyzer:<id>`, `terraform import github_repository_environment.release mp3-frame-analyzer:release`) before `apply`, or it would try to create duplicates.
 - **A setting changed by mistake in the UI:** `plan` shows the difference, and `apply` restores the reviewed value.
-- **A bad apply:** revert the change in a pull request, then `apply`. [`baseline.json`](../governance/snapshots/baseline.json) records the reviewed values.
+- **A bad apply:** revert the change in a pull request, then `apply`. Compare against your previously reviewed local/private baseline; no baseline is committed here.
 
 ### Stop managing the repository
 
@@ -137,15 +140,16 @@ The `main` ruleset in [`rulesets.tf`](../governance/rulesets.tf):
 
 **Signed commits.** GitHub signs each squash merge, Release Please's branch commits, and Dependabot's commits. GitHub notes that unsigned commits on a pull request branch can block its squash merge, so contributors sign their commits (`gpg.format ssh` with a signing key registered on GitHub).
 
-**The required-check contract** in [`checks.tf`](../governance/checks.tf) parses the workflows at plan time. GitHub counts a skipped check as passing, so planning fails if any required check could be missing or skipped on a pull request:
+**The required-check contract** in [`checks.tf`](../governance/checks.tf) parses supported workflow shapes at plan time. GitHub counts a skipped check as passing, so it rejects these sources of missing, skipped or ambiguous checks on pull requests into `main`:
 
-- it is not a job that reports under its own name; matrix and reusable-workflow jobs report derived names;
-- it can be skipped, through a condition other than `always()` or through `needs` without `always()`;
+- its name is not unique across workflows, including filtered and manually dispatched workflows, or it is a matrix or reusable-workflow job rather than one direct job;
+- it can be skipped, through a condition other than `always()` or through `needs` without `always()`; equivalent whitespace around the expression and its optional `${{ }}` delimiters is accepted;
 - its workflow does not run on `pull_request` or `pull_request_target`;
-- its workflow filters by paths or branches, or lists `types` without `opened`, `synchronize` and `reopened`;
+- its workflow filters by paths, ignores branches, or has a branch filter other than exactly `[main]`;
+- its event `types` omit `opened`, `synchronize` or `reopened`; the title check must also include `edited` so a title-only change is revalidated;
 - the aggregate is not required or not unique, does not run with `always()`, or does not need every other job in its workflow.
 
-The contract inspects the aggregate's `if` and `needs`. Its step in `ci.yml` fails on any child result other than success, including cancelled and skipped. Each rule has a fixture that must be rejected, and deleting any one rule makes `terraform test` fail. Renaming a check fails the `Governance` workflow on that pull request.
+The contract inspects the aggregate's `if` and `needs`; it is not a general Actions expression evaluator and does not prove step behavior. Its step in `ci.yml` fails on any child result other than success, including cancelled and skipped. Positive and negative fixtures exercise the supported forms and rejection rules. Renaming a check requires updating its variables and tests together or the `Governance` workflow fails on that pull request. That workflow is not a required check, so it warns rather than blocks.
 
 **Release PRs depend on dispatch.** Release Please opens its PRs with `GITHUB_TOKEN`, which starts no workflow runs of its own. Both required checks reach a release PR through the `workflow_dispatch` calls in `release-please.yml`, which run when Release Please creates or updates the PR. If the strict up-to-date rule leaves the release PR behind `main` without Release Please changing it, use the **Update branch** button; that human push runs the ordinary checks ([recovery](releasing.md#recover-from-a-failed-release)).
 
@@ -182,7 +186,7 @@ A modified asset fails both `verify-asset` and `attestation verify`; an asset fr
 
 ## Verification
 
-[`snapshots/baseline.json`](../governance/snapshots/baseline.json) is the settings read back after the configuration was applied on 2026-10-25. Enforcement was tested against GitHub, not inferred from the configuration; the pull request that introduced this document records the evidence.
+Snapshots are retained locally/privately, not committed to this repository. Enforcement was tested against GitHub after the configuration was applied on 2026-10-25, not inferred from the configuration; the pull request that introduced this document records the evidence.
 
 ## Sources
 
