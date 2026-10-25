@@ -1,13 +1,13 @@
 resource "github_repository" "analyzer" {
   name       = local.repository
-  visibility = "private"
+  visibility = "public"
 
   has_issues      = true
   has_projects    = true
   has_wiki        = false
   has_discussions = false
   is_template     = false
-  allow_forking   = false
+  allow_forking   = true
   archived        = false
 
   # Squash only, titled by the Conventional Commit PR title with a blank body:
@@ -29,6 +29,17 @@ resource "github_repository" "analyzer" {
   # rather than delete. Stop managing it with a removed block instead.
   archive_on_destroy = true
 
+  # Free for public repositories: alerts for leaked credentials, and pushes
+  # containing a recognized credential are refused.
+  security_and_analysis {
+    secret_scanning {
+      status = "enabled"
+    }
+    secret_scanning_push_protection {
+      status = "enabled"
+    }
+  }
+
   lifecycle {
     prevent_destroy = true
 
@@ -39,7 +50,6 @@ resource "github_repository" "analyzer" {
       homepage_url,
       topics,
       pages,
-      security_and_analysis,
       vulnerability_alerts,
       default_branch,
       has_downloads,

@@ -19,10 +19,6 @@ override_resource {
 }
 
 override_resource {
-  target = github_actions_repository_access_level.analyzer
-}
-
-override_resource {
   target = github_repository_vulnerability_alerts.analyzer
 }
 
@@ -172,21 +168,21 @@ run "aggregate_must_be_required" {
   expect_failures = [output.aggregate_status_check]
 }
 
-run "rulesets_stay_off_while_the_plan_blocks_them" {
+run "rulesets_can_be_disabled_in_an_emergency" {
   command = plan
+
+  variables {
+    enable_rulesets = false
+  }
 
   assert {
     condition     = length(github_repository_ruleset.main) == 0 && length(github_repository_ruleset.release_tags) == 0
-    error_message = "Rulesets must not be created until enable_rulesets is set."
+    error_message = "enable_rulesets = false must remove both rulesets."
   }
 }
 
 run "main_ruleset_requires_checks_not_reviews" {
   command = plan
-
-  variables {
-    enable_rulesets = true
-  }
 
   assert {
     condition     = github_repository_ruleset.main[0].enforcement == "active" && length(github_repository_ruleset.main[0].bypass_actors) == 0
@@ -203,9 +199,9 @@ run "main_ruleset_requires_checks_not_reviews" {
       github_repository_ruleset.main[0].rules[0].deletion,
       github_repository_ruleset.main[0].rules[0].non_fast_forward,
       github_repository_ruleset.main[0].rules[0].required_linear_history,
-      !github_repository_ruleset.main[0].rules[0].required_signatures,
+      github_repository_ruleset.main[0].rules[0].required_signatures,
     ])
-    error_message = "main must block deletion and force pushes and require linear history, without signatures by default."
+    error_message = "main must block deletion and force pushes and require linear, signed history."
   }
 
   assert {
@@ -227,26 +223,21 @@ run "main_ruleset_requires_checks_not_reviews" {
   }
 }
 
-run "signed_commits_are_required_once_enabled" {
+run "signed_commits_can_be_relaxed" {
   command = plan
 
   variables {
-    enable_rulesets        = true
-    require_signed_commits = true
+    require_signed_commits = false
   }
 
   assert {
-    condition     = github_repository_ruleset.main[0].rules[0].required_signatures
-    error_message = "require_signed_commits must add the signature rule."
+    condition     = !github_repository_ruleset.main[0].rules[0].required_signatures
+    error_message = "require_signed_commits = false must drop only the signature rule."
   }
 }
 
 run "release_tags_cannot_move_or_disappear" {
   command = plan
-
-  variables {
-    enable_rulesets = true
-  }
 
   assert {
     condition = (
@@ -266,7 +257,7 @@ run "adopted_settings_keep_squash_only_private_and_read_only_tokens" {
 
   assert {
     condition = (
-      github_repository.analyzer.visibility == "private" &&
+      github_repository.analyzer.visibility == "public" &&
       github_repository.analyzer.allow_squash_merge &&
       !github_repository.analyzer.allow_merge_commit &&
       !github_repository.analyzer.allow_rebase_merge &&
@@ -274,16 +265,46 @@ run "adopted_settings_keep_squash_only_private_and_read_only_tokens" {
       github_repository.analyzer.squash_merge_commit_message == "BLANK" &&
       github_repository.analyzer.archive_on_destroy
     )
-    error_message = "The repository must stay private and squash-only, and archive rather than delete."
+    error_message = "The repository must stay public and squash-only, and archive rather than delete."
+  }
+
+  assert {
+    condition = (
+      github_repository.analyzer.security_and_analysis[0].secret_scanning[0].status == "enabled" &&
+      github_repository.analyzer.security_and_analysis[0].secret_scanning_push_protection[0].status == "enabled"
+    )
+    error_message = "Secret scanning and push protection must be on."
   }
 
   assert {
     condition = (
       github_workflow_repository_permissions.analyzer.default_workflow_permissions == "read" &&
       github_actions_repository_permissions.analyzer.allowed_actions == "selected" &&
-      github_actions_repository_permissions.analyzer.sha_pinning_required &&
-      github_actions_repository_access_level.analyzer.access_level == "none"
+      github_actions_repository_permissions.analyzer.sha_pinning_required
     )
     error_message = "Actions must default to read-only tokens and SHA-pinned, selected actions."
+  }
+}
+
+run "publication_waits_for_one_owner_approval" {
+  command = plan
+
+  assert {
+    condition = (
+      github_repository_environment.release.reviewers[0].users == toset([98036866]) &&
+      length(coalesce(github_repository_environment.release.reviewers[0].teams, [])) == 0 &&
+      !github_repository_environment.release.prevent_self_review &&
+      !github_repository_environment.release.can_admins_bypass
+    )
+    error_message = "Only choskeli may approve, admins may not bypass, and the approver may approve their own release."
+  }
+
+  assert {
+    condition = (
+      !github_repository_environment.release.deployment_branch_policy[0].protected_branches &&
+      github_repository_environment.release.deployment_branch_policy[0].custom_branch_policies &&
+      github_repository_environment_deployment_policy.release_tags.tag_pattern == "v*"
+    )
+    error_message = "Only v* release tags may deploy to the release environment."
   }
 }
