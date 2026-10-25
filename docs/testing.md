@@ -1,5 +1,10 @@
 # Tests, fuzzing, and performance
 
+Maintained runtime and tooling code also follow the enforced
+[complexity and size limits](code-quality.md). Boundary tests verify that the
+production gates fail at 11 complexity, 301 file lines, 61 function lines, and
+121 characters, while retaining the documented test and literal exceptions.
+
 ## Test pyramid
 
 1. **Unit**: table-based validation of bitrate, rate, padding, CRC bit, invalid indices, reserved flags and synchsafe ID3 lengths. A table drives `errorResponseFor` through every failure mechanism, and stub consumers drive the upload module's guarantees.

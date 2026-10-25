@@ -64,16 +64,7 @@ export class FrameSpans {
       throw new Mp3ParseError('invalid-mp3', offset, 'Free-format sample rate changed');
     }
     const length = mode.baseLength + header.padding;
-    // A nonmono MPEG-1 frame needs 4 header + 32 side-information bytes,
-    // plus its optional CRC. Mono's 23-byte maximum prefix fits the global
-    // 24-byte minimum span. These bytes cannot come from the bit reservoir.
-    if (!header.mono && length < 36 + (header.hasCrc ? 2 : 0)) {
-      throw new Mp3ParseError(
-        'invalid-mp3',
-        offset,
-        'Free-format frame is smaller than its header and side information',
-      );
-    }
+    validateFreeFormatPrefix(header, length, offset);
     return { header, length };
   }
 
@@ -86,5 +77,18 @@ export class FrameSpans {
     };
     this.mode = mode;
     return mode;
+  }
+}
+
+function validateFreeFormatPrefix(header: FreeFormatFrameHeader, length: number, offset: number) {
+  // A nonmono MPEG-1 frame needs 4 header + 32 side-information bytes,
+  // plus its optional CRC. Mono's 23-byte maximum prefix fits the global
+  // 24-byte minimum span. These bytes cannot come from the bit reservoir.
+  if (!header.mono && length < 36 + (header.hasCrc ? 2 : 0)) {
+    throw new Mp3ParseError(
+      'invalid-mp3',
+      offset,
+      'Free-format frame is smaller than its header and side information',
+    );
   }
 }

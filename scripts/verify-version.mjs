@@ -9,8 +9,7 @@ function isCommit(value) {
   return typeof value === 'string' && value.length === 40 && commitSha.test(value);
 }
 
-export function validateVersionMetadata(pkg, lock, manifest, options = {}) {
-  const { tag, sourceCommit, gitHead, ci = false } = options;
+function validatePackageIdentity(pkg) {
   if (
     pkg.name !== 'mp3-frame-analyzer' ||
     typeof pkg.version !== 'string' ||
@@ -19,6 +18,9 @@ export function validateVersionMetadata(pkg, lock, manifest, options = {}) {
   ) {
     throw new Error('package.json must name mp3-frame-analyzer and use a stable X.Y.Z version');
   }
+}
+
+function validateVersionAgreement(pkg, lock, manifest) {
   if (
     lock.name !== pkg.name ||
     lock.version !== pkg.version ||
@@ -30,9 +32,9 @@ export function validateVersionMetadata(pkg, lock, manifest, options = {}) {
       'package.json, package-lock.json root, and release manifest versions must agree',
     );
   }
-  if (tag !== undefined && tag !== `v${pkg.version}`) {
-    throw new Error('RELEASE_TAG must be the exact stable vX.Y.Z tag matching package.json');
-  }
+}
+
+function validateSourceCommit(gitHead, sourceCommit, ci) {
   if (!isCommit(gitHead)) throw new Error('The checked-out Git HEAD must be a full commit SHA');
   if (sourceCommit !== undefined && !isCommit(sourceCommit)) {
     throw new Error('SOURCE_COMMIT must be a full 40-character hexadecimal commit SHA');
@@ -40,6 +42,16 @@ export function validateVersionMetadata(pkg, lock, manifest, options = {}) {
   if (ci && sourceCommit !== undefined && sourceCommit.toLowerCase() !== gitHead.toLowerCase()) {
     throw new Error('SOURCE_COMMIT does not match the checked-out Git HEAD');
   }
+}
+
+export function validateVersionMetadata(pkg, lock, manifest, options = {}) {
+  const { tag, sourceCommit, gitHead, ci = false } = options;
+  validatePackageIdentity(pkg);
+  validateVersionAgreement(pkg, lock, manifest);
+  if (tag !== undefined && tag !== `v${pkg.version}`) {
+    throw new Error('RELEASE_TAG must be the exact stable vX.Y.Z tag matching package.json');
+  }
+  validateSourceCommit(gitHead, sourceCommit, ci);
   return {
     name: pkg.name,
     version: pkg.version,

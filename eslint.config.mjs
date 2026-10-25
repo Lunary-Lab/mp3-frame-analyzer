@@ -21,13 +21,33 @@ export default tseslint.config(
   },
   eslint.configs.recommended,
   {
+    files: ['**/*.{ts,js,mjs,cjs}'],
+    rules: {
+      // Maintained runtime, build, release, mutation and fuzz tooling share this gate.
+      complexity: ['error', { max: 10 }],
+      'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
+      'max-lines-per-function': [
+        'error',
+        { max: 60, skipBlankLines: true, skipComments: true, IIFEs: true },
+      ],
+      'max-len': [
+        'error',
+        {
+          code: 120,
+          // Only standalone literals or URL-only comments, not surrounding code.
+          ignorePattern:
+            '^\\s*(?:(?:\'(?:[^\'\\\\]|\\\\.)*\'|"(?:[^"\\\\]|\\\\.)*"|`(?:[^`\\\\]|\\\\.)*`)[,;]?|//\\s*https?://\\S+)$',
+        },
+      ],
+    },
+  },
+  {
     files: ['**/*.ts'],
     extends: [...tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: { project: './tsconfig.lint.json', tsconfigRootDir: import.meta.dirname },
     },
     rules: {
-      complexity: ['warn', { max: 16 }],
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
@@ -42,7 +62,24 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.{js,mjs}'],
+    files: ['tests/**/*.ts', '**/*.test.{js,mjs,cjs}'],
+    rules: {
+      // Preserve the existing advisory test limit; review test policy separately.
+      // Declarative case tables should not be split merely to satisfy a metric.
+      complexity: ['warn', { max: 16 }],
+    },
+  },
+  {
+    files: ['**/*.test.{ts,js,mjs,cjs}'],
+    rules: {
+      // A test suite/case table is not one production responsibility. Keep every
+      // assertion together; helper modules retain the production size limits.
+      'max-lines': 'off',
+      'max-lines-per-function': 'off',
+    },
+  },
+  {
+    files: ['**/*.{js,mjs,cjs}'],
     languageOptions: { globals: globals.node },
   },
   {

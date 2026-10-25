@@ -73,6 +73,28 @@ export function parseChecksums(contents, expectedNames) {
   return entries;
 }
 
+function archiveMemberPath(entry, base, seen) {
+  if (!entry.startsWith(`${base}/`) || entry.includes('\\') || seen.has(entry)) {
+    throw new Error(`Unexpected archive member: ${entry}`);
+  }
+  seen.add(entry);
+  const path = entry.slice(base.length + 1);
+  if (path.split('/').some((part) => part === '..' || part === '.')) {
+    throw new Error(`Unexpected archive member: ${entry}`);
+  }
+  return path;
+}
+
+function validateRuntimePath(entry, path, rootFiles) {
+  if (entry.endsWith('/')) {
+    if (path !== '' && path !== 'dist/' && !/^dist\/(?:[\w-]+\/)+$/.test(path)) {
+      throw new Error(`Unexpected archive directory: ${entry}`);
+    }
+  } else if (!rootFiles.has(path) && !/^dist\/(?:[\w-]+\/)*[\w.-]+\.js$/.test(path)) {
+    throw new Error(`Unexpected runtime file: ${entry}`);
+  }
+}
+
 export function validateArchiveEntries(entries, base) {
   const required = new Set([
     'dist/server.js',
@@ -86,23 +108,8 @@ export function validateArchiveEntries(entries, base) {
   const rootFiles = new Set([...required].filter((path) => !path.startsWith('dist/')));
   const seen = new Set();
   for (const entry of entries) {
-    if (!entry.startsWith(`${base}/`) || entry.includes('\\') || seen.has(entry)) {
-      throw new Error(`Unexpected archive member: ${entry}`);
-    }
-    seen.add(entry);
-    const path = entry.slice(base.length + 1);
-    const parts = path.split('/');
-    if (parts.some((part) => part === '..' || part === '.')) {
-      throw new Error(`Unexpected archive member: ${entry}`);
-    }
-    const isDirectory = entry.endsWith('/');
-    if (isDirectory) {
-      if (path !== '' && path !== 'dist/' && !/^dist\/(?:[\w-]+\/)+$/.test(path)) {
-        throw new Error(`Unexpected archive directory: ${entry}`);
-      }
-    } else if (!rootFiles.has(path) && !/^dist\/(?:[\w-]+\/)*[\w.-]+\.js$/.test(path)) {
-      throw new Error(`Unexpected runtime file: ${entry}`);
-    }
+    const path = archiveMemberPath(entry, base, seen);
+    validateRuntimePath(entry, path, rootFiles);
     required.delete(path);
   }
   if (required.size > 0) throw new Error(`Runtime archive is missing: ${[...required].join(', ')}`);

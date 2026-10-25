@@ -129,7 +129,9 @@ try {
           maxMs: latencies[latencies.length - 1],
         },
         server,
-        note: 'Correct counts and successful completion are required. Timing is a small local sample, not a shared-CI latency SLA or a statistical capacity estimate.',
+        note:
+          'Correct counts and successful completion are required. ' +
+          'Timing is a small local sample, not a shared-CI latency SLA or a statistical capacity estimate.',
       },
       null,
       2,

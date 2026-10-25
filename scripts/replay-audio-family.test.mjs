@@ -27,7 +27,9 @@ test('audio-count replay retains its distinct failure family while counts change
     // counting succeeds and only the audio-count oracle fails.
     await writeFile(
       join(root, 'dist/mp3/count-frames.js'),
-      `import { countMp3Frames as actual } from ${JSON.stringify(new URL('../src/mp3/count-frames.ts', import.meta.url).href)};
+      `import { countMp3Frames as actual } from ${JSON.stringify(
+        new URL('../src/mp3/count-frames.ts', import.meta.url).href,
+      )};
 export async function countMp3Frames(input) { return actual(input); }`,
     );
     await writeFile(

@@ -14,21 +14,40 @@ async function checkCompiledFiles(directory) {
   }
 }
 
+function matchesApplicationIdentity(component, name, version) {
+  return (
+    component?.type === 'application' &&
+    component?.version === version &&
+    component?.['bom-ref'] === `${name}@${version}` &&
+    component?.purl === `pkg:npm/${name}@${version}`
+  );
+}
+
 export function normalizeApplicationSbom(sbom, { name, version }) {
   const component = sbom.metadata?.component;
   // npm uses the checkout directory for the root's display name, but derives
   // both identifiers from package.json. Verify those before canonicalizing it.
-  if (
-    sbom.bomFormat !== 'CycloneDX' ||
-    component?.type !== 'application' ||
-    component?.version !== version ||
-    component?.['bom-ref'] !== `${name}@${version}` ||
-    component?.purl !== `pkg:npm/${name}@${version}`
-  ) {
+  if (sbom.bomFormat !== 'CycloneDX' || !matchesApplicationIdentity(component, name, version)) {
     throw new Error('npm returned an SBOM for a different package or version');
   }
   component.name = name;
   return sbom;
+}
+
+async function stageRuntimeFiles(runtime, dist, serialized) {
+  await mkdir(runtime);
+  await cp(dist, join(runtime, 'dist'), { recursive: true });
+  for (const file of ['package.json', 'package-lock.json', 'README.md', '.npmrc']) {
+    if (!(await lstat(join(repositoryRoot, file))).isFile()) {
+      throw new Error(`Runtime package input must be a regular file: ${file}`);
+    }
+    await cp(join(repositoryRoot, file), join(runtime, file));
+  }
+  if (!(await lstat(join(repositoryRoot, 'docs/runtime.md'))).isFile()) {
+    throw new Error('Runtime instructions must be a regular file');
+  }
+  await cp(join(repositoryRoot, 'docs/runtime.md'), join(runtime, 'RUNTIME.md'));
+  await writeFile(join(runtime, 'release-metadata.json'), serialized);
 }
 
 export async function packageRelease() {
@@ -55,19 +74,7 @@ export async function packageRelease() {
   const stage = await mkdtemp(join(tmpdir(), 'mp3-release-stage-'));
   try {
     const runtime = join(stage, names.base);
-    await mkdir(runtime);
-    await cp(dist, join(runtime, 'dist'), { recursive: true });
-    for (const file of ['package.json', 'package-lock.json', 'README.md', '.npmrc']) {
-      if (!(await lstat(join(repositoryRoot, file))).isFile()) {
-        throw new Error(`Runtime package input must be a regular file: ${file}`);
-      }
-      await cp(join(repositoryRoot, file), join(runtime, file));
-    }
-    if (!(await lstat(join(repositoryRoot, 'docs/runtime.md'))).isFile()) {
-      throw new Error('Runtime instructions must be a regular file');
-    }
-    await cp(join(repositoryRoot, 'docs/runtime.md'), join(runtime, 'RUNTIME.md'));
-    await writeFile(join(runtime, 'release-metadata.json'), serialized);
+    await stageRuntimeFiles(runtime, dist, serialized);
 
     // Replace only generated release output. The source and build output stay intact.
     await rm(output, { recursive: true, force: true });

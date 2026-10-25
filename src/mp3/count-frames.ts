@@ -57,12 +57,7 @@ async function countFrames(
   for (;;) {
     const position = reader.offset;
     if (!(await reader.has(4))) {
-      if (frames === 0) {
-        throw new Mp3ParseError('invalid-mp3', position, 'No MPEG-1 Layer III frames found');
-      }
-      if (await reader.has(1)) {
-        throw new Mp3ParseError('truncated-mp3', position, 'Incomplete trailing frame header');
-      }
+      await validateFrameSequenceEnd(reader, frames, position);
       return frames - excludedEncoderFrame;
     }
     if (frames > 0 && startsTrailingMetadata(reader.peek(4))) {
@@ -76,5 +71,19 @@ async function countFrames(
     }
     await reader.skipExactly(length);
     frames++;
+  }
+}
+
+/** Validate EOF after a failed four-byte header lookahead. */
+async function validateFrameSequenceEnd(
+  reader: AsyncByteReader,
+  frames: number,
+  position: number,
+): Promise<void> {
+  if (frames === 0) {
+    throw new Mp3ParseError('invalid-mp3', position, 'No MPEG-1 Layer III frames found');
+  }
+  if (await reader.has(1)) {
+    throw new Mp3ParseError('truncated-mp3', position, 'Incomplete trailing frame header');
   }
 }

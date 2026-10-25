@@ -36,26 +36,13 @@ export async function inferFreeFormatBaseLength(
   const start = reader.offset;
   await reader.has(MAX_PROBE_BYTES);
   const window = reader.peek(Math.min(reader.bufferedLength, MAX_PROBE_BYTES));
-  const { sampleRateIndex } = first;
   let bestBase = 0;
   let bestMatches = 0;
   let tied = false;
   for (let second = MIN_FREE_FORMAT_FRAME_BYTES; second <= MAX_FREE_FORMAT_FRAME_BYTES; second++) {
-    if (paddingAt(window, second, sampleRateIndex) === undefined) continue;
-    const base = second - first.padding;
-    if (base < MIN_FREE_FORMAT_FRAME_BYTES || base > MAX_FREE_FORMAT_FRAME_BYTES - 1) continue;
-    let matches = 1;
-    let position = 0;
-    let padding = first.padding;
-    for (;;) {
-      const next = position + base + padding;
-      const nextPadding = paddingAt(window, next, sampleRateIndex);
-      if (nextPadding === undefined) break;
-      position = next;
-      padding = nextPadding;
-      matches++;
-    }
-    if (matches < 3) continue;
+    const candidate = measureCandidate(window, first, second);
+    if (candidate === undefined) continue;
+    const { base, matches } = candidate;
     if (matches > bestMatches) {
       bestBase = base;
       bestMatches = matches;
@@ -72,4 +59,30 @@ export async function inferFreeFormatBaseLength(
     );
   }
   return bestBase;
+}
+
+/** Validate one possible span and measure its complete chain within the bounded probe. */
+function measureCandidate(
+  window: Uint8Array,
+  first: FreeFormatFrameHeader,
+  second: number,
+): { base: number; matches: number } | undefined {
+  const { sampleRateIndex } = first;
+  if (paddingAt(window, second, sampleRateIndex) === undefined) return undefined;
+  const base = second - first.padding;
+  if (base < MIN_FREE_FORMAT_FRAME_BYTES || base > MAX_FREE_FORMAT_FRAME_BYTES - 1)
+    return undefined;
+  let matches = 1;
+  let position = 0;
+  let padding = first.padding;
+  for (;;) {
+    const next = position + base + padding;
+    const nextPadding = paddingAt(window, next, sampleRateIndex);
+    if (nextPadding === undefined) break;
+    position = next;
+    padding = nextPadding;
+    matches++;
+  }
+  if (matches < 3) return undefined;
+  return { base, matches };
 }

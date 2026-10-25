@@ -34,6 +34,70 @@ const harmlessBuiltins = new Set([
   'node:util',
 ]);
 
+function recordFilesystemAccess(result, declaration) {
+  result.reads = true;
+  const bindings =
+    declaration && ts.isImportDeclaration(declaration)
+      ? declaration.importClause?.namedBindings
+      : null;
+  if (
+    !bindings ||
+    !ts.isNamedImports(bindings) ||
+    bindings.elements.some((item) => !readOnlyFs.has((item.propertyName ?? item.name).text))
+  )
+    result.writes = true;
+}
+
+function resolveDependency(file, specifier, files, result) {
+  const path = posix.normalize(posix.join(posix.dirname(file), specifier));
+  if (path.startsWith('../') || path.startsWith('/')) {
+    result.uncertain = true;
+    return;
+  }
+  // The repository uses NodeNext .js specifiers for .ts implementations.
+  const candidates = [
+    path,
+    path.replace(/\.js$/, '.ts'),
+    path + '.ts',
+    path + '.js',
+    path + '/index.ts',
+    path + '/index.js',
+  ];
+  const matches = [...new Set(candidates)].filter((name) => files.has(name));
+  if (matches.length !== 1) result.uncertain = true;
+  else result.dependencies.add(matches[0]);
+}
+
+function isModuleCall(expression) {
+  const dynamicImport = expression.kind === ts.SyntaxKind.ImportKeyword;
+  const requireCall = ts.isIdentifier(expression) && expression.text === 'require';
+  const viImport =
+    ts.isPropertyAccessExpression(expression) &&
+    ts.isIdentifier(expression.expression) &&
+    expression.expression.text === 'vi' &&
+    ['mock', 'doMock', 'importActual', 'importMock'].includes(expression.name.text);
+  return dynamicImport || requireCall || viImport;
+}
+
+function inspectCall(node, ast, result, add) {
+  const expression = node.expression;
+  if (isModuleCall(expression)) {
+    if (node.arguments.length && ts.isStringLiteral(node.arguments[0])) add(node.arguments[0].text);
+    else result.uncertain = true;
+  }
+  if (
+    ts.isIdentifier(expression) &&
+    ['eval', 'Function', 'fetch', 'WebSocket'].includes(expression.text)
+  )
+    result.uncertain = true;
+  if (
+    ts.isPropertyAccessExpression(expression) &&
+    expression.expression.getText(ast) === 'process' &&
+    ['getBuiltinModule', 'binding', '_linkedBinding'].includes(expression.name.text)
+  )
+    result.uncertain = true;
+}
+
 function imports(file, source, files) {
   const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   const result = {
@@ -44,17 +108,7 @@ function imports(file, source, files) {
   };
   function add(specifier, declaration) {
     if (specifier === 'node:fs' || specifier === 'node:fs/promises') {
-      result.reads = true;
-      const bindings =
-        declaration && ts.isImportDeclaration(declaration)
-          ? declaration.importClause?.namedBindings
-          : null;
-      if (
-        !bindings ||
-        !ts.isNamedImports(bindings) ||
-        bindings.elements.some((item) => !readOnlyFs.has((item.propertyName ?? item.name).text))
-      )
-        result.writes = true;
+      recordFilesystemAccess(result, declaration);
       return;
     }
     if (packages.has(specifier) || harmlessBuiltins.has(specifier)) return;
@@ -62,23 +116,7 @@ function imports(file, source, files) {
       result.uncertain = true;
       return;
     }
-    const path = posix.normalize(posix.join(posix.dirname(file), specifier));
-    if (path.startsWith('../') || path.startsWith('/')) {
-      result.uncertain = true;
-      return;
-    }
-    // The repository uses NodeNext .js specifiers for .ts implementations.
-    const candidates = [
-      path,
-      path.replace(/\.js$/, '.ts'),
-      path + '.ts',
-      path + '.js',
-      path + '/index.ts',
-      path + '/index.js',
-    ];
-    const matches = [...new Set(candidates)].filter((name) => files.has(name));
-    if (matches.length !== 1) result.uncertain = true;
-    else result.dependencies.add(matches[0]);
+    resolveDependency(file, specifier, files, result);
   }
   function visit(node) {
     if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier) {
@@ -86,32 +124,7 @@ function imports(file, source, files) {
       else result.uncertain = true;
     }
     if (ts.isImportEqualsDeclaration(node)) result.uncertain = true;
-    if (ts.isCallExpression(node)) {
-      const expression = node.expression;
-      const dynamicImport = expression.kind === ts.SyntaxKind.ImportKeyword;
-      const requireCall = ts.isIdentifier(expression) && expression.text === 'require';
-      const viImport =
-        ts.isPropertyAccessExpression(expression) &&
-        ts.isIdentifier(expression.expression) &&
-        expression.expression.text === 'vi' &&
-        ['mock', 'doMock', 'importActual', 'importMock'].includes(expression.name.text);
-      if (dynamicImport || requireCall || viImport) {
-        if (node.arguments.length && ts.isStringLiteral(node.arguments[0]))
-          add(node.arguments[0].text);
-        else result.uncertain = true;
-      }
-      if (
-        ts.isIdentifier(expression) &&
-        ['eval', 'Function', 'fetch', 'WebSocket'].includes(expression.text)
-      )
-        result.uncertain = true;
-      if (
-        ts.isPropertyAccessExpression(expression) &&
-        expression.expression.getText(ast) === 'process' &&
-        ['getBuiltinModule', 'binding', '_linkedBinding'].includes(expression.name.text)
-      )
-        result.uncertain = true;
-    }
+    if (ts.isCallExpression(node)) inspectCall(node, ast, result, add);
     if (
       ts.isNewExpression(node) &&
       ts.isIdentifier(node.expression) &&
@@ -163,6 +176,20 @@ export function testWitnesses(report) {
   );
 }
 
+function unsupportedImpact(tests, before, after, changed) {
+  for (const test of tests) {
+    const old = before.get(test);
+    const current = after.get(test);
+    if (old.uncertain || current.uncertain) return `Unresolved import impact: ${test}`;
+    // Fork isolation does not isolate shared files, subprocesses or services.
+    // Opaque/state-writing graphs are outside this incremental contract.
+    if (old.writes || current.writes) return `Shared external-state capability: ${test}`;
+    if (changed.has(test) && (old.reads || current.reads))
+      return `Changed external-input test: ${test}`;
+  }
+  return null;
+}
+
 /** Keep only an unchanged killed mutant with an unaffected source-backed killer. */
 export function planReuse(report, currentFiles) {
   const oldFiles = new Map(currentFiles);
@@ -176,18 +203,8 @@ export function planReuse(report, currentFiles) {
   const tests = Object.keys(report.testFiles);
   const before = testClosures(oldFiles, tests);
   const after = testClosures(currentFiles, tests);
-  for (const test of tests) {
-    const old = before.get(test);
-    const current = after.get(test);
-    if (old.uncertain || current.uncertain)
-      return { report: null, reason: `Unresolved import impact: ${test}` };
-    // Fork isolation does not isolate shared files, subprocesses or services.
-    // Opaque/state-writing graphs are outside this incremental contract.
-    if (old.writes || current.writes)
-      return { report: null, reason: `Shared external-state capability: ${test}` };
-    if (changed.has(test) && (old.reads || current.reads))
-      return { report: null, reason: `Changed external-input test: ${test}` };
-  }
+  const reason = unsupportedImpact(tests, before, after, changed);
+  if (reason) return { report: null, reason };
   const affected = new Set(
     tests.filter(
       (test) =>

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "strykerVersion": "10.1.1",
   "target": 100,
-  "contextSha256": "4a5ff9e0ae97b8f5da6716029a5517ef063a85b9307411dbc93c6a2680cd42cf",
+  "contextSha256": "dfd4a0dcf507800a9994986cbd0cb228c3cf5d3a8e4a963fe5d469e72ce81cdb",
   "equivalents": [
     {
       "id": "EQ-COPY-OR",
@@ -107,7 +107,7 @@
     {
       "id": "EQ-CLEANUP-INITIAL-FLAG",
       "file": "src/mp3/count-frames.ts",
-      "sourceSha256": "de16916666297f9664c514850d146b3e73afe65c032c0519deabdfe2fdec1fe9",
+      "sourceSha256": "d3e361d30e0c1836ee31dfcd94d21ae64e01597820321c3bfa227088b95560c0",
       "mutatorName": "BooleanLiteral",
       "original": "false",
       "replacement": "true",
@@ -127,7 +127,7 @@
     {
       "id": "EQ-CLEANUP-CONDITION",
       "file": "src/mp3/count-frames.ts",
-      "sourceSha256": "de16916666297f9664c514850d146b3e73afe65c032c0519deabdfe2fdec1fe9",
+      "sourceSha256": "d3e361d30e0c1836ee31dfcd94d21ae64e01597820321c3bfa227088b95560c0",
       "mutatorName": "ConditionalExpression",
       "original": "failed",
       "replacement": "true",
@@ -147,7 +147,7 @@
     {
       "id": "EQ-CLEANUP-SUCCESS",
       "file": "src/mp3/count-frames.ts",
-      "sourceSha256": "de16916666297f9664c514850d146b3e73afe65c032c0519deabdfe2fdec1fe9",
+      "sourceSha256": "d3e361d30e0c1836ee31dfcd94d21ae64e01597820321c3bfa227088b95560c0",
       "mutatorName": "BlockStatement",
       "original": "{\n      await reader.close();\n    }",
       "replacement": "{}",
@@ -167,18 +167,18 @@
     {
       "id": "EQ-FREE-TIED-INITIAL",
       "file": "src/mp3/free-format.ts",
-      "sourceSha256": "5a023a02da6c20251dfcb9b8ece447913fde363e367c42c820a62f87320e3dc0",
+      "sourceSha256": "0b90c38b871bf296b5996e3dd474c778bda1a68815b52925214cd6adf0082fc8",
       "mutatorName": "BooleanLiteral",
       "original": "false",
       "replacement": "true",
       "location": {
         "end": {
           "column": 19,
-          "line": 42
+          "line": 41
         },
         "start": {
           "column": 14,
-          "line": 42
+          "line": 41
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and messages, iterator lifecycle and bounded resource ownership.",
@@ -187,18 +187,18 @@
     {
       "id": "EQ-FREE-PRECHECK",
       "file": "src/mp3/free-format.ts",
-      "sourceSha256": "5a023a02da6c20251dfcb9b8ece447913fde363e367c42c820a62f87320e3dc0",
+      "sourceSha256": "0b90c38b871bf296b5996e3dd474c778bda1a68815b52925214cd6adf0082fc8",
       "mutatorName": "ConditionalExpression",
       "original": "paddingAt(window, second, sampleRateIndex) === undefined",
       "replacement": "false",
       "location": {
         "end": {
-          "column": 65,
-          "line": 44
+          "column": 63,
+          "line": 71
         },
         "start": {
-          "column": 9,
-          "line": 44
+          "column": 7,
+          "line": 71
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and messages, iterator lifecycle and bounded resource ownership.",
@@ -207,18 +207,18 @@
     {
       "id": "EQ-FREE-MIN-MATCH-FILTER",
       "file": "src/mp3/free-format.ts",
-      "sourceSha256": "5a023a02da6c20251dfcb9b8ece447913fde363e367c42c820a62f87320e3dc0",
+      "sourceSha256": "0b90c38b871bf296b5996e3dd474c778bda1a68815b52925214cd6adf0082fc8",
       "mutatorName": "ConditionalExpression",
       "original": "matches < 3",
       "replacement": "false",
       "location": {
         "end": {
-          "column": 20,
-          "line": 58
+          "column": 18,
+          "line": 86
         },
         "start": {
-          "column": 9,
-          "line": 58
+          "column": 7,
+          "line": 86
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and messages, iterator lifecycle and bounded resource ownership.",
@@ -227,18 +227,18 @@
     {
       "id": "EQ-FREE-DISTINCT-BASE",
       "file": "src/mp3/free-format.ts",
-      "sourceSha256": "5a023a02da6c20251dfcb9b8ece447913fde363e367c42c820a62f87320e3dc0",
+      "sourceSha256": "0b90c38b871bf296b5996e3dd474c778bda1a68815b52925214cd6adf0082fc8",
       "mutatorName": "ConditionalExpression",
       "original": "base !== bestBase",
       "replacement": "true",
       "location": {
         "end": {
           "column": 60,
-          "line": 63
+          "line": 50
         },
         "start": {
           "column": 43,
-          "line": 63
+          "line": 50
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and messages, iterator lifecycle and bounded resource ownership.",

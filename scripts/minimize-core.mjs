@@ -8,32 +8,35 @@ export async function minimizeBytes(
   { maxProbes = 200, budgetMs = 20_000 } = {},
 ) {
   let candidate = Buffer.from(input);
-  let probes = 0;
-  const deadline = Date.now() + budgetMs;
+  const budget = { probes: 0, maxProbes, deadline: Date.now() + budgetMs };
   if (!(await reproduces(candidate)))
     throw new Error('Original input does not reproduce the failure');
   let parts = 2;
-  while (candidate.length > 0 && probes < maxProbes && Date.now() < deadline) {
-    const sliceSize = Math.ceil(candidate.length / parts);
-    let shrunk = false;
-    for (
-      let begin = 0;
-      begin < candidate.length && probes < maxProbes && Date.now() < deadline;
-      begin += sliceSize
-    ) {
-      const end = Math.min(candidate.length, begin + sliceSize);
-      const reduced = Buffer.concat([candidate.subarray(0, begin), candidate.subarray(end)]);
-      probes++;
-      if (await reproduces(reduced)) {
-        candidate = reduced;
-        parts = Math.max(2, parts - 1);
-        shrunk = true;
-        break;
-      }
+  while (candidate.length > 0 && budget.probes < maxProbes && Date.now() < budget.deadline) {
+    const reduced = await tryRemovingPart(candidate, parts, reproduces, budget);
+    if (reduced !== undefined) {
+      candidate = reduced;
+      parts = Math.max(2, parts - 1);
+      continue;
     }
-    if (shrunk) continue;
     if (parts >= candidate.length) break;
     parts = Math.min(candidate.length, parts * 2);
   }
-  return { bytes: candidate, probes, timedOut: Date.now() >= deadline };
+  return { bytes: candidate, probes: budget.probes, timedOut: Date.now() >= budget.deadline };
+}
+
+/** Try each partition in order, charging the shared budget only for actual probes. */
+async function tryRemovingPart(candidate, parts, reproduces, budget) {
+  const sliceSize = Math.ceil(candidate.length / parts);
+  for (
+    let begin = 0;
+    begin < candidate.length && budget.probes < budget.maxProbes && Date.now() < budget.deadline;
+    begin += sliceSize
+  ) {
+    const end = Math.min(candidate.length, begin + sliceSize);
+    const reduced = Buffer.concat([candidate.subarray(0, begin), candidate.subarray(end)]);
+    budget.probes++;
+    if (await reproduces(reduced)) return reduced;
+  }
+  return undefined;
 }

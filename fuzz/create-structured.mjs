@@ -45,15 +45,7 @@ function writeEncoderMetadata(frame, { channelMode, hasCrc, kind, count, shifted
     if (offset < frame.length) frame.fill(0, offset, Math.min(offset + 4, frame.length));
   }
   if (kind === undefined) return false;
-  if (kind < 2) {
-    const offset = (channelMode === 3 ? 21 : 36) + (shifted ? 2 : 0);
-    if (offset + 12 > frame.length) return false;
-    frame.write(kind === 0 ? 'Xing' : 'Info', offset, 'ascii');
-    frame.writeUInt32BE(1, offset + 4);
-    // Deliberately disagree with the real count: metadata is never the oracle.
-    frame.writeUInt32BE(count + 123, offset + 8);
-    return !shifted || hasCrc;
-  }
+  if (kind < 2) return writeXingMetadata(frame, { channelMode, hasCrc, kind, count, shifted });
   if (frame.length < 64) return false;
   frame.write('VBRI', 36, 'ascii');
   frame.fill(0, 40, 64);
@@ -66,11 +58,17 @@ function writeEncoderMetadata(frame, { channelMode, hasCrc, kind, count, shifted
   return true;
 }
 
-export function createStructuredMp3(input) {
-  const data = Buffer.from(input);
-  const at = (index) => (data.length ? data[index % data.length] : 0);
-  const frames = [];
-  const flags = at(1);
+function writeXingMetadata(frame, { channelMode, hasCrc, kind, count, shifted }) {
+  const offset = (channelMode === 3 ? 21 : 36) + (shifted ? 2 : 0);
+  if (offset + 12 > frame.length) return false;
+  frame.write(kind === 0 ? 'Xing' : 'Info', offset, 'ascii');
+  frame.writeUInt32BE(1, offset + 4);
+  // Deliberately disagree with the real count: metadata is never the oracle.
+  frame.writeUInt32BE(count + 123, offset + 8);
+  return !shifted || hasCrc;
+}
+
+function constructionParameters(at, flags) {
   const freeFormat = Boolean(flags & 8);
   // Free-format acquisition requires at least three headers under this
   // parser's documented contract. Short ambiguous inputs belong to raw fuzzing.
@@ -84,6 +82,18 @@ export function createStructuredMp3(input) {
   const metadataShifted = Boolean(at(6) & 4);
   // A valid signature in a later frame is ordinary payload and stays counted.
   const decoyFrame = flags & 32 && frameCount > 1 ? 1 + (at(7) % (frameCount - 1)) : undefined;
+  return {
+    freeFormat,
+    frameCount,
+    freeSampleRateIndex,
+    freeBaseLength,
+    metadataKind,
+    metadataShifted,
+    decoyFrame,
+  };
+}
+
+function leadingTags(at, flags) {
   const intro = [];
   if ((flags & 1) !== 0) {
     const numberOfTags = 1 + (at(2) % 3);
@@ -95,41 +105,67 @@ export function createStructuredMp3(input) {
       intro.push(id3(body, version, Boolean(flags & 2)));
     }
   }
+  return intro;
+}
+
+function createFrame(at, i, { freeFormat, freeSampleRateIndex, freeBaseLength }) {
+  const bits = at(9 + 5 * i);
+  const bitrateIndex = freeFormat ? 0 : 1 + (bits % 14);
+  const sampleRateIndex = freeFormat ? freeSampleRateIndex : at(10 + 5 * i) % 3;
+  const padding = at(11 + 5 * i) & 1;
+  const hasCrc = Boolean(at(12 + 5 * i) & 1);
+  const bitrate = BITRATE_KBPS[bitrateIndex];
+  const sampleRate = SAMPLE_RATE_HZ[sampleRateIndex];
+  const length =
+    (freeFormat ? freeBaseLength : Math.floor((144000 * bitrate) / sampleRate)) + padding;
+  const block = Buffer.alloc(length);
+  // The smallest free-format spans have room for mono side information only.
+  const channelMode = length < 38 ? 3 : at(14 + 5 * i) % 4;
+  const emphasis = [0, 1, 3][at(13 + 5 * i) % 3];
+  const header =
+    ((0x7ff << 21) |
+      (3 << 19) |
+      (1 << 17) |
+      ((hasCrc ? 0 : 1) << 16) |
+      (bitrateIndex << 12) |
+      (sampleRateIndex << 10) |
+      (padding << 9) |
+      (channelMode << 6) |
+      emphasis) >>>
+    0;
+  for (let j = 0; j < length; j++) {
+    // Keep free-format geometry unambiguous. Competing sync patterns belong
+    // in a separate raw/ambiguity corpus, not this known-valid count oracle.
+    block[j] = at(i * 7 + j + 16) & (freeFormat ? 0x7f : 0xff);
+  }
+  block.writeUInt32BE(header, 0);
+  return { block, channelMode, hasCrc };
+}
+
+function trailingTags(flags) {
+  const tail = [];
+  if ((flags & 4) !== 0) {
+    const id3v1 = Buffer.alloc(128, 0);
+    id3v1.write('TAG', 0, 'ascii');
+    tail.push(id3v1);
+  }
+  return tail;
+}
+
+export function createStructuredMp3(input) {
+  const data = Buffer.from(input);
+  const at = (index) => (data.length ? data[index % data.length] : 0);
+  const frames = [];
+  const flags = at(1);
+  const parameters = constructionParameters(at, flags);
+  const { frameCount, metadataKind, metadataShifted, decoyFrame } = parameters;
+  const intro = leadingTags(at, flags);
   const frameOffsets = [];
   const frameLengths = [];
   let offset = intro.reduce((total, tag) => total + tag.length, 0);
   let metadataFrameCount = 0;
   for (let i = 0; i < frameCount; i++) {
-    const bits = at(9 + 5 * i);
-    const bitrateIndex = freeFormat ? 0 : 1 + (bits % 14);
-    const sampleRateIndex = freeFormat ? freeSampleRateIndex : at(10 + 5 * i) % 3;
-    const padding = at(11 + 5 * i) & 1;
-    const hasCrc = Boolean(at(12 + 5 * i) & 1);
-    const bitrate = BITRATE_KBPS[bitrateIndex];
-    const sampleRate = SAMPLE_RATE_HZ[sampleRateIndex];
-    const length =
-      (freeFormat ? freeBaseLength : Math.floor((144000 * bitrate) / sampleRate)) + padding;
-    const block = Buffer.alloc(length);
-    // The smallest free-format spans have room for mono side information only.
-    const channelMode = length < 38 ? 3 : at(14 + 5 * i) % 4;
-    const emphasis = [0, 1, 3][at(13 + 5 * i) % 3];
-    const header =
-      ((0x7ff << 21) |
-        (3 << 19) |
-        (1 << 17) |
-        ((hasCrc ? 0 : 1) << 16) |
-        (bitrateIndex << 12) |
-        (sampleRateIndex << 10) |
-        (padding << 9) |
-        (channelMode << 6) |
-        emphasis) >>>
-      0;
-    for (let j = 0; j < length; j++) {
-      // Keep free-format geometry unambiguous. Competing sync patterns belong
-      // in a separate raw/ambiguity corpus, not this known-valid count oracle.
-      block[j] = at(i * 7 + j + 16) & (freeFormat ? 0x7f : 0xff);
-    }
-    block.writeUInt32BE(header, 0);
+    const { block, channelMode, hasCrc } = createFrame(at, i, parameters);
     if (i === 0) {
       const metadata = { channelMode, hasCrc, kind: metadataKind, shifted: metadataShifted };
       if (writeEncoderMetadata(block, { ...metadata, count: frameCount })) metadataFrameCount = 1;
@@ -138,17 +174,11 @@ export function createStructuredMp3(input) {
     }
     frames.push(block);
     frameOffsets.push(offset);
-    frameLengths.push(length);
-    offset += length;
-  }
-  const tail = [];
-  if ((flags & 4) !== 0) {
-    const id3v1 = Buffer.alloc(128, 0);
-    id3v1.write('TAG', 0, 'ascii');
-    tail.push(id3v1);
+    frameLengths.push(block.length);
+    offset += block.length;
   }
   return {
-    bytes: Buffer.concat([...intro, ...frames, ...tail]),
+    bytes: Buffer.concat([...intro, ...frames, ...trailingTags(flags)]),
     expectedCount: frameCount,
     expectedAudioFrameCount: frameCount - metadataFrameCount,
     metadataFrameCount,

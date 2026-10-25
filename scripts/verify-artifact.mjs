@@ -41,6 +41,20 @@ function deadline(promise, milliseconds, message) {
   ]).finally(() => clearTimeout(timer));
 }
 
+async function verifyUploadResponse(baseUrl) {
+  const fixture = await readFile(join(repositoryRoot, 'tests/fixtures/cbr.mp3'));
+  const form = new FormData();
+  form.append('file', new Blob([fixture], { type: 'audio/mpeg' }), 'release-smoke.mp3');
+  const response = await fetch(`${baseUrl}/file-upload`, {
+    method: 'POST',
+    body: form,
+    signal: AbortSignal.timeout(10_000),
+  });
+  assert.equal(response.status, 200, `Packaged upload returned HTTP ${response.status}`);
+  assert.match(response.headers.get('content-type') ?? '', /^application\/json(?:;|$)/);
+  assert.deepEqual(await response.json(), { frameCount: 32 });
+}
+
 async function smokeRuntime(runtime) {
   const port = await availablePort();
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -83,17 +97,7 @@ async function smokeRuntime(runtime) {
         await delay(50);
       }
     }
-    const fixture = await readFile(join(repositoryRoot, 'tests/fixtures/cbr.mp3'));
-    const form = new FormData();
-    form.append('file', new Blob([fixture], { type: 'audio/mpeg' }), 'release-smoke.mp3');
-    const response = await fetch(`${baseUrl}/file-upload`, {
-      method: 'POST',
-      body: form,
-      signal: AbortSignal.timeout(10_000),
-    });
-    assert.equal(response.status, 200, `Packaged upload returned HTTP ${response.status}`);
-    assert.match(response.headers.get('content-type') ?? '', /^application\/json(?:;|$)/);
-    assert.deepEqual(await response.json(), { frameCount: 32 });
+    await verifyUploadResponse(baseUrl);
     assert.equal(exited, false, 'Packaged server exited before shutdown');
     assert.equal(child.kill('SIGTERM'), true, 'Could not send SIGTERM to packaged server');
     const shutdown = await deadline(
@@ -111,10 +115,7 @@ async function smokeRuntime(runtime) {
   }
 }
 
-export async function verifyArtifact() {
-  const expected = await loadVersionMetadata();
-  const names = releaseNames(expected.version);
-  const output = join(repositoryRoot, 'release');
+async function verifyReleaseMetadata(output, names, expected) {
   const files = [names.archive, names.sbom, names.manifest];
   const checksums = parseChecksums(await readFile(join(output, 'SHA256SUMS'), 'utf8'), files);
   for (const name of files) {
@@ -128,6 +129,14 @@ export async function verifyArtifact() {
   for (const key of ['name', 'version', 'tag', 'sourceCommit']) {
     assert.equal(metadata[key], expected[key], `Release manifest ${key} mismatch`);
   }
+  return metadata;
+}
+
+export async function verifyArtifact() {
+  const expected = await loadVersionMetadata();
+  const names = releaseNames(expected.version);
+  const output = join(repositoryRoot, 'release');
+  const metadata = await verifyReleaseMetadata(output, names, expected);
   const archive = join(output, names.archive);
   const listing = await runFile('tar', ['-tzf', archive]);
   validateArchiveEntries(listing.stdout.trimEnd().split('\n'), names.base);

@@ -16,6 +16,7 @@ export default defineConfig({
       'tests/fuzz-regressions.test.ts',
       'tests/id3.test.ts',
       'tests/parser-boundaries.test.ts',
+      'tests/runtime-characterization.test.ts',
       'tests/encoder-frame.test.ts',
     ],
     isolate: true,

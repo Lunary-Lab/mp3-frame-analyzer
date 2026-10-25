@@ -11,13 +11,18 @@ import { CACHE_DIRECTORY } from './mutation-cache.mjs';
 const NAME = 'validated-mutation-baseline';
 const limit = 32 * 1024 * 1024;
 const positiveId = (value) => Number.isSafeInteger(value) && value > 0;
-export function trustedRun(run, repository, commit) {
+function trustedRepository(run, repository) {
   return (
-    positiveId(run.id) &&
     positiveId(run.repository?.id) &&
     run.head_repository?.id === run.repository.id &&
     run.repository?.full_name === repository &&
-    run.head_repository?.full_name === repository &&
+    run.head_repository?.full_name === repository
+  );
+}
+export function trustedRun(run, repository, commit) {
+  return (
+    positiveId(run.id) &&
+    trustedRepository(run, repository) &&
     run.head_sha === commit &&
     run.head_branch === 'main' &&
     run.event === 'push' &&
@@ -26,7 +31,7 @@ export function trustedRun(run, repository, commit) {
     run.path === '.github/workflows/ci.yml'
   );
 }
-export function trustedArtifact(artifact, run) {
+function trustedArtifactMetadata(artifact) {
   return (
     positiveId(artifact.id) &&
     artifact.name === NAME &&
@@ -34,13 +39,20 @@ export function trustedArtifact(artifact, run) {
     Number.isSafeInteger(artifact.size_in_bytes) &&
     artifact.size_in_bytes > 0 &&
     artifact.size_in_bytes <= limit &&
-    /^sha256:[a-f0-9]{64}$/.test(artifact.digest ?? '') &&
+    /^sha256:[a-f0-9]{64}$/.test(artifact.digest ?? '')
+  );
+}
+function artifactMatchesRun(artifact, run) {
+  return (
     artifact.workflow_run?.id === run.id &&
     artifact.workflow_run.head_sha === run.head_sha &&
     artifact.workflow_run.head_branch === 'main' &&
     artifact.workflow_run.repository_id === run.repository.id &&
     artifact.workflow_run.head_repository_id === run.repository.id
   );
+}
+export function trustedArtifact(artifact, run) {
+  return trustedArtifactMetadata(artifact) && artifactMatchesRun(artifact, run);
 }
 export function verifyArchive(bytes, artifact) {
   if (bytes.length > limit || `sha256:${sha256(bytes)}` !== artifact.digest)
@@ -58,6 +70,27 @@ function gh(path, binary = false) {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
+async function findTrustedArtifact(repository, commit, api) {
+  if (
+    !/^[\w.-]+\/[\w.-]+$/.test(repository ?? '') ||
+    !/^[a-f0-9]{40}$/.test(commit ?? '') ||
+    /^0+$/.test(commit)
+  )
+    throw new Error('No exact baseline commit');
+  const runs = JSON.parse(
+    await api(
+      `repos/${repository}/actions/workflows/ci.yml/runs?head_sha=${commit}&event=push&status=success&per_page=100`,
+    ),
+  ).workflow_runs;
+  const run = runs.find((item) => trustedRun(item, repository, commit));
+  if (!run) throw new Error('No successful exact-base main CI run');
+  const artifacts = JSON.parse(
+    await api(`repos/${repository}/actions/runs/${run.id}/artifacts?per_page=100`),
+  ).artifacts;
+  const matches = artifacts.filter((item) => trustedArtifact(item, run));
+  if (matches.length !== 1) throw new Error('No unique trusted baseline artifact');
+  return { run, artifact: matches[0] };
+}
 export async function restoreBaseline(root, repository, commit, api = gh) {
   const cache = join(root, CACHE_DIRECTORY);
   const provenancePath = join(root, '.cache/mutation/provenance.json');
@@ -66,25 +99,7 @@ export async function restoreBaseline(root, repository, commit, api = gh) {
   await rm(provenancePath, { force: true });
   let temporary;
   try {
-    if (
-      !/^[\w.-]+\/[\w.-]+$/.test(repository ?? '') ||
-      !/^[a-f0-9]{40}$/.test(commit ?? '') ||
-      /^0+$/.test(commit)
-    )
-      throw new Error('No exact baseline commit');
-    const runs = JSON.parse(
-      await api(
-        `repos/${repository}/actions/workflows/ci.yml/runs?head_sha=${commit}&event=push&status=success&per_page=100`,
-      ),
-    ).workflow_runs;
-    const run = runs.find((item) => trustedRun(item, repository, commit));
-    if (!run) throw new Error('No successful exact-base main CI run');
-    const artifacts = JSON.parse(
-      await api(`repos/${repository}/actions/runs/${run.id}/artifacts?per_page=100`),
-    ).artifacts;
-    const matches = artifacts.filter((item) => trustedArtifact(item, run));
-    if (matches.length !== 1) throw new Error('No unique trusted baseline artifact');
-    const artifact = matches[0];
+    const { run, artifact } = await findTrustedArtifact(repository, commit, api);
     const bytes = await api(`repos/${repository}/actions/artifacts/${artifact.id}/zip`, true);
     verifyArchive(bytes, artifact);
     temporary = await mkdtemp(join(tmpdir(), 'mutation-artifact-'));

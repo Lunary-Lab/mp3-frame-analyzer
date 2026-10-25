@@ -88,6 +88,7 @@ test('all project inputs including Markdown invalidate; only generated outputs a
     assert.equal(isMutationInput(path), false, path);
 });
 
+// eslint-disable-next-line max-len -- Preserve the complete descriptive test name on Prettier's test-call line.
 test('actual file changes, additions, removal, Markdown, modes and dependency edits change the fingerprint', async () => {
   const root = await mkdtemp(join(tmpdir(), 'mutation-inputs-'));
   try {

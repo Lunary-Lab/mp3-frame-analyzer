@@ -14,12 +14,17 @@ export function classifyReplayProcess(proc) {
   const match = proc.stderr?.match(/^FUZZ_FAILURE (\{[^\n]+\})$/m);
   if (!match) {
     throw new Error(
-      `Fuzz replay exited without a recognized failure marker: exit=${String(proc.status)}, signal=${String(proc.signal)}`,
+      `Fuzz replay exited without a recognized failure marker: exit=${String(proc.status)}, ` +
+        `signal=${String(proc.signal)}`,
     );
   }
+  return parseFailureMarker(match[1]);
+}
+
+function parseFailureMarker(marker) {
   let parsed;
   try {
-    parsed = JSON.parse(match[1]);
+    parsed = JSON.parse(marker);
   } catch (error) {
     throw new Error('Fuzz replay produced an invalid failure marker', {
       cause: error,
