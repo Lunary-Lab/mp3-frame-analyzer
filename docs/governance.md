@@ -140,7 +140,7 @@ The snapshot records only names for secrets and variables. Endpoints that are un
 
 ### Recovery
 
-- **State lost or corrupted:** delete it and run `init`, `plan` and `apply` again. The import blocks re-adopt every resource. The plan shows 7 imports and the two provider-local updates.
+- **State lost or corrupted:** preserve any recoverable state backup before rebuilding it with `init`, `plan` and a reviewed `apply`. With the current `enable_rulesets = false` configuration, `imports.tf` re-adopts the seven existing resources; the plan shows 7 imports and the two provider-local updates. If rulesets have since been enabled, add imports for their existing GitHub IDs as well before applying: the seven committed import blocks do not cover rulesets, and an unreviewed recovery plan could otherwise create duplicates.
   - Applying rewrites an empty homepage from `null` to `""`.
   - Where exact parity matters, restore it with `jq -n '{homepage: null}' | gh api -X PATCH repos/Lunary-Lab/mp3-frame-analyzer --input -`.
 - **A setting changed by mistake in the UI:** `plan` shows the difference, and `apply` restores the reviewed value.
@@ -148,7 +148,9 @@ The snapshot records only names for secrets and variables. Endpoints that are un
 
 ### Stop managing the repository
 
-In a pull request, replace each resource block with a `removed` block that keeps the real object, then `apply`. Terraform forgets the resources and leaves GitHub untouched:
+In one reviewed pull request, replace each managed resource block with a `removed` block that keeps the real object. Remove its matching block from `governance/imports.tf` and update or remove every remaining reference to it, including disabled ruleset resources and test overrides. A retained import targeting a removed resource makes `plan` fail with "Configuration for import target does not exist" even though `validate` passes.
+
+Review the resulting plan before applying: it must only forget the intended state entries, with no remote creates, changes or destroys. For example:
 
 ```hcl
 removed {
@@ -160,7 +162,9 @@ removed {
 }
 ```
 
-Write one block for each address in `terraform -chdir=governance state list`, including any enabled rulesets. Equivalently, run `terraform -chdir=governance state rm $(terraform -chdir=governance state list)` and then delete `governance/` in a pull request. Never run `terraform destroy`, and never delete a resource block without a `removed` block.
+Cover every managed address reported by `terraform -chdir=governance state list`, including any enabled rulesets. The example above is only one resource, not a complete handoff configuration.
+
+The alternative `terraform state rm` procedure also requires removing the corresponding resource and import configuration in a reviewed change. Pause Terraform runs during that handoff: running the old configuration after forgetting state can re-import resources or plan to recreate them. Do not run a blanket state-removal command before preparing the matching configuration change. Never run `terraform destroy`, and never simply delete a resource block while it is still managed in state.
 
 **Turning the rulesets off again** is different: set `enable_rulesets = false` and apply. That deletes the two rulesets on GitHub and nothing else.
 
