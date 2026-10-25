@@ -215,3 +215,95 @@ describe('free-format MPEG-1 Layer III', () => {
     await expect(count(bytes)).rejects.toMatchObject({ kind: 'unsupported-format' });
   });
 });
+
+// RFC 5219 section 3: MPEG-1 Layer III has a 4-byte header, optional 2-byte
+// CRC, and 17 mono / 32 nonmono side-information bytes in this same frame.
+// These short fixtures check only that mandatory prefix's available space;
+// they do not assert valid compressed audio or CRC contents.
+function prefixFrame(length: number, channelMode: number, crc = false, padding = 0): Uint8Array {
+  const bytes = new Uint8Array(length);
+  bytes.set([0xff, crc ? 0xfa : 0xfb, 0x04 | (padding << 1), channelMode << 6]);
+  return bytes;
+}
+
+async function countPrefixFrames(
+  blocks: readonly Uint8Array[],
+  chunkSize: number,
+): Promise<number> {
+  const bytes = Buffer.concat(blocks);
+  async function* input() {
+    for (let position = 0; position < bytes.length; position += chunkSize) {
+      yield bytes.subarray(position, position + chunkSize);
+    }
+  }
+  return countMp3Frames(input());
+}
+
+it.each(
+  [0, 1, 2].flatMap((mode) =>
+    (
+      [
+        [24, false],
+        [35, false],
+        [36, true],
+        [37, true],
+      ] as const
+    ).flatMap(([length, crc]) => [1, 127].map((chunkSize) => ({ mode, length, crc, chunkSize }))),
+  ),
+)(
+  'rejects mode $mode length $length CRC $crc in $chunkSize-byte chunks',
+  async ({ mode, length, crc, chunkSize }) => {
+    await expect(
+      countPrefixFrames(
+        Array.from({ length: 3 }, () => prefixFrame(length, mode, crc)),
+        chunkSize,
+      ),
+    ).rejects.toMatchObject({
+      kind: 'invalid-mp3',
+      offset: 0,
+      message: 'Free-format frame is smaller than its header and side information',
+    });
+  },
+);
+
+it.each([0, 1, 2, 3])('preserves complete mandatory prefixes for mode %i', async (mode) => {
+  for (const crc of [false, true]) {
+    const length = mode === 3 ? 24 : crc ? 38 : 36;
+    for (const chunkSize of [1, 127]) {
+      await expect(
+        countPrefixFrames(
+          Array.from({ length: 3 }, () => prefixFrame(length, mode, crc)),
+          chunkSize,
+        ),
+      ).resolves.toBe(3);
+    }
+  }
+});
+
+it('rechecks side-information space when channel mode changes after acquisition', async () => {
+  const blocks = [...Array.from({ length: 5 }, () => prefixFrame(24, 3)), prefixFrame(24, 0)];
+  await expect(countPrefixFrames(blocks, 1)).rejects.toMatchObject({
+    kind: 'invalid-mp3',
+    offset: 120,
+    message: 'Free-format frame is smaller than its header and side information',
+  });
+});
+
+it('rechecks CRC space when protection changes after acquisition', async () => {
+  const blocks = [...Array.from({ length: 5 }, () => prefixFrame(36, 0)), prefixFrame(36, 0, true)];
+  await expect(countPrefixFrames(blocks, 127)).rejects.toMatchObject({
+    kind: 'invalid-mp3',
+    offset: 180,
+    message: 'Free-format frame is smaller than its header and side information',
+  });
+});
+
+it('checks the actual padded frame length, not just the cached base', async () => {
+  const padded = Array.from({ length: 5 }, () => prefixFrame(36, 0, false, 1));
+  await expect(countPrefixFrames(padded, 1)).resolves.toBe(5);
+  await expect(countPrefixFrames([...padded, prefixFrame(35, 0)], 127)).rejects.toMatchObject({
+    kind: 'invalid-mp3',
+    offset: 180,
+    message: 'Free-format frame is smaller than its header and side information',
+  });
+});

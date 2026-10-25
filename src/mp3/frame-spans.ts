@@ -63,7 +63,18 @@ export class FrameSpans {
     if (header.sampleRateIndex !== mode.sampleRateIndex) {
       throw new Mp3ParseError('invalid-mp3', offset, 'Free-format sample rate changed');
     }
-    return { header, length: mode.baseLength + header.padding };
+    const length = mode.baseLength + header.padding;
+    // A nonmono MPEG-1 frame needs 4 header + 32 side-information bytes,
+    // plus its optional CRC. Mono's 23-byte maximum prefix fits the global
+    // 24-byte minimum span. These bytes cannot come from the bit reservoir.
+    if (!header.mono && length < 36 + (header.hasCrc ? 2 : 0)) {
+      throw new Mp3ParseError(
+        'invalid-mp3',
+        offset,
+        'Free-format frame is smaller than its header and side information',
+      );
+    }
+    return { header, length };
   }
 
   /** Discover and lock a free-format stream's base length and sample rate from its first frames. */
