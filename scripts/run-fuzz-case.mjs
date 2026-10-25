@@ -11,8 +11,9 @@ for await (const chunk of stdin) {
   if (totalBytes > 128 * 1024) throw new Error('Crash input too large for replay');
   data.push(chunk);
 }
+// Module loading is infrastructure setup, not an input-dependent fuzz failure.
+const { fuzz } = await import(`../fuzz/${target}.fuzz.mjs`);
 try {
-  const { fuzz } = await import(`../fuzz/${target}.fuzz.mjs`);
   await fuzz(Buffer.concat(data));
 } catch (error) {
   // This fixed marker is parsed by the reducer; the full stack is not needed.
