@@ -75,7 +75,8 @@ The repository owner chose this default because the assessment's suggested tool,
 - `src/mp3/id3.ts`: ID3v2.2/2.3/2.4 synchsafe tag parsing; excludes ID3v1 tags.
 - `src/mp3/byte-reader.ts`: incremental lookahead and skipping over any `AsyncIterable<Uint8Array>`.
 - `src/mp3/count-frames.ts`: sequential frame traversal with no full-file buffering.
-- `src/app.ts`: Fastify multipart route, response schemas, limits, and stable JSON errors.
+- `src/upload.ts`: raw and multipart uploads behind one interface: media types, per-upload limits, empty uploads, and the unread remainder of a rejected upload.
+- `src/app.ts`: Fastify route, query option, response schemas, and stable JSON errors.
 - `src/server.ts`: configurable server bootstrap and graceful signal handling.
 
 Complexity: **O(n)** time and **O(max upstream chunk size)** additional memory. Frame headers require only four bytes of lookahead, and metadata content is streamed past rather than accumulated.

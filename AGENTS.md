@@ -34,7 +34,10 @@ Read this file before changing parser, API, fixtures, fuzzers, or counts. This f
 `src/mp3/count-frames.ts`: streaming boundaries and count semantics.
 `src/mp3/id3.ts`: tag sizing; `src/mp3/vbr-header.ts`: recognized initial encoder frame.
 `src/mp3/byte-reader.ts`: chunk partition independence / bounded memory.
-`src/app.ts`: HTTP upload policies.
+`src/upload.ts`: raw and multipart upload policies (media types, limits, unread remainder).
+`src/app.ts`: route, query option and error responses.
+
+Domain terms live in [`GLOSSARY.md`](GLOSSARY.md); architecture decisions live in [`docs/adr/`](docs/adr/).
 
 Add focused tests in `tests/` and independent generated encoder fixtures; expand `fuzz/` oracles when widening format acceptance. Run `npm run check`, `npm run fuzz:regression`, `npm run mutation` and relevant memory/HTTP benchmarks. Do not use FFprobe/MediaInfo decoded counts as an oracle for physical counts without reconciling the leading metadata frame.
 

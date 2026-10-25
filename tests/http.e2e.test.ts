@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { Agent, request as httpRequest, type IncomingMessage } from 'node:http';
-import { connect } from 'node:net';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
+import { sendPipelined } from './helpers/http.js';
 import { frame, mp3, multipartBody } from './helpers/mp3-fixtures.js';
 
 let app: FastifyInstance;
@@ -87,43 +87,11 @@ it('reuses a keep-alive connection after a rejected MIME type', async () => {
   }
 });
 
-/** Send requests over one TCP connection; each response needs the prior body consumed. */
-async function sendPipelined(
-  uploads: readonly { payload: Buffer; contentType: string }[],
-): Promise<{ status: number; body: unknown }[]> {
-  const socket = connect(Number(new URL(baseUrl).port), '127.0.0.1');
-  try {
-    let received = '';
-    const responses = /HTTP\/1\.1 (\d{3})[^]*?\r\n\r\n(\{[^}]*\})/g;
-    const complete = new Promise<void>((resolve, reject) => {
-      socket.on('data', (chunk: Buffer) => {
-        received += chunk.toString('latin1');
-        if (received.match(responses)?.length === uploads.length) resolve();
-      });
-      socket.once('error', reject);
-      socket.once('close', () => reject(new Error(`Connection closed after: ${received}`)));
-    });
-    for (const { payload, contentType } of uploads) {
-      socket.write(
-        `POST /file-upload HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: ${contentType}\r\nContent-Length: ${payload.length}\r\n\r\n`,
-      );
-      socket.write(payload);
-    }
-    await complete;
-    return [...received.matchAll(responses)].map(([, status, body]) => ({
-      status: Number(status),
-      body: JSON.parse(body!) as unknown,
-    }));
-  } finally {
-    socket.destroy();
-  }
-}
-
 it('drains a large upload rejected by the parser so its connection stays usable', async () => {
   // Larger than loopback socket buffers: the parser rejects the first header
   // while most of the body has not yet been read from the connection.
   const invalidAudio = Buffer.alloc(16 * 1024 * 1024);
-  const [rejected, accepted] = await sendPipelined([
+  const [rejected, accepted] = await sendPipelined(baseUrl, [
     multipartBody(invalidAudio),
     multipartBody(frame()),
   ]);
@@ -134,7 +102,7 @@ it('drains a large upload rejected by the parser so its connection stays usable'
 it('keeps serving when a form ends unterminated while its rejected upload drains', async () => {
   const { contentType, payload } = multipartBody(Buffer.alloc(16 * 1024 * 1024));
   const withoutClosingBoundary = payload.subarray(0, payload.lastIndexOf('\r\n--'));
-  const [rejected, accepted] = await sendPipelined([
+  const [rejected, accepted] = await sendPipelined(baseUrl, [
     { contentType, payload: withoutClosingBoundary },
     multipartBody(frame()),
   ]);

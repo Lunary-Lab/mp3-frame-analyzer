@@ -2,7 +2,7 @@
 
 ## Boundary definition
 
-`POST /file-upload` receives either one streamed multipart `file` or a raw binary `audio/mpeg` request body. Both use the same byte-stream parser. The HTTP adapter explicitly excludes one recognized initial encoder-metadata frame unless `includeVbrHeaderFrame=true` requests physical counting; omitted and `false` select exclusion. It also enforces upload resource limits and maps domain errors to JSON. The parser itself knows nothing about HTTP or Fastify and accepts a standard `AsyncIterable<Uint8Array>`, so it is easy to unit-test with arbitrary chunk partitions. Direct `countMp3Frames()` calls retain their physical-frame default.
+`POST /file-upload` receives either one streamed multipart `file` or a raw binary `audio/mpeg` request body. Both use the same byte-stream parser. The HTTP adapter explicitly excludes one recognized initial encoder-metadata frame unless `includeVbrHeaderFrame=true` requests physical counting; omitted and `false` select exclusion. The upload module enforces upload resource limits, and the route maps domain errors to JSON. The parser itself knows nothing about HTTP or Fastify and accepts a standard `AsyncIterable<Uint8Array>`, so it is easy to unit-test with arbitrary chunk partitions. Direct `countMp3Frames()` calls retain their physical-frame default.
 
 ## MPEG-1 Layer III frame structure
 
@@ -34,6 +34,8 @@ This is a **structural parser**. Full validation would additionally examine side
 The byte cursor queues incoming stream chunks to read a four-byte MPEG header or a ten-byte ID3 header, with one bounded ~8.7 KiB lookahead when inferring free-format frame spacing. Time is linear in bytes consumed; memory is proportional to the largest chunk delivered by the upstream stream, **not** the total upload size.
 
 Fastify's multipart implementation provides stream backpressure, a 50 MiB per-file cap, one file / one part limit, an 8 KiB multipart-header buffering bound, and dedicated error handling. Parsing terminates immediately on invalid headers. Request and idle-connection timeouts bound slow or abandoned uploads. They do not impose an aggregate body cap or global concurrency limit. A 50 MiB upload has a 30-second receive deadline, so filling the maximum requires about 1.67 MiB/s before protocol overhead.
+
+The upload module (`src/upload.ts`) applies these policies to both upload forms behind one interface: accepted media types, the per-upload byte limit, empty uploads, and the unread remainder of a rejected upload. A raw upload's connection closes after its error response, because its remainder is attacker-sized; a multipart upload's remainder drains in the background, bounded by the multipart file limit, so its connection stays usable. The route hands the module a consumer, the frame counter, and never touches request bodies itself ([ADR 0001](adr/0001-upload-module-owns-the-upload-lifecycle.md)).
 
 An immediately ready in-memory async source can keep the parser busy until its input is consumed. The benchmark reports this delay honestly. Network backpressure and I/O provide natural scheduling points in the HTTP path; performance measurements include small requests alongside valid large uploads. If measurements under a real deployment show unfair scheduling, profile and add a bounded cooperative-yield policy before claiming a latency guarantee.
 

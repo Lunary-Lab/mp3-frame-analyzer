@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { buildApp, MAX_UPLOAD_BYTES } from '../src/app.js';
+import { buildApp } from '../src/app.js';
+import { MAX_UPLOAD_BYTES } from '../src/upload.js';
 import { frame, multipartBody, synchsafe } from './helpers/mp3-fixtures.js';
 
 let app: FastifyInstance;

@@ -1,11 +1,7 @@
-import { finished } from 'node:stream/promises';
-import type { Readable } from 'node:stream';
 import Fastify, { type FastifyInstance } from 'fastify';
-import multipart from '@fastify/multipart';
 import { countMp3Frames } from './mp3/count-frames.js';
 import { Mp3ParseError } from './mp3/errors.js';
-
-export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+import { MAX_UPLOAD_BYTES, registerUploads, UploadError } from './upload.js';
 
 // Busboy currently reports these protocol failures without a typed statusCode.
 // Keep this list specific so unrelated application errors still become HTTP 500.
@@ -16,37 +12,6 @@ const multipartParseErrors = new Set([
   'Part terminated early due to unexpected end of multipart data',
   'Preamble terminated early due to unexpected end of multipart data',
 ]);
-
-class UploadError extends Error {
-  readonly status: number;
-  readonly code: string;
-
-  constructor(status: number, code: string, message: string) {
-    super(message);
-    this.name = 'UploadError';
-    this.status = status;
-    this.code = code;
-  }
-}
-
-/** Discard an unwanted file part so multipart parsing can finish normally. */
-async function discardFile(file: Readable): Promise<void> {
-  const completion = finished(file, { cleanup: true });
-  file.resume();
-  await completion;
-}
-
-/**
- * The parser can reject a file long before its upload ends. Keep reading the
- * rest in the background so the error responds immediately, Busboy completes,
- * and the connection can serve its next request or close during shutdown.
- */
-function drainRejectedFile(file: Readable): void {
-  // A malformed or interrupted remainder cannot change the response already sent.
-  discardFile(file).catch(() => {});
-}
-
-const rawMp3Types = new Set(['audio/mpeg', 'audio/mp3', 'application/octet-stream']);
 
 /**
  * Match the actual typed Fastify 5 / @fastify/multipart 10.1.6 errors, not just
@@ -68,36 +33,6 @@ const frameworkClientErrors = new Map<string, readonly [number, string, string]>
   ['FST_ERR_CTP_INVALID_CONTENT_LENGTH', [400, 'invalid-request', 'Invalid Content-Length']],
   ['FST_ERR_CTP_BODY_TOO_LARGE', [413, 'request-too-large', 'Request body exceeds the limit']],
 ]);
-
-/** A zero-byte file is a missing payload, not a malformed MPEG bitstream. */
-async function* nonEmptyFile(input: AsyncIterable<Uint8Array>): AsyncGenerator<Uint8Array> {
-  let received = 0;
-  for await (const chunk of input) {
-    received += chunk.length;
-    yield chunk;
-  }
-  if (received === 0) {
-    throw new UploadError(400, 'empty-file', 'The MP3 file must not be empty');
-  }
-}
-
-/** The multipart limit does not apply to raw request streams. Enforce it per chunk. */
-async function* boundedRawUpload(file: Readable, limit: number): AsyncGenerator<Uint8Array> {
-  let received = 0;
-  for await (const chunk of file.iterator({ destroyOnReturn: false })) {
-    if (!(chunk instanceof Uint8Array)) {
-      throw new UploadError(400, 'invalid-upload', 'Invalid raw byte chunk');
-    }
-    received += chunk.length;
-    if (received > limit) {
-      throw new UploadError(413, 'file-too-large', 'File exceeds configured upload limit');
-    }
-    yield chunk;
-  }
-  if (received === 0) {
-    throw new UploadError(400, 'empty-file', 'The MP3 file must not be empty');
-  }
-}
 
 function includeVbrHeaderFrame(query: unknown): boolean {
   const value =
@@ -125,33 +60,12 @@ const errorSchema = {
 export async function buildApp({
   maxUploadBytes = MAX_UPLOAD_BYTES,
 }: { maxUploadBytes?: number } = {}): Promise<FastifyInstance> {
-  if (!Number.isSafeInteger(maxUploadBytes) || maxUploadBytes < 1) {
-    throw new RangeError('maxUploadBytes must be a positive safe integer');
-  }
   const app = Fastify({
     logger: process.env['NODE_ENV'] !== 'test',
     requestTimeout: 30_000,
     connectionTimeout: 10_000,
   });
-
-  const multipartLimits = {
-    files: 1,
-    fields: 0,
-    parts: 1,
-    fileSize: maxUploadBytes,
-    // The plugin forwards headerSize to Busboy although its limits type omits
-    // that option. Busboy bounds header buffering; exact field validation is below.
-    headerSize: 8 * 1024,
-    headerPairs: 32,
-  };
-  // Fastify delegates the raw request body without buffering it in memory.
-  // Its normal parseAs:'buffer' size protection does not apply to this path.
-  app.addContentTypeParser([...rawMp3Types], (_request, payload, done) => done(null, payload));
-
-  await app.register(multipart, {
-    throwFileSizeLimit: true,
-    limits: multipartLimits,
-  });
+  const uploads = await registerUploads(app, { maxUploadBytes });
 
   app.post(
     '/file-upload',
@@ -181,79 +95,9 @@ export async function buildApp({
         reply.header('connection', 'close');
         throw error;
       }
-      if (!request.isMultipart()) {
-        const mime = String(request.headers['content-type'] ?? '')
-          .split(';')[0]!
-          .trim()
-          .toLowerCase();
-        if (!rawMp3Types.has(mime)) {
-          throw new UploadError(415, 'unsupported-media-type', 'Expected an MP3 upload');
-        }
-        const file = request.body as Readable | undefined;
-        if (!file || typeof file.iterator !== 'function') {
-          reply.header('connection', 'close');
-          throw new UploadError(400, 'empty-file', 'The MP3 file must not be empty');
-        }
-        const declaredSize = request.headers['content-length'];
-        if (declaredSize !== undefined && Number(declaredSize) > maxUploadBytes) {
-          reply.header('connection', 'close');
-          throw new UploadError(413, 'file-too-large', 'File exceeds configured upload limit');
-        }
-        try {
-          return {
-            frameCount: await countMp3Frames(boundedRawUpload(file, maxUploadBytes), {
-              includeVbrHeaderFrame: include,
-            }),
-          };
-        } catch (error) {
-          // Do not drain arbitrary amounts of an already-rejected raw request.
-          // Ending this connection after the JSON response is safe for HTTP/1.1,
-          // and avoids reading an attacker-controlled stream in the background.
-          reply.header('connection', 'close');
-          throw error;
-        }
-      }
-
-      let frameCount: number | undefined;
-      for await (const part of request.parts()) {
-        if (part.type !== 'file') {
-          throw new UploadError(400, 'invalid-upload', 'Only one file field is accepted');
-        }
-        if (part.fieldname !== 'file') {
-          // Busboy expects a yielded file part to be consumed. Drain rejected
-          // uploads without buffering rather than abandoning a live stream.
-          await discardFile(part.file);
-          throw new UploadError(400, 'invalid-upload', 'Upload field must be named "file"');
-        }
-        if (!['audio/mpeg', 'audio/mp3', 'application/octet-stream'].includes(part.mimetype)) {
-          await discardFile(part.file);
-          throw new UploadError(415, 'unsupported-media-type', 'Expected an MP3 file');
-        }
-
-        try {
-          // Destroying an unfinished Busboy file stream stalls the request
-          // body, so an early parser rejection must leave it drainable.
-          frameCount = await countMp3Frames(
-            nonEmptyFile(part.file.iterator({ destroyOnReturn: false })),
-            { includeVbrHeaderFrame: include },
-          );
-        } catch (error) {
-          // A file truncated at the multipart limit is a transport error,
-          // not a malformed-MP3 parser error.
-          if (part.file.truncated) {
-            throw new UploadError(413, 'file-too-large', 'File exceeds configured upload limit');
-          }
-          if (error instanceof Mp3ParseError) drainRejectedFile(part.file);
-          throw error;
-        }
-        if (part.file.truncated) {
-          throw new UploadError(413, 'file-too-large', 'File exceeds configured upload limit');
-        }
-      }
-
-      if (frameCount === undefined) {
-        throw new UploadError(400, 'missing-file', 'A multipart field named "file" is required');
-      }
+      const frameCount = await uploads.consume(request, reply, (upload) =>
+        countMp3Frames(upload, { includeVbrHeaderFrame: include }),
+      );
       return { frameCount };
     },
   );

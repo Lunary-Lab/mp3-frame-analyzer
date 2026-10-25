@@ -26,7 +26,7 @@ Lefthook checks staged secret content when explicitly installed by the developer
 
 The static checks complement behavioral tests; they do not establish comprehensive vulnerability coverage. The security lint rule `detect-object-injection` is disabled because this binary parser deliberately indexes validated byte arrays and fixed tables; the rule cannot establish whether an index is safely bounded. The remaining recommended security rules stay enabled. A public deployment still needs host/container hardening, deployment-specific threat modeling, sustained load testing, and incident monitoring.
 
-When the parser rejects a multipart file before its upload ends, the error responds immediately and the remaining file bytes are read and discarded in the background. Abandoning the unfinished multipart stream would leave the request body unread, wedging that connection until the request timeout and preventing graceful shutdown. Early raw-upload errors instead close the connection after the response, as described below.
+When the parser, or any other consumer, rejects a multipart upload before it ends, the error responds immediately and the remaining file bytes are read and discarded in the background. Abandoning the unfinished multipart stream would leave the request body unread, wedging that connection until the request timeout and preventing graceful shutdown. Early raw-upload errors instead close the connection after the response, as described below.
 
 The runtime observes shutdown failures and allows up to 10 seconds for requests and close hooks to drain. A failed close or expired deadline is logged and ends the process with a failure status. Connection-level failures and aborted requests cannot always receive JSON.
 

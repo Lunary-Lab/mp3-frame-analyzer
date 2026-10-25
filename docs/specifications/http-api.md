@@ -76,4 +76,4 @@ curl -i 'http://127.0.0.1:3000/file-upload?includeVbrHeaderFrame=true' \
   -F 'file=@tests/fixtures/vbr.mp3;type=audio/mpeg'
 ```
 
-For binary transport, timeouts, upload limits and RFC handling tests, see [`app.ts`](../../src/app.ts), [HTTP E2E](../../tests/http.e2e.test.ts), [raw-upload tests](../../tests/raw-upload.test.ts) and [security tests](../../tests/security.test.ts).
+For binary transport, timeouts, upload limits and RFC handling tests, see [`upload.ts`](../../src/upload.ts), [`app.ts`](../../src/app.ts), [HTTP E2E](../../tests/http.e2e.test.ts), [raw-upload tests](../../tests/raw-upload.test.ts) and [security tests](../../tests/security.test.ts).
