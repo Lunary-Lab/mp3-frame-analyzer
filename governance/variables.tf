@@ -4,15 +4,15 @@ locals {
 }
 
 variable "enable_rulesets" {
-  description = "Create the main-branch and release-tag rulesets. GitHub returns 403 for rulesets on this private repository under the organization's Free plan, so enable this only after the plan supports them."
+  description = "Enforce the main-branch and release-tag rulesets. Disable only to recover from an emergency (docs/governance.md)."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "require_signed_commits" {
-  description = "Require verified signatures on main. GitHub signs squash merges, but unsigned commits on a pull request branch can still block its squash merge, so enable this only once every contributor signs their commits."
+  description = "Require verified signatures on main. GitHub signs squash merges, but unsigned commits on a pull request branch can still block its squash merge, so every contributor signs their commits."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "required_status_checks" {
