@@ -162,7 +162,7 @@ describe('POST /file-upload', () => {
     }
   });
 
-  it.each(['audio/mp eg', 'audio/mp\teg', ' audio/wav ', '\u00a0audio/mpeg\u00a0'])(
+  it.each(['audio/mp eg', 'audio/mp\teg', ' audio/wav ', '"audio/mpeg;"'])(
     'does not normalize disallowed multipart media type %j into an allowed one',
     async (mime) => {
       const response = await upload(frame(), { mime });
@@ -170,6 +170,48 @@ describe('POST /file-upload', () => {
       expect(response.json()).toHaveProperty('error', 'unsupported-media-type');
     },
   );
+
+  it('accepts a mixed-case media type with parameters, raw or multipart', async () => {
+    const mime = 'Audio/MPEG ; x=1';
+    const raw = await app.inject({
+      method: 'POST',
+      url: '/file-upload',
+      headers: { 'content-type': mime },
+      payload: frame(),
+    });
+    for (const response of [raw, await upload(frame(), { mime })]) {
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ frameCount: 1 });
+    }
+  });
+
+  it('treats a no-break space around the media type as part of it, raw or multipart', async () => {
+    // HTTP's optional whitespace is SP or HTAB only (RFC 9110 §5.6.3). Send a
+    // single 0xA0 byte, as a client would, not its two-byte UTF-8 encoding.
+    const form = multipartBody(frame(), { mime: 'NBSP-MEDIA-TYPE' });
+    const payload = Buffer.from(
+      form.payload.toString('latin1').replace('NBSP-MEDIA-TYPE', '\u00a0audio/mpeg\u00a0'),
+      'latin1',
+    );
+    const multipart = await app.inject({
+      method: 'POST',
+      url: '/file-upload',
+      headers: { 'content-type': form.contentType },
+      payload,
+    });
+    const raw = await app.inject({
+      method: 'POST',
+      url: '/file-upload',
+      headers: { 'content-type': '\u00a0audio/mpeg\u00a0' },
+      payload: frame(),
+    });
+    for (const response of [multipart, raw]) {
+      expect(response.statusCode).toBe(415);
+      expect(response.json()).toHaveProperty('error', 'unsupported-media-type');
+    }
+    // The raw body is unread, so its connection must not be reused.
+    expect(raw.headers.connection).toBe('close');
+  });
 
   it('keeps unexpected failures as sanitized HTTP 500 responses', async () => {
     const failingApp = await buildApp();

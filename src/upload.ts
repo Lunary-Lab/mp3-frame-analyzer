@@ -9,9 +9,13 @@ export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 /** Accepted for a raw upload's request and a multipart upload's form part alike. */
 const mp3MediaTypes = new Set(['audio/mpeg', 'audio/mp3', 'application/octet-stream']);
 
-/** Busboy lowercases media types but can leave their surrounding ASCII SP/HTAB. */
-function isMp3PartType(mediaType: string): boolean {
-  return mp3MediaTypes.has(mediaType.replace(/^[ \t]+|[ \t]+$/g, ''));
+/**
+ * Whether a media type, without parameters, is accepted. Media types are
+ * case-insensitive (RFC 9110 §8.3.1), and only SP or HTAB counts as the
+ * optional whitespace around one (RFC 9110 §5.6.3).
+ */
+function isAcceptedMediaType(mediaType: string): boolean {
+  return mp3MediaTypes.has(mediaType.replace(/^[ \t]+|[ \t]+$/g, '').toLowerCase());
 }
 
 /** The two ways a client can send an upload. */
@@ -73,7 +77,7 @@ export async function registerUploads(
     // RFC 7578 permits file parts without filenames. Busboy otherwise treats
     // audio media types without a filename as text fields.
     isPartAFile: (_fieldName, contentType, fileName) =>
-      fileName !== undefined || isMp3PartType(contentType ?? ''),
+      fileName !== undefined || isAcceptedMediaType(contentType ?? ''),
   });
   return {
     consume: (request, reply, consumer) =>
@@ -89,12 +93,14 @@ async function consumeRawUpload<T>(
   maxUploadBytes: number,
   consumer: UploadConsumer<T>,
 ): Promise<T> {
-  if (!mp3MediaTypes.has(mediaTypeOf(request))) {
+  if (!isAcceptedMediaType(mediaTypeOf(request))) {
+    // A body Fastify already handed over is unread: never drain it.
+    if (isBodyStream(request.body)) reply.header('connection', 'close');
     throw new ClientError(415, 'unsupported-media-type', 'Expected an MP3 upload');
   }
   try {
-    const body = request.body as Readable | undefined;
-    if (!body || typeof body.iterator !== 'function') throw emptyUpload();
+    const body = request.body;
+    if (!isBodyStream(body)) throw emptyUpload();
     const declaredSize = request.headers['content-length'];
     if (declaredSize !== undefined && Number(declaredSize) > maxUploadBytes) throw fileTooLarge();
     // The multipart limit does not apply to raw request streams; enforce it per chunk.
@@ -123,7 +129,7 @@ async function consumeMultipartUpload<T>(
       await discardPart(part.file);
       throw new ClientError(400, 'invalid-upload', 'Upload field must be named "file"');
     }
-    if (!isMp3PartType(part.mimetype)) {
+    if (!isAcceptedMediaType(part.mimetype)) {
       await discardPart(part.file);
       throw new ClientError(415, 'unsupported-media-type', 'Expected an MP3 file');
     }
@@ -157,10 +163,14 @@ async function consumeMultipartStream<T>(
   throw fileTooLarge();
 }
 
-/** The request's media type, without parameters, in lower case. */
+/** Fastify hands an accepted raw body over as a stream; bodiless requests have none. */
+function isBodyStream(body: unknown): body is Readable {
+  return typeof (body as Readable | undefined)?.iterator === 'function';
+}
+
+/** The request's media type with its parameters removed; Busboy does this for form parts. */
 function mediaTypeOf(request: FastifyRequest): string {
-  const contentType = String(request.headers['content-type'] ?? '');
-  return contentType.split(';')[0]!.trim().toLowerCase();
+  return String(request.headers['content-type'] ?? '').split(';')[0]!;
 }
 
 /** Discard a rejected form part so multipart parsing can finish normally. */
