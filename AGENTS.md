@@ -16,14 +16,14 @@ Read this file before changing parser, API, fixtures, fuzzers, or counts. This f
 
 ## Current design invariants (not additional assessment requirements)
 
-**Scope gate:** Only requirements called out in the [assessment-only checklist](docs/specifications/assessment-scope.md) are mandated by the employer. The 50 MiB limit, raw uploads, metadata-exclusion option, extended free-format range, fuzzing and release tooling are established **project choices**, not extra conditions imposed by the brief. Keep them working but never broaden unrelated scope to satisfy a reference appendix.
+**Scope gate:** Only requirements called out in the [assessment-only checklist](docs/specifications/assessment-scope.md) are mandated by the employer. The configurable 50 MiB default limit, raw uploads, metadata-exclusion option, extended free-format range, fuzzing and release tooling are established **project choices**, not extra conditions imposed by the brief. Keep them working but never broaden unrelated scope to satisfy a reference appendix.
 
 - MPEG-1 is version bits `11`; Layer III is layer bits `01`. Support bitrate indices 1–14 **and free-format index 0** (bounded frame-spacing inference); reject reserved index 15 and reserved sample rate 3. MPEG-2, MPEG-2.5, Layers I/II, ADTS/AAC and MP4 are out of assessment scope.
 - Compute indexed frame lengths independently for **every frame**, including VBR/ABR, rather than multiplying the first frame length by the count or trusting a Xing/VBRI count.
 - Free-format has no table bitrate; cache the **unpadded frame length**, then apply each frame's padding. Confirm competing sync candidates conservatively; do not guess on ambiguous short streams. Never allow unbounded lookahead, rescans or backtracking.
 - **Current owner-selected policy:** HTTP omitted/`false` excludes at most one recognized _initial_ Xing/Info/VBRI encoder frame; HTTP `true` and direct parser calls with no option count complete physical MPEG frames. **ID3 frames are metadata records, not MPEG audio frames.** Exclusion must recognize the initial encoder structure, never subtract one blindly, and does not prove that every counted frame decodes to audio.
 - Skip supported ID3 tags from their encoded, bounded lengths; do not interpret tag content, decompress, execute, download art, log uploaded bytes, or load entire uploads into memory.
-- Preserve `AsyncIterable<Uint8Array>` parsing, bounded memory, streaming backpressure, raw/multipart per-file 50 MiB limits, typed deterministic failures, and JSON response format.
+- Preserve `AsyncIterable<Uint8Array>` parsing, bounded memory, streaming backpressure, one configurable raw/multipart per-file byte limit (50 MiB by default), typed deterministic failures, and JSON response format.
 - A structurally valid MPEG header chain is **not proof of decodable audio or valid CRC**. Do not claim this service is a full Layer III decoder or formal ISO bitstream-conformance validator.
 - Classify requirements explicitly as `ISO/RFC normative`, `ID3 informal standard`, `encoder convention`, or `project-specific policy`. Do not promote a decoder implementation or MIME interoperability preference to an ISO requirement.
 

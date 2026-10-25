@@ -14,6 +14,21 @@ HOST=127.0.0.1 PORT=3000 npm start
 
 Replace `1.0.0` in the filename and directory with the downloaded version. Runtime installation requires access to the npm registry for the dependencies named in `package-lock.json`. The archive does not bundle `node_modules`.
 
+The per-file upload limit defaults to **50 MiB (52,428,800 bytes)**. To set a
+100 MiB limit for both raw and multipart files:
+
+```bash
+MAX_UPLOAD_BYTES=104857600 HOST=127.0.0.1 PORT=3000 npm start
+```
+
+`MAX_UPLOAD_BYTES` must be decimal digits representing `1` through
+`9007199254740991` bytes; leading zeros are allowed. Only an absent variable
+uses the default. Empty values, whitespace, signs, fractions, exponents, units,
+and unsafe integers fail startup before listening. There is no unlimited mode.
+The limit includes file bytes, not multipart envelope overhead, and applies
+also to raw requests without `Content-Length`. Increasing it does not increase
+request timeouts or add an aggregate HTTP-body or concurrency limit.
+
 From another terminal, upload a MPEG-1 Layer III file:
 
 ```bash
