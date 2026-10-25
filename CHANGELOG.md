@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.2](https://github.com/Lunary-Lab/mp3-frame-analyzer/compare/v2.0.1...v2.0.2) (2026-10-25)
+
+
+### Bug Fixes
+
+* **ci:** audit required checks as they stood at merge ([5bda42c](https://github.com/Lunary-Lab/mp3-frame-analyzer/commit/5bda42c92025d280411064987314b0b65237aba7))
+* **release:** include shared runtime dependencies in production SBOM ([08c625e](https://github.com/Lunary-Lab/mp3-frame-analyzer/commit/08c625e58754d1c50784810b6246f0aaa737be1c))
+
 ## [2.0.1](https://github.com/Lunary-Lab/mp3-frame-analyzer/compare/v2.0.0...v2.0.1) (2026-10-25)
 
 
