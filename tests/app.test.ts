@@ -116,6 +116,25 @@ describe('POST /file-upload', () => {
     }
   });
 
+  it.each(['audio/mpeg', 'audio/mp3', 'application/octet-stream'])(
+    'accepts a %s file part without the optional filename',
+    async (mime) => {
+      const form = multipartBody(frame(), { mime });
+      const payload = Buffer.from(
+        form.payload.toString('latin1').replace('; filename="test.mp3"', ''),
+        'latin1',
+      );
+      const response = await app.inject({
+        method: 'POST',
+        url: '/file-upload',
+        headers: { 'content-type': form.contentType },
+        payload,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ frameCount: 1 });
+    },
+  );
+
   it('keeps unexpected failures as sanitized HTTP 500 responses', async () => {
     const failingApp = await buildApp();
     // A failed request hook is a real framework boundary, independent of parser details.

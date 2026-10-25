@@ -62,7 +62,14 @@ export async function registerUploads(
     headerSize: 8 * 1024,
     headerPairs: 32,
   };
-  await app.register(multipart, { throwFileSizeLimit: true, limits: multipartLimits });
+  await app.register(multipart, {
+    throwFileSizeLimit: true,
+    limits: multipartLimits,
+    // RFC 7578 permits file parts without filenames. Busboy otherwise treats
+    // audio media types without a filename as text fields.
+    isPartAFile: (_fieldName, contentType, fileName) =>
+      fileName !== undefined || mp3MediaTypes.has(contentType ?? ''),
+  });
   return {
     consume: (request, reply, consumer) =>
       uploadFormOf(request) === 'multipart'
