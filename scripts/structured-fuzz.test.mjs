@@ -96,3 +96,20 @@ test('curated structured seeds exercise both smallest and largest supported free
     }
   }
 });
+
+test('only first-frame metadata at a recognized position is an expected exclusion', async () => {
+  for (const [name, physical, audio, frame, offset, signature] of [
+    ['encoder-frame-xing.bin', 4, 3, 0, 36, 'Xing'],
+    ['lone-encoder-frame.bin', 1, 0, 0, 36, 'VBRI'],
+    ['crc-shifted-info.bin', 3, 2, 0, 38, 'Info'],
+    ['shifted-info-without-crc.bin', 3, 3, 0, 38, 'Info'],
+    ['later-frame-decoy.bin', 4, 4, 1, 36, 'Xing'],
+  ]) {
+    const input = await readFile(new URL(`../fuzz/seeds/structured/${name}`, import.meta.url));
+    const fixture = createStructuredMp3(input);
+    assert.equal(fixture.expectedCount, physical, name);
+    assert.equal(fixture.expectedAudioFrameCount, audio, name);
+    const start = fixture.frameOffsets[frame] + offset;
+    assert.equal(fixture.bytes.subarray(start, start + 4).toString(), signature, name);
+  }
+});

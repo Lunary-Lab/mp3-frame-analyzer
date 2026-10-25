@@ -85,6 +85,12 @@ of the compiled `dist/mp3/` modules:
 | Raw-byte mutations           |     92,869 |            137 | No unexpected failures         |
 | Structured valid MPEG frames |     20,087 |            113 | No incorrect counts or crashes |
 
+After the structured target began checking encoder-frame exclusion (initial,
+CRC-shifted and decoy signatures), a 120-second campaign per target ran 534,540
+raw and 86,991 structured inputs without findings; fault-injected parsers that
+never exclude, exclude a later or every recognized frame, or mishandle the CRC
+shift each failed within the first few dozen cases.
+
 The standard Jazzer CLI also replayed the existing corpus successfully for
 both targets. The crash reducer's fail-closed classifier has four passing Node
 unit tests, including a regression for infrastructure exits lacking a valid

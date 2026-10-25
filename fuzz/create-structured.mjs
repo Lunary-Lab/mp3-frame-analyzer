@@ -2,7 +2,8 @@
  * Independent construction oracle for MPEG-1 Layer III byte streams.
  * The parser under test is never consulted when deriving the frame count.
  * Input bytes control indexed/free-format bitrate, frame count, sample rate,
- * padding, CRC, channel mode, payload and optional ID3/Xing/Info/VBRI metadata.
+ * padding, CRC, channel mode, payload and optional ID3/Xing/Info/VBRI metadata,
+ * including CRC-shifted placements and decoy signatures in later frames.
  * These are known-boundary structural fixtures, not encoded audio: side
  * information, the bit reservoir, compressed samples and CRC are not validated.
  */
@@ -31,20 +32,27 @@ function id3(body, version, footer) {
   return Buffer.concat([header, body, tail]);
 }
 
-function writeVbrHeader(frame, channelMode, kind, count) {
+/**
+ * Write encoder metadata of `kind` (0 Xing, 1 Info, 2 VBRI) into a frame and
+ * report whether it forms an encoder frame under the documented placement
+ * rules: Xing/Info at byte 21 in mono or 36 otherwise, or two bytes later
+ * after a CRC; VBRI at byte 36. `shifted` writes Xing/Info two bytes later,
+ * which is payload, not metadata, in a frame without a CRC.
+ */
+function writeEncoderMetadata(frame, { channelMode, hasCrc, kind, count, shifted }) {
   // Make the optional metadata policy independent of chance payload signatures.
   for (const offset of [21, 23, 36, 38]) {
     if (offset < frame.length) frame.fill(0, offset, Math.min(offset + 4, frame.length));
   }
   if (kind === undefined) return false;
   if (kind < 2) {
-    const offset = channelMode === 3 ? 21 : 36;
+    const offset = (channelMode === 3 ? 21 : 36) + (shifted ? 2 : 0);
     if (offset + 12 > frame.length) return false;
     frame.write(kind === 0 ? 'Xing' : 'Info', offset, 'ascii');
     frame.writeUInt32BE(1, offset + 4);
     // Deliberately disagree with the real count: metadata is never the oracle.
     frame.writeUInt32BE(count + 123, offset + 8);
-    return true;
+    return !shifted || hasCrc;
   }
   if (frame.length < 64) return false;
   frame.write('VBRI', 36, 'ascii');
@@ -73,6 +81,9 @@ export function createStructuredMp3(input) {
       SAMPLE_RATE_HZ[freeSampleRateIndex],
   );
   const metadataKind = flags & 16 ? at(6) % 3 : undefined;
+  const metadataShifted = Boolean(at(6) & 4);
+  // A valid signature in a later frame is ordinary payload and stays counted.
+  const decoyFrame = flags & 32 && frameCount > 1 ? 1 + (at(7) % (frameCount - 1)) : undefined;
   const intro = [];
   if ((flags & 1) !== 0) {
     const numberOfTags = 1 + (at(2) % 3);
@@ -119,8 +130,11 @@ export function createStructuredMp3(input) {
       block[j] = at(i * 7 + j + 16) & (freeFormat ? 0x7f : 0xff);
     }
     block.writeUInt32BE(header, 0);
-    if (i === 0 && writeVbrHeader(block, channelMode, metadataKind, frameCount)) {
-      metadataFrameCount = 1;
+    if (i === 0) {
+      const metadata = { channelMode, hasCrc, kind: metadataKind, shifted: metadataShifted };
+      if (writeEncoderMetadata(block, { ...metadata, count: frameCount })) metadataFrameCount = 1;
+    } else if (i === decoyFrame) {
+      writeEncoderMetadata(block, { channelMode, hasCrc, kind: at(7) % 3, count: frameCount });
     }
     frames.push(block);
     frameOffsets.push(offset);
