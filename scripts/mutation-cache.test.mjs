@@ -272,7 +272,7 @@ test('timeouts and static mutants must rerun; the original report is never rewri
   assert.deepEqual(f.report, before);
 });
 
-test('execution accounting rejects invented fresh results, incomplete inventories and timeout reuse', () => {
+test('execution accounting rejects missing evidence, incomplete inventories and timeout reuse', () => {
   const f = fixture();
   const current = structuredClone(f.report);
   assert.deepEqual(executionSummary(current), { executed: 1, reused: 0, total: 1 });

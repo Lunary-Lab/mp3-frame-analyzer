@@ -1,6 +1,6 @@
 import { connect } from 'node:net';
 
-/** POST uploads over one TCP connection; each response needs the prior body consumed. */
+/** POST uploads over one TCP connection; later requests need prior bodies consumed. */
 export async function sendPipelined(
   baseUrl: string,
   uploads: readonly { payload: Buffer; contentType: string }[],

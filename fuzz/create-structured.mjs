@@ -119,7 +119,7 @@ function createFrame(at, i, { freeFormat, freeSampleRateIndex, freeBaseLength })
   const length =
     (freeFormat ? freeBaseLength : Math.floor((144000 * bitrate) / sampleRate)) + padding;
   const block = Buffer.alloc(length);
-  // The smallest free-format spans have room for mono side information only.
+  // Force mono below 38 bytes so the mandatory prefix fits with either CRC setting.
   const channelMode = length < 38 ? 3 : at(14 + 5 * i) % 4;
   const emphasis = [0, 1, 3][at(13 + 5 * i) % 3];
   const header =
