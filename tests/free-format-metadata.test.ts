@@ -49,26 +49,30 @@ describe('bounded free-format metadata acquisition', () => {
     }
   });
 
-  it('retains prior validated tag anchors when final ID3v1 extends beyond the probe', async () => {
-    for (const frames of [1, 2]) {
-      for (const precedingTags of [0, 1, 9]) {
-        const audio = Array.from({ length: frames }, () => Buffer.from(singleton));
-        const earlier = Array.from({ length: precedingTags }, () =>
-          metadataTag(4, { footer: true }),
-        );
-        const prefix = Buffer.concat([...audio, ...earlier]);
-        // Sweep both sides of a complete/partial TAG signature and all 128
-        // possible tag bytes crossing the searched window, not only one edge.
-        for (let total = 8_644; total <= 8_778; total++) {
-          const body = sizedTag(total - prefix.length - 128);
-          const bytes = Buffer.concat([prefix, body, metadataV1()]);
-          for (const sizes of [[1, 97], [bytes.length]]) {
-            expect(await countMp3Frames(chunks(bytes, sizes))).toBe(frames);
-          }
+  it.each([
+    [1, 0],
+    [1, 1],
+    [1, 9],
+    [2, 0],
+    [2, 1],
+    [2, 9],
+  ])(
+    'retains prior validated tag anchors beyond the probe (%i frames, %i preceding tags)',
+    async (frames, precedingTags) => {
+      const audio = Array.from({ length: frames }, () => Buffer.from(singleton));
+      const earlier = Array.from({ length: precedingTags }, () => metadataTag(4, { footer: true }));
+      const prefix = Buffer.concat([...audio, ...earlier]);
+      // Sweep both sides of a complete/partial TAG signature and all 128
+      // possible tag bytes crossing the searched window, not only one edge.
+      for (let total = 8_644; total <= 8_778; total++) {
+        const body = sizedTag(total - prefix.length - 128);
+        const bytes = Buffer.concat([prefix, body, metadataV1()]);
+        for (const sizes of [[1, 97], [bytes.length]]) {
+          expect(await countMp3Frames(chunks(bytes, sizes))).toBe(frames);
         }
       }
-    }
-  });
+    },
+  );
 
   it('retains anchors without forgiving truncated or overlong ID3v1 tails at the probe edge', async () => {
     for (const tagStart of [8_519, 8_520, 8_644, 8_645, 8_647, 8_648]) {
