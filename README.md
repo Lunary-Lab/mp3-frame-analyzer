@@ -44,20 +44,20 @@ The response uses `Content-Type: application/json`. For multipart uploads, the `
 
 ### API
 
-| Situation                                      | HTTP status | Error code / behavior                                                                            |
-| ---------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------ |
-| Valid raw or multipart MPEG-1 Layer III        | 200         | `{"frameCount":32}` (bundled CBR fixture, default policy)                                        |
-| Missing multipart file or invalid fields/query | 400         | `missing-file`, `invalid-upload`, `invalid-option`                                               |
-| Empty raw or multipart file                    | 400         | `empty-file`                                                                                     |
-| Invalid HTTP body framing / length             | 400         | `invalid-request` when the connection remains writable                                           |
-| MP3 file exceeds per-file limit                | 413         | `file-too-large`                                                                                 |
-| Extra multipart file / form field / part       | 413         | `too-many-files`, `unexpected-fields`, or `too-many-parts`, depending on the first limit reached |
-| Other framework size limit                     | 413         | `request-too-large`                                                                              |
-| Unsupported MIME or MPEG format                | 415         | `unsupported-media-type` or `unsupported-format`                                                 |
-| Invalid, malformed, or truncated MP3 content   | 422         | `invalid-mp3` or `truncated-mp3`                                                                 |
-| Unknown route                                  | 404         | `not-found`                                                                                      |
-| Wrong method on `/file-upload`                 | 405         | `method-not-allowed` with `Allow: POST`                                                          |
-| Unexpected application failure                 | 500         | `internal-error` (sanitized)                                                                     |
+| Situation                                                         | HTTP status | Error code / behavior                                                                            |
+| ----------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------ |
+| Valid raw or multipart MPEG-1 Layer III                           | 200         | `{"frameCount":32}` (bundled CBR fixture, default policy)                                        |
+| Missing, incomplete or malformed multipart form, or invalid query | 400         | `missing-file`, `invalid-upload`, `invalid-option`                                               |
+| Empty raw or multipart file                                       | 400         | `empty-file`                                                                                     |
+| Invalid HTTP body framing / length                                | 400         | `invalid-request` when the connection remains writable                                           |
+| MP3 file exceeds per-file limit                                   | 413         | `file-too-large`                                                                                 |
+| Extra multipart file / form field / part                          | 413         | `too-many-files`, `unexpected-fields`, or `too-many-parts`, depending on the first limit reached |
+| Other framework size limit                                        | 413         | `request-too-large`                                                                              |
+| Unsupported MIME or MPEG format                                   | 415         | `unsupported-media-type` or `unsupported-format`                                                 |
+| Invalid, malformed, or truncated MP3 content                      | 422         | `invalid-mp3` or `truncated-mp3`                                                                 |
+| Unknown route                                                     | 404         | `not-found`                                                                                      |
+| Wrong method on `/file-upload`                                    | 405         | `method-not-allowed` with `Allow: POST`                                                          |
+| Unexpected application failure                                    | 500         | `internal-error` (sanitized)                                                                     |
 
 All application-generated error bodies use JSON with `error` and `message` strings. Limits apply to both raw and multipart uploads. A malformed MPEG header can be rejected **before** a later size-limit violation is observable; an explicit oversized raw `Content-Length` is rejected early. Thus 413 does not always take precedence over 422 for a malicious stream.
 

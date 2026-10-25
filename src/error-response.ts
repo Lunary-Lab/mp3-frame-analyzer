@@ -51,8 +51,10 @@ const multipartParseErrors = new Set([
  *
  * A ClientError keeps its status, code and message, and an MPEG parse error
  * maps by kind. Framework failures are matched by their typed code first,
- * then by known Busboy messages, then by their HTTP status class, and always
- * get a sanitized message. Everything else is an unexpected internal failure.
+ * then, on a multipart upload, by a form that ended early (a known Busboy
+ * message or a stream that closed before the form ended), then by their HTTP
+ * status class, and always get a sanitized message. Everything else is an
+ * unexpected internal failure.
  */
 export function errorResponseFor(error: unknown, form: UploadForm): ErrorResponse {
   return (
@@ -87,7 +89,11 @@ function fromFrameworkCode(error: unknown, form: UploadForm): ErrorResponse | un
 
 function fromMultipartProtocol(error: unknown, form: UploadForm): ErrorResponse | undefined {
   if (form !== 'multipart' || !(error instanceof Error)) return undefined;
-  if (!multipartParseErrors.has(error.message)) return undefined;
+  // When the end of a cut-off form reaches Busboy in the same burst as the
+  // upload, the upload's reader sees Node's premature-close error first, not a
+  // Busboy message. Client disconnects never get here: the handler drops them.
+  const streamClosedEarly = propertyOf(error, 'code') === 'ERR_STREAM_PREMATURE_CLOSE';
+  if (!streamClosedEarly && !multipartParseErrors.has(error.message)) return undefined;
   return errorResponse(400, 'invalid-upload', 'Invalid or incomplete multipart request');
 }
 

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { MAX_UPLOAD_BYTES } from '../src/upload.js';
-import { frame, multipartBody, synchsafe } from './helpers/mp3-fixtures.js';
+import { frame, mp3, multipartBody, synchsafe } from './helpers/mp3-fixtures.js';
 
 let app: FastifyInstance;
 beforeAll(async () => {
@@ -154,6 +154,37 @@ it('rejects a reserved bitrate index at a required frame boundary', async () => 
     payload,
   });
   expect(result.statusCode).toBe(422);
+});
+
+const cutOffForms = {
+  'inside the upload bytes': (payload: Buffer) =>
+    payload.subarray(0, payload.indexOf('\r\n\r\n') + 50),
+  'after the upload bytes': (payload: Buffer) => payload.subarray(0, payload.lastIndexOf('\r\n--')),
+};
+
+it.each([
+  ...Object.entries(cutOffForms).flatMap(([cut, shorten]) => [
+    [`valid audio cut off ${cut}`, multipartBody(mp3([frame(), frame()])), shorten] as const,
+    [`invalid audio cut off ${cut}`, multipartBody(Buffer.alloc(4096)), shorten] as const,
+  ]),
+  [
+    'a rejected field cut off inside its bytes',
+    multipartBody(frame(), { field: 'other' }),
+    cutOffForms['inside the upload bytes'],
+  ] as const,
+])('rejects %s with 400 however the body arrives', async (_, { contentType, payload }, shorten) => {
+  // Injection delivers the whole cut-off body to Busboy in one burst.
+  const response = await app.inject({
+    method: 'POST',
+    url: '/file-upload',
+    headers: { 'content-type': contentType },
+    payload: shorten(payload),
+  });
+  expect(response.statusCode).toBe(400);
+  expect(response.json()).toEqual({
+    error: 'invalid-upload',
+    message: 'Invalid or incomplete multipart request',
+  });
 });
 
 it('rejects malformed multipart termination gracefully', async () => {

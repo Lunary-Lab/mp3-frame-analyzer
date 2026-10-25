@@ -60,6 +60,18 @@ it.each<[string, unknown, UploadForm, ErrorResponse]>([
     response(400, 'invalid-upload', 'Invalid or incomplete multipart request'),
   ],
   [
+    'a multipart stream that closed before the form ended is 400',
+    failure('Premature close', { code: 'ERR_STREAM_PREMATURE_CLOSE' }),
+    'multipart',
+    response(400, 'invalid-upload', 'Invalid or incomplete multipart request'),
+  ],
+  [
+    'a premature close on a raw upload is not a multipart failure',
+    failure('Premature close', { code: 'ERR_STREAM_PREMATURE_CLOSE' }),
+    'raw',
+    internal,
+  ],
+  [
     'a Busboy message on a raw upload is not a multipart failure',
     new Error('Unexpected end of form'),
     'raw',
