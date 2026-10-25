@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.1.1](https://github.com/Lunary-Lab/mp3-frame-analyzer/compare/v2.1.0...v2.1.1) (2026-10-25)
+## [2.1.1](https://github.com/Lunary-Lab/mp3-frame-analyzer/releases/tag/v2.1.1) (2026-10-25)
 
 
 ### Miscellaneous Chores
