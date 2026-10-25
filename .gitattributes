@@ -1,4 +1,5 @@
-* text=auto
+* text=auto eol=lf
 *.mp3 binary
 *.zip binary
 *.bin binary
+package-lock.json linguist-generated=true
