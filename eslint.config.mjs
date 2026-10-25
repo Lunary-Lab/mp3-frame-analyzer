@@ -10,6 +10,7 @@ export default tseslint.config(
       'coverage/**',
       'node_modules/**',
       '.git/**',
+      '.cache/**',
       'release/**',
       'reports/**',
       '.stryker-tmp/**',

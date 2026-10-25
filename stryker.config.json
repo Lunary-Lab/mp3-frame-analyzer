@@ -1,10 +1,7 @@
 {
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
-  "testRunner": "command",
-  "commandRunner": {
-    "command": "npm run test:mutation:unit"
-  },
-  "coverageAnalysis": "off",
+  "testRunner": "vitest",
+  "coverageAnalysis": "perTest",
   "mutate": ["src/mp3/**/*.ts"],
   "reporters": ["clear-text", "progress", "json"],
   "concurrency": 2,
@@ -15,8 +12,15 @@
     "break": 0
   },
   "tempDirName": ".stryker-tmp",
-  "ignorePatterns": ["reports/**", "coverage/**", "dist/**", ".git/**"],
+  "ignorePatterns": ["reports/**", "coverage/**", "dist/**", ".git/**", ".cache/**"],
   "jsonReporter": {
     "fileName": "reports/mutation/mutation.json"
-  }
+  },
+  "vitest": {
+    "configFile": "vitest.mutation.config.ts",
+    "related": false,
+    "pool": "forks"
+  },
+  "incremental": true,
+  "incrementalFile": ".cache/mutation/working.json"
 }

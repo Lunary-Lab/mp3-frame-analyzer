@@ -149,11 +149,14 @@ At that time, the focused two-decoder mutation score was **98.27%** (164 kills, 
 ## Full-parser mutation analysis
 
 The mutation scope covers all files in `src/mp3/**/*.ts`, including the
-streaming reader, frame traversal and errors. The command runner executes the
-parser test files; the HTTP adapter's tests run separately in the quality gate.
-The mutation gate runs all mutants, preserves the raw report, and fails
+streaming reader, frame traversal and errors. The native Vitest runner uses
+per-test mutation coverage over the same parser test selection. Every invocation
+also runs the normal full Vitest suite and a fresh Stryker coverage dry run.
+The gate audits every mutant, labels any validated result reuse, preserves the
+raw report, and fails
 on every unexplained survivor or stale exact equivalence approval; documentation
-is in [the audit](mutation-review.md).
+is in [the audit](mutation-review.md). See [cache safety](mutation-cache.md) for
+exact invalidation rules, forced-full verification and measured results.
 
 The preceding full campaign on the parser before the queue cursor change
 (October 24, 2026, Stryker 10.1.1,
@@ -162,7 +165,7 @@ It produced **632 kills and 34 timeouts**. The **raw score is 95.97%**. The
 **adjusted score is 100%**, after excluding 28 reviewed equivalents. It ran
 in 5 minutes 41 seconds locally. Running the whole suite per mutant took 14
 minutes 49 seconds locally and exceeded the 20-minute CI wall-clock limit, so
-the mutation command now runs only parser tests with `timeoutMS: 2000` as an
+the mutation command switched to parser tests with `timeoutMS: 2000` as an
 additional timeout allowance. The first run on the combined tree scored 89.77% raw. Its 46
 non-equivalent survivors, in the free-format inference, the Xing/VBRI detector
 and the traversal error messages, were all killed with focused boundary tests

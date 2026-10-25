@@ -6,7 +6,7 @@ import {
   sha256,
   sourceContext,
   PARSER_GLOB,
-  TEST_COMMAND,
+  VITEST_CONFIG,
 } from './mutation-policy.mjs';
 
 function fixture() {
@@ -47,9 +47,17 @@ function fixture() {
     framework: { name: 'StrykerJS', version: '10.1.1' },
     config: {
       mutate: [PARSER_GLOB],
-      testRunner: 'command',
-      commandRunner: { command: TEST_COMMAND },
-      coverageAnalysis: 'off',
+      testRunner: 'vitest',
+      vitest: { configFile: VITEST_CONFIG, related: false, pool: 'forks' },
+      coverageAnalysis: 'perTest',
+      incremental: true,
+      incrementalFile: '.cache/mutation/working.json',
+    },
+    testFiles: {
+      'tests/example.test.ts': {
+        source: 'test',
+        tests: [{ id: 'all', name: 'example', location: { start: { line: 1, column: 1 } } }],
+      },
     },
     files: { 'src/mp3/example.ts': { source, mutants: [killed, survived] } },
   };
@@ -226,8 +234,8 @@ test('does not accept weakened gate settings or broad exclusions', () => {
   g.report.config.mutator = { excludedMutations: ['ConditionalExpression'] };
   assert.throws(() => run(g), /Broad mutation exclusions/);
   const h = fixture();
-  h.report.config.incremental = true;
-  assert.throws(() => run(h), /incremental/);
+  h.report.config.incremental = false;
+  assert.throws(() => run(h), /execution configuration/);
 });
 
 test('rejects stale reports, duplicate mutants, empty inventories and bad coordinates', () => {
@@ -277,4 +285,16 @@ test('never declares vacuous 100% when every mutant is excepted', () => {
     f.survived.duration = 7759;
     assert.throws(() => run(f), /not exactly 100%/);
   }
+});
+
+test('native test locations and killing-test references are mandatory', () => {
+  const f = fixture();
+  delete f.report.testFiles;
+  assert.throws(() => run(f), /test-file reporting/);
+  const g = fixture();
+  delete g.report.testFiles['tests/example.test.ts'].tests[0].location;
+  assert.throws(() => run(g), /test locations/);
+  const h = fixture();
+  h.killed.killedBy = ['invented-test'];
+  assert.throws(() => run(h), /failing-test evidence/);
 });

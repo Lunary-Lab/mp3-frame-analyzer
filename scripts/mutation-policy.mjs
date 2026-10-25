@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 export const PARSER_GLOB = 'src/mp3/**/*.ts';
-export const TEST_COMMAND = 'npm run test:mutation:unit';
+export const VITEST_CONFIG = 'vitest.mutation.config.ts';
 export const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 
 export const sourceContext = (sources) =>
@@ -68,7 +68,8 @@ function exceptionKey(entry) {
 
 /**
  * Audit the unmodified raw report. No source mutation is skipped: exceptions
- * affect only the separately reported adjusted score, after every mutant ran.
+ * affect only the separately reported adjusted score, after every mutant has a validated result. Reused results are identified separately
+ * by the wrapper; a timeout always requires fresh positive duration evidence.
  * `sources` must contain every current runtime TypeScript file under src/mp3.
  */
 export function auditMutations(report, policy, sources) {
@@ -85,11 +86,14 @@ export function auditMutations(report, policy, sources) {
     'Mutation scope must include the entire parser',
   );
   requireThat(
-    config.testRunner === 'command' &&
-      config.commandRunner?.command === TEST_COMMAND &&
-      config.coverageAnalysis === 'off' &&
-      !config.incremental,
-    'Unexpected or incremental mutation execution configuration',
+    config.testRunner === 'vitest' &&
+      config.vitest?.configFile === VITEST_CONFIG &&
+      config.vitest?.related === false &&
+      config.vitest?.pool === 'forks' &&
+      config.coverageAnalysis === 'perTest' &&
+      config.incremental === true &&
+      config.incrementalFile === '.cache/mutation/working.json',
+    'Unexpected mutation execution configuration',
   );
   requireThat(
     !config.mutator?.excludedMutations?.length && !config.ignorers?.length,
@@ -135,6 +139,42 @@ export function auditMutations(report, policy, sources) {
     exceptions.set(key, entry);
   }
 
+  requireThat(
+    report.testFiles && Object.keys(report.testFiles).length > 0,
+    'Missing native test-file reporting',
+  );
+  const testIds = new Set();
+  for (const [file, record] of Object.entries(report.testFiles)) {
+    requireThat(
+      file.startsWith('tests/') &&
+        !file.split('/').includes('..') &&
+        typeof record.source === 'string',
+      'Invalid test-file provenance',
+    );
+    requireThat(
+      Array.isArray(record.tests) && record.tests.length > 0,
+      'Missing native test locations',
+    );
+    for (const test of record.tests) {
+      requireThat(
+        typeof test.id === 'string' && !testIds.has(test.id),
+        'Duplicate or invalid test ID',
+      );
+      requireThat(
+        typeof test.name === 'string' && test.name.length > 0,
+        'Missing native test name',
+      );
+      testIds.add(test.id);
+      requireThat(
+        Number.isInteger(test.location?.start?.line) &&
+          test.location.start.line > 0 &&
+          Number.isInteger(test.location?.start?.column) &&
+          test.location.start.column > 0,
+        'Missing native test locations',
+      );
+    }
+  }
+
   const seen = new Set();
   const mutantIds = new Set();
   const timedOutEquivalents = [];
@@ -177,7 +217,9 @@ export function auditMutations(report, policy, sources) {
         counts.equivalent++;
       } else if (mutant.status === 'Killed') {
         requireThat(
-          mutant.testsCompleted > 0 && mutant.killedBy?.length > 0,
+          mutant.testsCompleted > 0 &&
+            mutant.killedBy?.length > 0 &&
+            mutant.killedBy.every((id) => testIds.has(id)),
           `No failing-test evidence for killed mutant ${mutant.id}`,
         );
         counts.killed++;

@@ -99,7 +99,8 @@ npm run fuzz:extended      # 120 seconds per target, on-demand
 npm run test:memory        # distinct chunks, independent 8/32/128 MiB processes
 npm run test:performance   # two local 32 MiB uploads plus small-upload probes
 npm run bench              # Vitest Bench microbenchmark
-npm run mutation           # Full parser; 100% audited detection
+npm run mutation           # Full parser; reuse validated unaffected mutant kills
+npm run mutation:full      # Force every mutant to execute; 100% adjusted gate
 ```
 
 `tests/` includes deterministic binary fixtures, structured property testing with fast-check, actual FFmpeg-encoded MP3s, HTTP injection tests, and a real TCP upload test. The mutation smoke harness is separate from the **coverage-guided Jazzer.js 4** targets. A raw-byte target detects crashes and chunk-dependent results; an independent structured-frame generator detects incorrect positive counts. Their seeds, regression corpus, minimizer, and limits are documented in [Fuzzing](fuzz/README.md).
@@ -213,4 +214,10 @@ separate fail-closed audit requires **100% detection after narrowly reviewed
 behaviorally equivalent mutations**. Exceptions match source hashes, exact
 expressions, mutation operators and replacements in
 [`mutation-equivalents.json`](mutation-equivalents.json), never whole source
-lines or mutation families. [Audit design](docs/mutation-review.md).
+lines or mutation families. Native Vitest per-test coverage avoids repeatedly running
+unrelated tests. Normal PRs can reuse validated unaffected kills from an authenticated successful
+main baseline; changed/impacted mutants rerun. Missing baselines, global input
+changes or uncertain impact fall back to full; releases and weekly verification
+always run full.
+Fresh and reused results are counted separately. [Audit design](docs/mutation-review.md)
+and [cache safety/verification](docs/mutation-cache.md).

@@ -8,7 +8,9 @@ frame traversal and error class. New files are discovered automatically by
 both Stryker and the auditor. This does not claim 100% mutation testing of the
 HTTP adapter or the entire application.
 
-Every generated mutant is executed. There are **no source-level Stryker ignores,
+Every generated mutant must have an audited result: freshly executed or explicitly
+reused with a validated unaffected killing-test witness from a trusted baseline. Forced-full mode executes all
+mutants. There are **no source-level Stryker ignores,
 no excluded mutator families, and no native ignore plugin**. The raw JSON report
 is preserved unchanged. The adjusted score excludes only exact, reviewed,
 behaviorally equivalent mutants from its population. A reviewed equivalent that
@@ -31,8 +33,12 @@ replacement**. No neighboring mutation is exempted.
 hash** also binds proofs that depend on another module's invariants. Any parser
 change requires re-reviewing those assumptions before updating that hash.
 
-`scripts/run-mutations.mjs` deletes previous reports, runs Stryker, and audits the
-fresh complete report with `scripts/mutation-policy.mjs`. CI fails for:
+`scripts/run-mutations.mjs` deletes previous output reports, runs the normal
+Vitest suite and Stryker, and audits the newly generated complete report with
+`scripts/mutation-policy.mjs`. A new report may include explicitly accounted-for
+validated reused outcomes; it is not represented as all-fresh execution.
+[Cache safety and verification](mutation-cache.md) documents the trust boundary
+and conservative invalidation rules. CI fails for:
 
 - Any unexplained survivor, uncovered mutant, ignored mutant, pending result,
   compile error, runtime error, or failed Stryker process.
@@ -57,9 +63,14 @@ auditor then requires exactly 100%, with no rounding tolerance. CI invokes the
 wrapper, never bare `stryker run`. Running bare Stryker is diagnostic only.
 
 Both reports are uploaded: `reports/mutation/mutation.json` (raw) and
-`reports/mutation/audit.json` (adjusted, with explicit counts and exception IDs).
+`reports/mutation/audit.json` (adjusted, with explicit counts, exception IDs,
+and executed/reused accounting). Test-process logs and input fingerprints are
+uploaded beside them. The unmodified Stryker schema stays at 1.0 and the
+equivalence policy at 1; only the separate audit adds an `execution` object.
 A failed run cannot reuse a stale passing audit. Mutation jobs run for pull
-requests, pushes to `main`, and manual dispatches.
+requests, pushes to `main`, manual dispatches, and a weekly forced-full run.
+Normal PRs can reuse validated unaffected kills from an exact-base trusted-main
+baseline. Releases and weekly verification always execute all mutants.
 
 ## Evidence and compatibility
 
@@ -89,10 +100,10 @@ The wrapper now permits 60 minutes, with a 65-minute CI job limit for setup
 and report upload. These finite whole-run limits are separate from Stryker's
 per-mutant timeout policy.
 
-The command runner uses Vitest's `--bail=1`: one failing test already detects
+The historical command runner used Vitest's `--bail=1`: one failing test already detects
 the active mutant, so remaining tests need not run for that mutant. The
-unmodified baseline and every surviving mutant still run the complete parser
-test selection. Every parser mutant remains in scope, and the 100%
+then-current unmodified baseline and every surviving mutant ran the complete
+parser test selection. The native runner now uses coverage-based test selection. Every parser mutant remains in scope, and the 100%
 adjusted score requirement is unchanged. A fresh CI invocation generates and
 audits its own reports; the historical result below does not substitute for
 that CI run. The original timed-out run is retained in

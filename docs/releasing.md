@@ -101,7 +101,7 @@ npm run package:release
 npm run test:artifact
 ```
 
-`npm run check` produces `dist/`. Packaging reuses it; the artifact test extracts the archive into an isolated temporary directory, installs only locked runtime dependencies, and checks the compiled application. The full reusable CI adds the security, fuzzing, mutation, and performance gates described above.
+`npm run check` produces `dist/`. Packaging reuses it; the artifact test extracts the archive into an isolated temporary directory, installs only locked runtime dependencies, and checks the compiled application. The full reusable CI adds the security, fuzzing, mutation, and performance gates described above. Release mutation validation always forces full execution and never trusts incremental result caches. Use `npm run mutation:full` for the same local guarantee.
 
 ## Release record
 

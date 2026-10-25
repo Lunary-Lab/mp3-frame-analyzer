@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      full_mutation:
+        description: Force a fresh full mutation run (no result reuse)
+        type: boolean
+        default: true
+  schedule:
+    - cron: '23 5 * * 1'
   workflow_call:
     inputs:
       ref:
@@ -54,6 +61,17 @@ jobs:
           fi
           lame --version
       - run: npm run check
+      - name: Exercise real mutation-cache invalidation and survivor detection
+        if: matrix.node == '24'
+        run: npm run test:mutation-cache:integration
+      - name: Upload mutation-cache verification evidence
+        if: always() && matrix.node == '24'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-cache-verification
+          path: reports/mutation-cache-validation/
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Verify release version agreement
         run: npm run verify:version
         env:
@@ -151,6 +169,9 @@ jobs:
 
   mutation:
     name: Full parser mutation gate (100% adjusted)
+    permissions:
+      contents: read
+      actions: read
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 65
@@ -165,7 +186,34 @@ jobs:
           cache: npm
       - run: npm install --global npm@11.19.0 --ignore-scripts --no-audit --no-fund
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: npm run mutation
+      - name: Restore only an authenticated successful exact-base main artifact
+        if: github.event_name != 'schedule' && inputs.ref == '' && inputs.release_tag == '' && inputs.full_mutation != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MUTATION_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+        run: node scripts/restore-mutation-baseline.mjs
+      - name: Audit all parser mutants with explicit fresh/reused accounting
+        env:
+          FORCE_FULL: ${{ github.event_name == 'schedule' || inputs.ref != '' || inputs.release_tag != '' || inputs.full_mutation == true }}
+        run: |
+          if [ "$FORCE_FULL" = true ]; then
+            node scripts/run-mutations.mjs --full
+          else
+            node scripts/run-mutations.mjs
+          fi
+      # A consumer additionally requires the entire producing CI run to have
+      # completed successfully. PR artifacts are never eligible baselines.
+      - name: Publish audited default-branch baseline
+        if: success() && github.ref == 'refs/heads/main' && github.event_name == 'push' && inputs.ref == '' && inputs.release_tag == ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: validated-mutation-baseline
+          path: |
+            .cache/mutation/validated/manifest.json
+            .cache/mutation/validated/report.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
       - name: Upload mutation report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
