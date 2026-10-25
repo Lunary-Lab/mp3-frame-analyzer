@@ -162,7 +162,7 @@ The staged secrets hook needs Betterleaks installed locally; the hook fails clos
 
 [Release Please](https://github.com/googleapis/release-please) derives version bumps and a changelog from **Conventional Commit PR titles**, preserved with **Squash and merge**. `fix:` / `perf:` increment the patch version, `feat:` increments the minor version, and `!` marks a breaking change. Labels do not decide versions. The generated release PR updates the package, lockfile, version manifest, and changelog; a maintainer reviews and merges it to approve a release.
 
-[v1.1.0](https://github.com/Lunary-Lab/mp3-frame-analyzer/releases/tag/v1.1.0) was the first release published through this pipeline; see the [release record](docs/releasing.md#release-record). Release CI validates the exact tagged commit and publishes a runtime archive containing compiled JavaScript, a lockfile for production dependency installation, checksums, release metadata, and a production SBOM. It installs and runs the **unpacked archive** before those same bytes can be attached to the GitHub Release. No npm registry publication or production deployment is configured.
+Release CI validates the exact tagged commit and publishes a runtime archive containing compiled JavaScript, a lockfile for production dependency installation, checksums, release metadata, and a production SBOM. It installs and runs the **unpacked archive** before those same bytes can be attached to the GitHub Release. No npm registry publication or production deployment is configured.
 
 ```bash
 npm run check
@@ -170,7 +170,7 @@ npm run package:release    # packages the existing dist/ build; also creates SBO
 npm run test:artifact      # fresh production install, real upload, graceful shutdown
 ```
 
-See [Releasing and repository settings](docs/releasing.md) for the verified GitHub settings, what the current plan cannot enforce, permissions, artifact verification, provenance availability, and recovery of an interrupted release.
+See [Releasing and repository settings](docs/releasing.md) for the enforced GitHub settings, the release approval, permissions, artifact verification, provenance availability, and recovery of an interrupted release.
 
 ## Authoritative format specifications and AI agent context
 

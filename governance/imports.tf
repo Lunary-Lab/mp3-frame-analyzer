@@ -23,11 +23,6 @@ import {
 }
 
 import {
-  to = github_actions_repository_access_level.analyzer
-  id = local.repository
-}
-
-import {
   to = github_repository_vulnerability_alerts.analyzer
   id = local.repository
 }
