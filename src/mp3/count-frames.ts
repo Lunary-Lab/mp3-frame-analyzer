@@ -2,7 +2,7 @@ import { AsyncByteReader } from './byte-reader.js';
 import { Mp3ParseError } from './errors.js';
 import { parseFrameHeader, looksLikeUnsupportedMpeg, isFreeFormatHeader } from './frame-header.js';
 import type { FrameHeader } from './frame-header.js';
-import { isId3v1Tag, isId3v2Tag, parseId3Header } from './id3.js';
+import { skipLeadingTags, skipTrailingMetadata, startsTrailingMetadata } from './id3.js';
 import { inferFreeFormatBaseLength } from './free-format.js';
 import { isVbrHeaderFrame } from './vbr-header.js';
 
@@ -51,13 +51,7 @@ async function countFrames(
   reader: AsyncByteReader,
   includeVbrHeaderFrame: boolean,
 ): Promise<number> {
-  let tagCount = 0;
-  while ((await reader.has(3)) && isId3v2Tag(reader.peek(3))) {
-    if (++tagCount > 8) {
-      throw new Mp3ParseError('invalid-mp3', reader.offset, 'Too many ID3v2 tags');
-    }
-    await skipId3v2(reader, 'leading');
-  }
+  await skipLeadingTags(reader);
 
   let frames = 0;
   let excludedVbrFrame = 0;
@@ -77,8 +71,8 @@ async function countFrames(
     }
 
     const bytes = reader.peek(4);
-    if (frames > 0 && (isId3v2Tag(bytes) || isId3v1Tag(bytes))) {
-      await skipTrailingTags(reader);
+    if (frames > 0 && startsTrailingMetadata(bytes)) {
+      await skipTrailingMetadata(reader);
       return frames - excludedVbrFrame;
     }
 
@@ -118,59 +112,6 @@ async function countFrames(
     }
     await reader.skipExactly(frameLength);
     frames++;
-  }
-}
-
-async function skipId3v2(
-  reader: AsyncByteReader,
-  placement: 'leading' | 'trailing',
-): Promise<void> {
-  const position = reader.offset;
-  if (!(await reader.has(10))) {
-    throw new Mp3ParseError('truncated-mp3', position, 'Incomplete ID3v2 tag header');
-  }
-  // Keep just the header while streaming past metadata, even for large album art.
-  const header = Uint8Array.from(reader.peek(10));
-  const id3 = parseId3Header(header, position)!;
-  if (placement === 'trailing' && !id3.hasFooter) {
-    throw new Mp3ParseError(
-      'invalid-mp3',
-      position,
-      'Appended ID3v2 tags must use version 2.4 with a footer',
-    );
-  }
-  await reader.skipExactly(10 + id3.bodyLength);
-  if (!id3.hasFooter) return;
-
-  if (!(await reader.has(10))) {
-    throw new Mp3ParseError('truncated-mp3', reader.offset, 'Incomplete ID3v2 footer');
-  }
-  const footer = reader.peek(10);
-  // A footer copies every header byte except its reversed "3DI" signature.
-  if (
-    footer[0] !== 0x33 ||
-    footer[1] !== 0x44 ||
-    footer[2] !== 0x49 ||
-    header.subarray(3).some((byte, index) => footer[index + 3] !== byte)
-  ) {
-    throw new Mp3ParseError('invalid-mp3', reader.offset, 'Invalid ID3v2 footer');
-  }
-  await reader.skipExactly(10);
-}
-
-async function skipTrailingTags(reader: AsyncByteReader): Promise<void> {
-  // ID3v2.4 permits an appended tag before tags from other systems. Once a
-  // trailing tag begins, only one optional final ID3v1 tag may follow it.
-  if (isId3v2Tag(reader.peek(3))) await skipId3v2(reader, 'trailing');
-  if ((await reader.has(3)) && isId3v1Tag(reader.peek(3))) {
-    await reader.skipExactly(128);
-  }
-  if (await reader.has(1)) {
-    throw new Mp3ParseError(
-      'invalid-mp3',
-      reader.offset,
-      'Unexpected bytes after trailing metadata',
-    );
   }
 }
 

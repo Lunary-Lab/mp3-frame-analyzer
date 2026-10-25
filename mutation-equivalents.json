@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "strykerVersion": "10.1.1",
   "target": 100,
-  "contextSha256": "87f99d8d08a80ce52efca21d0491768a3c75ca76db403dec389303542a3fd88a",
+  "contextSha256": "663e5d30dd74c5431fd8651bd98d4ff9eb2cf2d5f1d11a713ccacf8825d73a37",
   "equivalents": [
     {
       "id": "EQ-COPY-OR",
@@ -107,7 +107,7 @@
     {
       "id": "EQ-CLEANUP-INITIAL-FLAG",
       "file": "src/mp3/count-frames.ts",
-      "sourceSha256": "0eda7c00281efda08b597389d8702a55c6229156ae13acf6e8857dd5e8d1e916",
+      "sourceSha256": "11f92479f26b886e1e0ad368f264b9f78adbbf51b464c78214709563fe13181d",
       "mutatorName": "BooleanLiteral",
       "original": "false",
       "replacement": "true",
@@ -127,7 +127,7 @@
     {
       "id": "EQ-CLEANUP-CONDITION",
       "file": "src/mp3/count-frames.ts",
-      "sourceSha256": "0eda7c00281efda08b597389d8702a55c6229156ae13acf6e8857dd5e8d1e916",
+      "sourceSha256": "11f92479f26b886e1e0ad368f264b9f78adbbf51b464c78214709563fe13181d",
       "mutatorName": "ConditionalExpression",
       "original": "failed",
       "replacement": "true",
@@ -147,7 +147,7 @@
     {
       "id": "EQ-CLEANUP-SUCCESS",
       "file": "src/mp3/count-frames.ts",
-      "sourceSha256": "0eda7c00281efda08b597389d8702a55c6229156ae13acf6e8857dd5e8d1e916",
+      "sourceSha256": "11f92479f26b886e1e0ad368f264b9f78adbbf51b464c78214709563fe13181d",
       "mutatorName": "BlockStatement",
       "original": "{\n      await reader.close();\n    }",
       "replacement": "{}",
@@ -162,27 +162,7 @@
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned bytes/count, typed errors, iterator lifecycle and bounded resource ownership; it does not promise identical instruction counts for bounded empty copies. Exact promise-resolution or internal microtask scheduling is not an API guarantee.",
-      "proof": "A successful count returns only after has() observes EOF and proves the remaining byte count is zero, either after the last frame or after ID3v1. skipExactly has consumed and removed every queued chunk. The success-only close call is therefore already a no-op on all externally owned resources. The internal reader is not exposed to callers."
-    },
-    {
-      "id": "EQ-ID3-LEADING-PLACEMENT",
-      "file": "src/mp3/count-frames.ts",
-      "sourceSha256": "0eda7c00281efda08b597389d8702a55c6229156ae13acf6e8857dd5e8d1e916",
-      "mutatorName": "StringLiteral",
-      "original": "'leading'",
-      "replacement": "\"\"",
-      "location": {
-        "end": {
-          "column": 38,
-          "line": 59
-        },
-        "start": {
-          "column": 29,
-          "line": 59
-        }
-      },
-      "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and messages, iterator lifecycle and bounded resource ownership.",
-      "proof": "skipId3v2 uses its placement argument only in placement === 'trailing', which requires an ID3v2.4 footer on appended tags. Every other value, including the empty string, takes the leading-tag path, so passing \"\" instead of 'leading' changes no branch, count or error."
+      "proof": "A successful count returns only after has() observes EOF and proves the remaining byte count is zero, either after the last frame or after skipTrailingMetadata, which rejects any byte left after trailing metadata. skipExactly has consumed and removed every queued chunk. The success-only close call is therefore already a no-op on all externally owned resources. The internal reader is not exposed to callers."
     },
     {
       "id": "EQ-FREE-COMPAT-LENGTH-GUARD",
@@ -305,64 +285,24 @@
       "proof": "Each iteration uses a distinct second and the fixed initialPadding, so base = second - initialPadding differs from every earlier candidate, and the range filter keeps it above the initial bestBase of 0. The comparison is always true wherever it is evaluated."
     },
     {
-      "id": "EQ-ID3V2-LENGTH-GUARD",
-      "file": "src/mp3/id3.ts",
-      "sourceSha256": "6706ce5d95778ed995f781c366bf930f79ae1dc68fc4fa2354141261c1786cf8",
-      "mutatorName": "ConditionalExpression",
-      "original": "bytes.length >= 3",
-      "replacement": "true",
-      "location": {
-        "end": {
-          "column": 27,
-          "line": 10
-        },
-        "start": {
-          "column": 10,
-          "line": 10
-        }
-      },
-      "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and messages, iterator lifecycle and bounded resource ownership.",
-      "proof": "With fewer than three bytes, at least one of bytes[0..2] is out of range and reads as undefined, which is never strictly equal to 0x49, 0x44 or 0x33. The remaining conjunction is therefore false exactly when the length guard would return false."
-    },
-    {
       "id": "EQ-ID3V2-FOOTER-VERSION",
       "file": "src/mp3/id3.ts",
-      "sourceSha256": "6706ce5d95778ed995f781c366bf930f79ae1dc68fc4fa2354141261c1786cf8",
+      "sourceSha256": "4cbddd9022701e5b59f1a2379cb3f9802a364fe15622d53f45498b64c8513b70",
       "mutatorName": "ConditionalExpression",
       "original": "version === 4",
       "replacement": "true",
       "location": {
         "end": {
-          "column": 34,
-          "line": 37
+          "column": 55,
+          "line": 110
         },
         "start": {
-          "column": 21,
-          "line": 37
+          "column": 42,
+          "line": 110
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and messages, iterator lifecycle and bounded resource ownership.",
-      "proof": "parseId3Header throws for versions outside 2..4 and for flags outside the defined set: 0xc0 for ID3v2.2 and 0xe0 for ID3v2.3, both excluding the 0x10 footer flag. Only ID3v2.4 can reach hasFooter with flags & 0x10 set, so dropping the version test cannot change hasFooter or totalLength."
-    },
-    {
-      "id": "EQ-ID3V1-LENGTH-GUARD",
-      "file": "src/mp3/id3.ts",
-      "sourceSha256": "6706ce5d95778ed995f781c366bf930f79ae1dc68fc4fa2354141261c1786cf8",
-      "mutatorName": "ConditionalExpression",
-      "original": "bytes.length >= 3",
-      "replacement": "true",
-      "location": {
-        "end": {
-          "column": 27,
-          "line": 42
-        },
-        "start": {
-          "column": 10,
-          "line": 42
-        }
-      },
-      "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and messages, iterator lifecycle and bounded resource ownership.",
-      "proof": "With fewer than three bytes, at least one of bytes[0..2] is out of range and reads as undefined, which is never strictly equal to 0x54, 0x41 or 0x47. The remaining conjunction is therefore false exactly when the length guard would return false."
+      "proof": "readTagHeader throws for versions outside 2..4 and for flags outside the defined set: 0xc0 for ID3v2.2 and 0xe0 for ID3v2.3, both excluding the 0x10 footer flag. Only ID3v2.4 can reach hasFooter with flags & 0x10 set, so dropping the version test cannot change hasFooter, the bytes skipped or the footer check."
     },
     {
       "id": "EQ-VBR-TEXT-GUARD",

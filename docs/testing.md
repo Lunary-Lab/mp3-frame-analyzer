@@ -199,6 +199,10 @@ population, yielding 672/672 (100%). An equivalent that fails a test still
 requires re-review; incomplete or invalid outcomes still fail. The correction
 requires a fresh passing CI campaign before merge.
 
+The ID3 placement refactor then generated 683 mutants: 627 killed, 27 timed out
+and 29 reviewed equivalents (95.75% raw, 654/654 adjusted), three fewer
+equivalents than before; see the [mutation review](mutation-review.md).
+
 ## Free-format, raw upload and metadata-header policy
 
 The same `POST /file-upload` endpoint accepts raw `audio/mpeg` (also `audio/mp3` and `application/octet-stream`) or single-file multipart bodies. HTTP tests cover both modes, default/optional counting, 413 errors for known-length and chunked streams, and invalid query values. The owner-selected HTTP default and explicit `includeVbrHeaderFrame=false` exclude only a structurally recognized initial Xing/Info or VBRI encoder header; `true` requests physical counting. No arbitrary payload match or declared VBR count changes the answer. The supplied sample's HTTP expectations are 6089 for omitted/`false` and 6090 for `true`; the low-level parser's default remains 6090.

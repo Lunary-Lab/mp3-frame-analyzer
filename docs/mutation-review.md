@@ -118,6 +118,24 @@ entry, parser source, test selection, mutation scope or timeout setting changes
 for this accounting correction. A fresh CI run must still complete and audit
 its own full report before merge.
 
+### ID3 placement refactor
+
+[ADR 0003](adr/0003-the-id3-module-owns-tag-placement.md) moved tag placement
+rules from `count-frames.ts` into `id3.ts`, changing both files and the parser
+context hash. A local campaign on the changed tree generated **683 mutants:
+627 killed, 27 timed out and 29 reviewed equivalents**, for **95.75% raw** and
+**654/654 adjusted**. Three equivalents disappeared with the code that needed
+them: `EQ-ID3-LEADING-PLACEMENT` (placement is no longer a string argument) and
+`EQ-ID3V2-LENGTH-GUARD` / `EQ-ID3V1-LENGTH-GUARD` (the redundant signature
+length guards are gone). `EQ-CLEANUP-INITIAL-FLAG`, `EQ-CLEANUP-CONDITION`,
+`EQ-CLEANUP-SUCCESS` and `EQ-ID3V2-FOOTER-VERSION` were re-reviewed against the
+new source; their reasoning holds, and two proofs now name the new functions.
+The synchsafe-size check became a `findIndex` over the copied header. Its old
+`i < 10` loop bound was killed only by a direct decoder test that passed more
+than ten bytes; through `countMp3Frames` that mutant would have been
+equivalent, so the check now takes its bound from the header bytes instead. The other 25 entries cover
+unchanged files and were reused verbatim.
+
 ### Historical campaign totals
 
 | Module            | Mutants |  Killed | Timed out | Reviewed equivalents |

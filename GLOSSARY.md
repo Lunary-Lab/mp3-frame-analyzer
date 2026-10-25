@@ -19,3 +19,13 @@ _Avoid_: form upload, file part
 **Unread remainder**:
 The part of an upload the service has not read yet when it decides to reject that upload.
 _Avoid_: leftover body, rejected body
+
+## Metadata
+
+**Leading tag**:
+An ID3v2 tag before the first MPEG frame; at most eight may precede the audio.
+_Avoid_: header tag, prefix
+
+**Trailing metadata**:
+The ID3 tags after the last MPEG frame: at most one appended ID3v2.4 tag with a footer, then at most one ID3v1 tag, and nothing after them.
+_Avoid_: trailer, trailing tags

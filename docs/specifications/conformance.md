@@ -46,7 +46,7 @@ Legend: **Required** = assessment's format; **Supported** = implemented structur
 - Header and bitrate: [`src/mp3/frame-header.ts`](../../src/mp3/frame-header.ts)
 - Free-format inference: [`src/mp3/free-format.ts`](../../src/mp3/free-format.ts)
 - Stream traversal: [`src/mp3/count-frames.ts`](../../src/mp3/count-frames.ts)
-- Tag sizes: [`src/mp3/id3.ts`](../../src/mp3/id3.ts)
+- Leading tags and trailing metadata: [`src/mp3/id3.ts`](../../src/mp3/id3.ts)
 - VBR signature detection: [`src/mp3/vbr-header.ts`](../../src/mp3/vbr-header.ts)
 - Bounded buffering: [`src/mp3/byte-reader.ts`](../../src/mp3/byte-reader.ts)
 - Upload policies: [`src/upload.ts`](../../src/upload.ts)

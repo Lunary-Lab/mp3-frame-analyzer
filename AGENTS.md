@@ -32,7 +32,7 @@ Read this file before changing parser, API, fixtures, fuzzers, or counts. This f
 `src/mp3/frame-header.ts`: bitfields and bitrate table.
 `src/mp3/free-format.ts`: bounded free-format discovery.
 `src/mp3/count-frames.ts`: streaming boundaries and count semantics.
-`src/mp3/id3.ts`: tag sizing; `src/mp3/vbr-header.ts`: recognized initial encoder frame.
+`src/mp3/id3.ts`: leading tags and trailing metadata (placement, footers, ID3v1); `src/mp3/vbr-header.ts`: recognized initial encoder frame.
 `src/mp3/byte-reader.ts`: chunk partition independence / bounded memory.
 `src/upload.ts`: raw and multipart upload policies (media types, limits, unread remainder).
 `src/error-response.ts`: maps every failure the route raises to its JSON error response.
