@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 import { parseChecksums, releaseNames, repositoryRoot, sha256 } from './release-utils.mjs';
+import { validateProductionInventory } from './production-sbom.mjs';
 
 const run = promisify(execFile);
 
@@ -20,6 +21,7 @@ test('release packaging works when the checkout directory differs from the packa
       'README.md',
       'docs/runtime.md',
       'scripts/package-release.mjs',
+      'scripts/production-sbom.mjs',
       'scripts/release-utils.mjs',
       'scripts/verify-version.mjs',
     ]) {
@@ -59,6 +61,8 @@ test('release packaging works when the checkout directory differs from the packa
     assert.equal(sbom.metadata.component.version, pkg.version);
     assert.equal(sbom.metadata.component['bom-ref'], pkg.name + '@' + pkg.version);
     assert.equal(sbom.metadata.component.purl, 'pkg:npm/' + pkg.name + '@' + pkg.version);
+    const originalLock = JSON.parse(await readFile(join(root, 'package-lock.json'), 'utf8'));
+    validateProductionInventory(sbom, originalLock);
     const names = releaseNames(pkg.version);
     const output = join(root, 'release');
     const artifacts = [names.archive, names.sbom, names.manifest];
