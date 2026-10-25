@@ -13,55 +13,25 @@ jobs:
   audit:
     name: Main policy audit
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     steps:
-      # The current GitHub plan cannot enforce branch protection on this private
-      # repository. This detects, after the fact, commits that reached main
-      # outside the reviewed squash path. It reads metadata only.
-      - name: Require each pushed commit to be a checked, conventionally titled squash merge
+      # Detective metadata-only control, not branch enforcement. No PR code,
+      # dependencies, lifecycle scripts, write token or approval requirement.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: scripts/main-policy-audit*.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Audit squash checks as they stood before each merge
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           BEFORE_SHA: ${{ github.event.before }}
           AFTER_SHA: ${{ github.event.after }}
           FORCED: ${{ github.event.forced }}
-        run: |
-          node --input-type=module <<'JS'
-          import { execFileSync } from 'node:child_process';
-          const { GH_REPO: repo, BEFORE_SHA: before, AFTER_SHA: after, FORCED: forced } = process.env;
-          const api = (path) => JSON.parse(execFileSync('gh', ['api', path], { encoding: 'utf8' }));
-          const conventional = /^(feat|fix|perf|docs|style|refactor|test|build|ci|chore|revert)(?:\([^\r\n()]+\))?!?: \S[^\r\n]*$/;
-          const requiredChecks = ['All checks', 'Conventional Commit PR title'];
-          const failures = [];
-          if (forced === 'true') failures.push('main was force-pushed; its previous history was rewritten');
-          const commits = /^0+$/.test(before)
-            ? [api(`repos/${repo}/commits/${after}`)]
-            : api(`repos/${repo}/compare/${before}...${after}`).commits;
-          for (const commit of commits) {
-            const { sha } = commit;
-            const subject = commit.commit.message.split('\n', 1)[0];
-            if (commit.parents.length !== 1) failures.push(`${sha} is not a squash commit`);
-            if (!conventional.test(subject)) failures.push(`${sha} subject is not a Conventional Commit: ${subject}`);
-            const pr = api(`repos/${repo}/commits/${sha}/pulls`).find(
-              (candidate) => candidate.merged_at && candidate.merge_commit_sha === sha && candidate.base.ref === 'main',
-            );
-            if (!pr) {
-              failures.push(`${sha} did not arrive through a merged pull request`);
-              continue;
-            }
-            for (const name of requiredChecks) {
-              const query = `check_name=${encodeURIComponent(name)}&filter=latest&per_page=100`;
-              const runs = api(`repos/${repo}/commits/${pr.head.sha}/check-runs?${query}`).check_runs;
-              if (runs.length === 0 || runs.some((run) => run.conclusion !== 'success')) {
-                failures.push(`${sha}: PR #${pr.number} head ${pr.head.sha} lacks a passing "${name}" check`);
-              }
-            }
-            const reviews = api(`repos/${repo}/pulls/${pr.number}/reviews?per_page=100`);
-            if (!reviews.some((review) => review.state === 'APPROVED' && review.user.login !== pr.user.login)) {
-              console.log(`::warning::PR #${pr.number} (${sha}) was merged without an independent approval`);
-            }
-          }
-          for (const failure of failures) console.log(`::error::${failure}`);
-          if (failures.length > 0) process.exit(1);
-          console.log(`Audited ${commits.length} commit(s) pushed to main`);
-          JS
+        run: node scripts/main-policy-audit.mjs
