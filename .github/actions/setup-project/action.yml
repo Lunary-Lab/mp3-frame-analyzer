@@ -1,0 +1,34 @@
+name: Locked Node project setup
+description: Pinned supported Node/npm with lifecycle scripts disabled during installation
+inputs:
+  node:
+    description: Supported Node major
+    default: '24'
+  npm:
+    description: Reviewed npm version
+    default: '11.19.0'
+  install:
+    description: Install the locked project dependencies
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: ${{ inputs.node }}
+        cache: npm
+        check-latest: false
+    - name: Use the reviewed package manager
+      shell: bash
+      env:
+        NPM_CONFIG_UPDATE_NOTIFIER: 'false'
+        NPM_VERSION: ${{ inputs.npm }}
+      run: |
+        case "$NPM_VERSION" in 11.19.0|11.9.0) ;; *) exit 1 ;; esac
+        npm install --global "npm@$NPM_VERSION" --ignore-scripts --no-audit --no-fund
+    - name: Install exact locked dependencies without lifecycle scripts
+      if: inputs.install == 'true'
+      shell: bash
+      env:
+        NPM_CONFIG_UPDATE_NOTIFIER: 'false'
+      run: npm ci --ignore-scripts --no-audit --no-fund

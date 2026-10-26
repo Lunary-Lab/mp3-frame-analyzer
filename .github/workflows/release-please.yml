@@ -62,7 +62,7 @@ jobs:
               throw new Error('Unexpected release PR branch');
             }
             if (!Number.isSafeInteger(pr.number) || pr.number < 1) throw new Error('Invalid release PR number');
-            execFileSync('gh', ['workflow', 'run', 'ci.yml', '--repo', process.env.GH_REPO, '--ref', pr.headBranchName], { stdio: 'inherit' });
+            execFileSync('gh', ['workflow', 'run', 'ci.yml', '--repo', process.env.GH_REPO, '--ref', pr.headBranchName, '-f', 'full_mutation=false'], { stdio: 'inherit' });
             execFileSync('gh', ['workflow', 'run', 'pr-title.yml', '--repo', process.env.GH_REPO, '--ref', pr.headBranchName, '-f', `pr_number=${pr.number}`], { stdio: 'inherit' });
           }
           JS
