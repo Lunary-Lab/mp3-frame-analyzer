@@ -16,7 +16,7 @@ export const FRAMES_PER_SEGMENT = 51;
 export const BYTES_PER_SEGMENT = audio.length;
 export const CHUNK_BYTES = 64 * 1024;
 
-/** Every yielded chunk owns a fresh backing store; no file-sized buffer exists. */
+/** Fresh chunk backing stores avoid a buffer proportional to the repeated stream. */
 export async function* audioChunks(repetitions, observe = () => {}) {
   assert.ok(Number.isSafeInteger(repetitions) && repetitions > 0);
   const length = repetitions * audio.length;

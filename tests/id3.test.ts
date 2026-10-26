@@ -19,7 +19,7 @@ describe('ID3 tag headers', () => {
     await expect(count(mp3([frame()], id3v2(Buffer.alloc(12), 4, true)))).resolves.toBe(1);
   });
 
-  it('reads only the four synchsafe length bytes, never the tag body', async () => {
+  it('decodes the size from four synchsafe header bytes, not from the tag body', async () => {
     const body = Buffer.from([0x80, 0x80, 0xff, 0xfb]);
     await expect(count(mp3([frame()], id3v2(body, 4)), 1)).resolves.toBe(1);
   });

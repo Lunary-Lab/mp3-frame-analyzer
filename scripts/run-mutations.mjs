@@ -60,8 +60,8 @@ function run(cli, args, env, log) {
         }
       } else child.kill('SIGKILL');
     }
-    // Per-mutant timeouts are in stryker.config.json; this bounds the whole run.
-    // CI projected about 45 minutes for the full corpus; retain finite headroom.
+    // Per-mutant timeouts are in stryker.config.json. This one-hour deadline
+    // bounds each child process, including the complete Stryker campaign.
     const onInterrupt = () => stop('SIGINT');
     const onTerminate = () => stop('SIGTERM');
     process.once('SIGINT', onInterrupt);

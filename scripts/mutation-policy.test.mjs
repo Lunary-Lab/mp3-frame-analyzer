@@ -202,7 +202,7 @@ test('new source files and an accidentally narrowed scope fail', () => {
   assert.throws(() => run(h), /No mutants/);
 });
 
-test('stale exceptions cannot survive source, location or toolchain changes', () => {
+test('rejects stale source identity, original expressions, toolchains and mutant inventories', () => {
   const f = fixture();
   f.entry.sourceSha256 = 'f'.repeat(64);
   assert.throws(() => run(f), /Stale source context/);
@@ -258,7 +258,7 @@ test('rejects stale reports, duplicate mutants, empty inventories and bad coordi
   );
 });
 
-test('changing an imported parser module invalidates a dependent equivalence proof', () => {
+test('changing parser source invalidates the aggregate equivalence context', () => {
   const f = fixture();
   f.sources.set(
     'src/mp3/example.ts',

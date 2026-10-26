@@ -17,7 +17,7 @@ export interface ErrorResponse {
 
 /**
  * Match the actual typed Fastify 5 / @fastify/multipart 10.1.6 errors, not just
- * their numeric HTTP status. All four multipart limits use 413, but only one
+ * their numeric HTTP status. These four multipart limit errors use 413, but only one
  * actually means that the uploaded file's bytes exceeded the size limit.
  */
 const frameworkClientErrors = new Map<string, readonly [number, string, string]>([
@@ -90,8 +90,8 @@ function fromFrameworkCode(error: unknown, form: UploadForm): ErrorResponse | un
 function fromMultipartProtocol(error: unknown, form: UploadForm): ErrorResponse | undefined {
   if (form !== 'multipart' || !(error instanceof Error)) return undefined;
   // When the end of a cut-off form reaches Busboy in the same burst as the
-  // upload, the upload's reader sees Node's premature-close error first, not a
-  // Busboy message. Client disconnects never get here: the handler drops them.
+  // upload, its reader can see Node's premature-close error instead of a
+  // Busboy message. The HTTP handler filters aborted or destroyed requests.
   const streamClosedEarly = propertyOf(error, 'code') === 'ERR_STREAM_PREMATURE_CLOSE';
   if (!streamClosedEarly && !multipartParseErrors.has(error.message)) return undefined;
   return errorResponse(400, 'invalid-upload', 'Invalid or incomplete multipart request');

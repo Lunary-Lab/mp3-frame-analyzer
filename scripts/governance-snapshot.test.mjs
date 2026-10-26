@@ -70,6 +70,20 @@ test('snapshot never requests secret-scanning alert payloads', () => {
   );
 });
 
+test('public settings snapshot excludes private Actions access and release inventories', () => {
+  const result = snapshot();
+  const values = settings(result);
+  for (const key of ['actions_access_level', 'releases', 'tags']) {
+    assert.ok(!Object.hasOwn(values, key), `Restored excluded inventory: ${key}`);
+  }
+  const excluded = ['actions/permissions/access', 'releases', 'git/matching-refs/tags/'];
+  assert.ok(
+    result.calls.every((args) =>
+      args.every((arg) => !excluded.some((suffix) => arg.startsWith(`${repository}/${suffix}`))),
+    ),
+  );
+});
+
 test('snapshot combines every array page and preserves unavailable status', () => {
   const endpoint = `${repository}/keys`;
   const first = { title: 'zeta', read_only: true, key: 'omit' };
@@ -190,8 +204,6 @@ test('every public collection is paginated, including native release-policy inve
     ],
     ['hooks', 'webhooks', '.', { name: 'zeta' }, { name: 'alpha' }],
     ['autolinks', 'autolinks', '.', { id: 2 }, { id: 1 }],
-    ['releases?per_page=100', 'releases', '.', { tag_name: 'v2' }, { tag_name: 'v1' }],
-    ['git/matching-refs/tags/', 'tags', '.', { ref: 'refs/tags/v2' }, { ref: 'refs/tags/v1' }],
   ];
   const responses = Object.fromEntries(
     collections.map(([suffix, , key, first, second]) => {
