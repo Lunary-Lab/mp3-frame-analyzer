@@ -15,20 +15,33 @@ on:
 permissions:
   contents: read
 
+env:
+  GH_NO_UPDATE_NOTIFIER: '1'
+  GH_NO_EXTENSION_UPDATE_NOTIFIER: '1'
+  DO_NOT_TRACK: '1'
+  OTEL_SDK_DISABLED: 'true'
+  # Must match the explicitly reviewed sole owner in governance/environment.tf.
+  RELEASE_APPROVER_ID: '98036866'
+
 concurrency:
   group: publish-${{ inputs.tag }}
   cancel-in-progress: false
 
 jobs:
   preflight:
+    if: github.run_attempt == 1
     runs-on: ubuntu-latest
     timeout-minutes: 3
     # Draft releases are only visible to push-capable credentials. This job
     # reads metadata only; no repository code or dependency is checked out.
     permissions:
       contents: write
+      actions: read
     outputs:
       release_id: ${{ steps.check.outputs.release_id }}
+      draft_body_sha256: ${{ steps.check.outputs.draft_body_sha256 }}
+      environment_id: ${{ steps.check.outputs.environment_id }}
+      approver_id: ${{ steps.check.outputs.approver_id }}
     steps:
       - name: Require a draft release of a tagged commit already on main
         id: check
@@ -42,12 +55,37 @@ jobs:
           import assert from 'node:assert/strict';
           import { execFileSync } from 'node:child_process';
           import { appendFileSync } from 'node:fs';
+          import { createHash } from 'node:crypto';
           const { GH_REPO: repo, RELEASE_TAG: tag, RELEASE_SHA: sha } = process.env;
           assert.match(tag, /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
           assert.match(sha, /^[0-9a-f]{40}$/);
           assert.equal(process.env.GITHUB_REF, `refs/tags/${tag}`, 'Dispatch this workflow at the release tag');
           assert.equal(process.env.GITHUB_SHA, sha, 'Invocation must identify the actual build source');
-          const api = (path) => JSON.parse(execFileSync('gh', ['api', path], { encoding: 'utf8' }));
+          assert.equal(process.env.GITHUB_RUN_ATTEMPT, '1', 'Retry by starting a new workflow dispatch');
+          const api = (path) => JSON.parse(execFileSync('gh', ['api', '--method', 'GET', path], { encoding: 'utf8' }));
+          const repository = api(`repos/${repo}`);
+          assert.equal(String(repository.id), process.env.GITHUB_REPOSITORY_ID, 'Repository was replaced');
+          assert.equal(repository.full_name, repo);
+          assert.equal(repository.private, false, 'Native public release protections must be available');
+          const environment = api(`repos/${repo}/environments/release`);
+          assert.equal(environment.name, 'release');
+          assert.ok(Number.isSafeInteger(environment.id) && environment.id > 0);
+          assert.equal(environment.can_admins_bypass, false);
+          assert.deepEqual(environment.deployment_branch_policy, { protected_branches: false, custom_branch_policies: true });
+          const rules = environment.protection_rules.filter((rule) => rule.type === 'required_reviewers');
+          assert.equal(rules.length, 1);
+          assert.equal(rules[0].prevent_self_review, false);
+          assert.equal(rules[0].reviewers.length, 1);
+          const reviewer = rules[0].reviewers[0];
+          assert.equal(reviewer.type, 'User');
+          assert.equal(reviewer.reviewer.type, 'User');
+          assert.equal(String(reviewer.reviewer.id), process.env.RELEASE_APPROVER_ID, 'Only the reviewed owner may approve');
+          const policyPages = JSON.parse(execFileSync('gh', ['api', '--method', 'GET', '--paginate', '--slurp',
+            `repos/${repo}/environments/release/deployment-branch-policies?per_page=100`], { encoding: 'utf8' }));
+          assert.ok(Array.isArray(policyPages) && policyPages.length > 0);
+          assert.ok(policyPages.every((page) => Array.isArray(page.branch_policies)));
+          assert.deepEqual(policyPages.flatMap((page) => page.branch_policies).map(({name, type}) => ({name, type})),
+            [{ name: 'v*', type: 'tag' }]);
           const pages = JSON.parse(execFileSync('gh', ['api', '--paginate', '--slurp', `repos/${repo}/releases?per_page=100`], { encoding: 'utf8' }));
           const release = pages.flat().find((candidate) => candidate.tag_name === tag);
           assert.ok(release, 'The release tag has no draft release');
@@ -56,7 +94,11 @@ jobs:
           const ancestry = api(`repos/${repo}/compare/${sha}...main`);
           assert.ok(['ahead', 'identical'].includes(ancestry.status), 'Release commit is not on main');
           assert.ok(Number.isSafeInteger(release.id) && release.id > 0);
-          appendFileSync(process.env.GITHUB_OUTPUT, `release_id=${release.id}\n`);
+          assert.equal(release.prerelease, false);
+          assert.equal(typeof release.body, 'string');
+          const bodyHash = createHash('sha256').update(release.body.trim()).digest('hex');
+          appendFileSync(process.env.GITHUB_OUTPUT, `release_id=${release.id}\ndraft_body_sha256=${bodyHash}\n` +
+            `environment_id=${environment.id}\napprover_id=${reviewer.reviewer.id}\n`);
           JS
 
   verify:
@@ -69,86 +111,451 @@ jobs:
       ref: ${{ inputs.sha }}
       release_tag: ${{ inputs.tag }}
 
+  notes:
+    needs: preflight
+    uses: ./.github/workflows/release-notes.yml
+    permissions:
+      contents: write # Ceiling only; the generator executes project code read-only.
+      pull-requests: read
+    with:
+      tag: ${{ inputs.tag }}
+      sha: ${{ inputs.sha }}
+
+  candidate:
+    needs: [preflight, verify, notes]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      runtime_id: ${{ steps.bind.outputs.runtime_id }}
+      runtime_digest: ${{ steps.bind.outputs.runtime_digest }}
+      runtime_checksums_sha256: ${{ steps.bind.outputs.runtime_checksums_sha256 }}
+      notes_id: ${{ steps.bind.outputs.notes_id }}
+      notes_digest: ${{ steps.bind.outputs.notes_digest }}
+      notes_body_sha256: ${{ steps.bind.outputs.notes_body_sha256 }}
+      original_notes_sha256: ${{ steps.bind.outputs.original_notes_sha256 }}
+      bundle_id: ${{ steps.bundle.outputs.artifact-id }}
+      bundle_digest: ${{ steps.bundle.outputs.artifact-digest }}
+      bundle_checksums_sha256: ${{ steps.bind.outputs.bundle_checksums_sha256 }}
+    steps:
+      - &authenticate-artifacts
+        name: Authenticate immutable artifact identities before downloading
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_SHA: ${{ inputs.sha }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          DEPENDENCIES: ${{ toJSON(needs) }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          const e = process.env;
+          const api = (path) => JSON.parse(execFileSync('gh', ['api', '--method', 'GET',
+            `repos/${e.GH_REPO}/${path}`], { encoding: 'utf8' }));
+          assert.equal(e.GITHUB_RUN_ATTEMPT, '1', 'Start a new dispatch for a fresh owner decision');
+          assert.equal(e.GITHUB_SHA, e.RELEASE_SHA);
+          assert.equal(e.GITHUB_WORKFLOW_SHA, e.RELEASE_SHA);
+          assert.equal(e.GITHUB_REF, `refs/tags/${e.RELEASE_TAG}`);
+          const run = api(`actions/runs/${e.GITHUB_RUN_ID}`);
+          assert.equal(String(run.id), e.GITHUB_RUN_ID);
+          assert.equal(String(run.run_attempt), e.GITHUB_RUN_ATTEMPT);
+          assert.equal(String(run.repository.id), e.GITHUB_REPOSITORY_ID);
+          assert.equal(String(run.head_repository.id), e.GITHUB_REPOSITORY_ID);
+          assert.equal(run.head_sha, e.RELEASE_SHA);
+          assert.equal(run.event, 'workflow_dispatch');
+          assert.equal(run.path, '.github/workflows/publish-release.yml');
+          const needs = JSON.parse(e.DEPENDENCIES);
+          const candidate = needs.candidate?.outputs;
+          const artifacts = candidate ? [
+            [candidate.bundle_id, candidate.bundle_digest, `release-bundle-${e.RELEASE_TAG}-1`],
+          ] : [
+            [needs.verify.outputs.release_artifact_id, needs.verify.outputs.release_artifact_digest, 'release-assets-1'],
+            [needs.notes.outputs.artifact_id, needs.notes.outputs.artifact_digest, `release-notes-${e.RELEASE_TAG}-1`],
+          ];
+          for (const [id, digest, name] of artifacts) {
+            assert.match(id, /^[1-9]\d*$/);
+            assert.match(digest, /^[a-f0-9]{64}$/);
+            const artifact = api(`actions/artifacts/${id}`);
+            assert.equal(String(artifact.id), id);
+            assert.equal(artifact.name, name);
+            assert.equal(artifact.expired, false);
+            assert.equal(artifact.digest, `sha256:${digest}`);
+            assert.equal(String(artifact.workflow_run.id), e.GITHUB_RUN_ID);
+            assert.equal(String(artifact.workflow_run.repository_id), e.GITHUB_REPOSITORY_ID);
+            assert.equal(String(artifact.workflow_run.head_repository_id), e.GITHUB_REPOSITORY_ID);
+            assert.equal(artifact.workflow_run.head_sha, e.RELEASE_SHA);
+          }
+          JS
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.verify.outputs.release_artifact_id }}
+          path: release
+          merge-multiple: true
+          digest-mismatch: error
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.notes.outputs.artifact_id }}
+          path: notes
+          merge-multiple: true
+          digest-mismatch: error
+      - name: Bind the tested runtime and prepared notes to one reviewable candidate
+        id: bind
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_SHA: ${{ inputs.sha }}
+          RUNTIME_ID: ${{ needs.verify.outputs.release_artifact_id }}
+          RUNTIME_DIGEST: ${{ needs.verify.outputs.release_artifact_digest }}
+          RUNTIME_ATTEMPT: ${{ needs.verify.outputs.release_run_attempt }}
+          NOTES_ID: ${{ needs.notes.outputs.artifact_id }}
+          NOTES_DIGEST: ${{ needs.notes.outputs.artifact_digest }}
+          NOTES_BODY_SHA256: ${{ needs.notes.outputs.body_sha256 }}
+          DRAFT_BODY_SHA256: ${{ needs.preflight.outputs.draft_body_sha256 }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { execFileSync } from 'node:child_process';
+          import { appendFileSync, cpSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+          const e = process.env;
+          const digest = (value) => createHash('sha256').update(value).digest('hex');
+          const api = (path) => JSON.parse(execFileSync('gh', ['api', '--method', 'GET', `repos/${e.GH_REPO}/${path}`], { encoding: 'utf8' }));
+          assert.equal(e.GITHUB_RUN_ATTEMPT, '1', 'Retry with a new workflow dispatch, not a job rerun');
+          assert.equal(e.RUNTIME_ATTEMPT, e.GITHUB_RUN_ATTEMPT);
+          assert.equal(e.GITHUB_SHA, e.RELEASE_SHA);
+          assert.equal(e.GITHUB_REF, `refs/tags/${e.RELEASE_TAG}`);
+          const repository = api('');
+          assert.equal(String(repository.id), e.GITHUB_REPOSITORY_ID);
+          assert.equal(repository.full_name, e.GH_REPO);
+          assert.equal(repository.private, false);
+          for (const [id, expectedDigest, expectedName] of [
+            [e.RUNTIME_ID, e.RUNTIME_DIGEST, `release-assets-${e.GITHUB_RUN_ATTEMPT}`],
+            [e.NOTES_ID, e.NOTES_DIGEST, `release-notes-${e.RELEASE_TAG}-${e.GITHUB_RUN_ATTEMPT}`],
+          ]) {
+            assert.match(id, /^[1-9]\d*$/);
+            assert.match(expectedDigest, /^[a-f0-9]{64}$/);
+            const artifact = api(`actions/artifacts/${id}`);
+            assert.equal(String(artifact.id), id);
+            assert.equal(artifact.name, expectedName);
+            assert.equal(artifact.expired, false);
+            assert.equal(artifact.digest, `sha256:${expectedDigest}`);
+            assert.equal(String(artifact.workflow_run.id), e.GITHUB_RUN_ID);
+            assert.equal(String(artifact.workflow_run.repository_id), e.GITHUB_REPOSITORY_ID);
+            assert.equal(String(artifact.workflow_run.head_repository_id), e.GITHUB_REPOSITORY_ID);
+            assert.equal(artifact.workflow_run.head_sha, e.RELEASE_SHA);
+          }
+          const base = `mp3-frame-analyzer-${e.RELEASE_TAG.slice(1)}`;
+          const files = [`${base}.tar.gz`, `${base}.cdx.json`, `${base}.manifest.json`].sort();
+          assert.deepEqual(readdirSync('release').sort(), [...files, 'SHA256SUMS'].sort());
+          assert.deepEqual(readdirSync('notes').sort(), ['body.md', 'manifest.json']);
+          for (const path of [...files.map((name) => `release/${name}`), 'release/SHA256SUMS', 'notes/body.md', 'notes/manifest.json']) {
+            assert.ok(lstatSync(path).isFile(), 'Only regular artifact files are accepted');
+          }
+          const sums = readFileSync('release/SHA256SUMS', 'utf8');
+          const entries = sums.trim().split('\n').map((line) => {
+            const match = /^([a-f0-9]{64}) {2}([A-Za-z0-9._-]+)$/.exec(line);
+            assert.ok(match && files.includes(match[2]));
+            assert.equal(digest(readFileSync(`release/${match[2]}`)), match[1]);
+            return match[2];
+          });
+          assert.deepEqual(entries.sort(), files);
+          const runtime = JSON.parse(readFileSync(`release/${base}.manifest.json`, 'utf8'));
+          assert.equal(runtime.sourceCommit, e.RELEASE_SHA);
+          assert.equal(runtime.tag, e.RELEASE_TAG);
+          assert.equal(runtime.version, e.RELEASE_TAG.slice(1));
+          const manifest = JSON.parse(readFileSync('notes/manifest.json', 'utf8'));
+          const body = readFileSync('notes/body.md', 'utf8');
+          assert.ok(Buffer.byteLength(body) > 0 && Buffer.byteLength(body) <= 125_000);
+          assert.equal(manifest.schemaVersion, 2);
+          assert.equal(manifest.repository, e.GH_REPO);
+          assert.equal(manifest.repositoryId, e.GITHUB_REPOSITORY_ID);
+          assert.equal(manifest.sha, e.RELEASE_SHA);
+          assert.equal(manifest.tag, e.RELEASE_TAG);
+          assert.equal(manifest.producer.runId, e.GITHUB_RUN_ID);
+          assert.equal(manifest.producer.runAttempt, e.GITHUB_RUN_ATTEMPT);
+          assert.equal(manifest.producer.workflowSha, e.RELEASE_SHA);
+          assert.equal(digest(body), e.NOTES_BODY_SHA256);
+          assert.equal(manifest.bodySha256, e.NOTES_BODY_SHA256);
+          assert.match(manifest.userNotesSha256, /^[a-f0-9]{64}$/);
+          assert.ok([manifest.userNotesSha256, digest(body.trim())].includes(e.DRAFT_BODY_SHA256), 'Draft notes were independently edited');
+          mkdirSync('.release-bundle', { recursive: true });
+          cpSync('release', '.release-bundle/release', { recursive: true });
+          cpSync('notes', '.release-bundle/notes', { recursive: true });
+          const identity = { schemaVersion: 1, repository: e.GH_REPO, repositoryId: e.GITHUB_REPOSITORY_ID,
+            tag: e.RELEASE_TAG, sha: e.RELEASE_SHA, producer: manifest.producer,
+            runtime: { artifactId: e.RUNTIME_ID, artifactDigest: e.RUNTIME_DIGEST },
+            notes: { artifactId: e.NOTES_ID, artifactDigest: e.NOTES_DIGEST, bodySha256: e.NOTES_BODY_SHA256 } };
+          writeFileSync('.release-bundle/release-identity.json', JSON.stringify(identity, null, 2) + '\n');
+          const bundlePaths = [...files.map((name) => `release/${name}`), 'release/SHA256SUMS',
+            'notes/body.md', 'notes/manifest.json', 'release-identity.json'].sort();
+          const bundleSums = bundlePaths.map((path) => `${digest(readFileSync(`.release-bundle/${path}`))}  ${path}\n`).join('');
+          writeFileSync('.release-bundle/BUNDLE-SHA256SUMS', bundleSums);
+          const outputs = {
+            bundle_checksums_sha256: digest(bundleSums),
+            runtime_id: e.RUNTIME_ID, runtime_digest: e.RUNTIME_DIGEST, runtime_checksums_sha256: digest(sums),
+            notes_id: e.NOTES_ID, notes_digest: e.NOTES_DIGEST, notes_body_sha256: e.NOTES_BODY_SHA256,
+            original_notes_sha256: manifest.userNotesSha256,
+          };
+          for (const [key, value] of Object.entries(outputs)) appendFileSync(e.GITHUB_OUTPUT, `${key}=${value}\n`);
+          appendFileSync(e.GITHUB_STEP_SUMMARY,
+            `## Release candidate — awaiting one owner approval\n\nRepository ID: \`${e.GITHUB_REPOSITORY_ID}\`\n\n` +
+            `Tag/source: \`${e.RELEASE_TAG}\` / \`${e.RELEASE_SHA}\`\n\nRun/attempt: \`${e.GITHUB_RUN_ID}/${e.GITHUB_RUN_ATTEMPT}\`\n\n` +
+            `Runtime artifact: \`${e.RUNTIME_ID}\`, digest \`${e.RUNTIME_DIGEST}\`\n\n` +
+            `Notes artifact: \`${e.NOTES_ID}\`, digest \`${e.NOTES_DIGEST}\`\n\nBody SHA-256: \`${e.NOTES_BODY_SHA256}\`\n\n` +
+            `The protected environment approval covers these exact identities and the following text.\n\n---\n\n${body}`);
+          JS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: bundle
+        with:
+          name: release-bundle-${{ inputs.tag }}-${{ github.run_attempt }}
+          path: .release-bundle/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+      - name: Identify the sealed candidate
+        env:
+          BUNDLE_ID: ${{ steps.bundle.outputs.artifact-id }}
+          BUNDLE_DIGEST: ${{ steps.bundle.outputs.artifact-digest }}
+        run: echo "Sealed bundle artifact ID $BUNDLE_ID, SHA-256 $BUNDLE_DIGEST" >> "$GITHUB_STEP_SUMMARY"
+
   provenance:
-    needs: verify
-    if: github.event.repository.private == false || vars.ENABLE_ARTIFACT_ATTESTATIONS == 'true'
+    needs: candidate
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
       id-token: write
       attestations: write
+      actions: read
     steps:
+      - *authenticate-artifacts
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release-assets
-          path: release
-      - name: Verify downloaded bytes
-        working-directory: release
-        run: sha256sum --check SHA256SUMS
-      # Without SBOM or predicate inputs, actions/attest emits SLSA build provenance.
-      - name: Attest the tested runtime archive, production SBOM, and manifest
+          artifact-ids: ${{ needs.candidate.outputs.bundle_id }}
+          path: .release-bundle
+          digest-mismatch: error
+      - name: Verify every sealed byte before attestation
+        working-directory: .release-bundle
+        env:
+          EXPECTED_SUMS: ${{ needs.candidate.outputs.bundle_checksums_sha256 }}
+        run: |
+          test "$(sha256sum BUNDLE-SHA256SUMS | cut -d ' ' -f1)" = "$EXPECTED_SUMS"
+          sha256sum --check BUNDLE-SHA256SUMS
+      - name: Attest runtime, SBOM, checksums, both note views and source-artifact ledger
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-checksums: release/SHA256SUMS
+          subject-path: .release-bundle/**/*
 
   publish:
-    needs: [preflight, verify, provenance]
-    if: always() && needs.preflight.result == 'success' && needs.verify.result == 'success' && (needs.provenance.result == 'success' || needs.provenance.result == 'skipped')
+    needs: [preflight, candidate, provenance]
+    if: always() && github.run_attempt == 1 && needs.preflight.result == 'success' && needs.candidate.result == 'success' && needs.provenance.result == 'success'
     runs-on: ubuntu-latest
     # The one human approval: the release environment admits only v* tags and
     # waits for the release approver after the tag is tested and attested.
-    environment: release
+    environment:
+      name: release
+      url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
     timeout-minutes: 5
     concurrency:
       group: release-publication-${{ github.repository }}
       cancel-in-progress: false
     permissions:
       contents: write
+      actions: read
     steps:
-      # Download the exact tested bytes. Do not rebuild in this privileged job.
+      - *authenticate-artifacts
+      # The approved, attested candidate is downloaded by its immutable ID.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release-assets
-          path: release
-      - name: Verify checksums before attaching assets
-        working-directory: release
-        run: sha256sum --check SHA256SUMS
+          artifact-ids: ${{ needs.candidate.outputs.bundle_id }}
+          path: .release-bundle
+          digest-mismatch: error
       - name: Attach artifacts and publish the draft
+        working-directory: .release-bundle
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.tag }}
           RELEASE_SHA: ${{ inputs.sha }}
           DRAFT_RELEASE_ID: ${{ needs.preflight.outputs.release_id }}
+          ENVIRONMENT_ID: ${{ needs.preflight.outputs.environment_id }}
+          APPROVER_ID: ${{ needs.preflight.outputs.approver_id }}
+          RUNTIME_ID: ${{ needs.candidate.outputs.runtime_id }}
+          RUNTIME_DIGEST: ${{ needs.candidate.outputs.runtime_digest }}
+          RUNTIME_CHECKSUMS_SHA256: ${{ needs.candidate.outputs.runtime_checksums_sha256 }}
+          NOTES_ID: ${{ needs.candidate.outputs.notes_id }}
+          NOTES_DIGEST: ${{ needs.candidate.outputs.notes_digest }}
+          NOTES_BODY_SHA256: ${{ needs.candidate.outputs.notes_body_sha256 }}
+          ORIGINAL_NOTES_SHA256: ${{ needs.candidate.outputs.original_notes_sha256 }}
+          BUNDLE_CHECKSUMS_SHA256: ${{ needs.candidate.outputs.bundle_checksums_sha256 }}
         run: |
           node --input-type=module <<'JS'
           import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
           import { execFileSync } from 'node:child_process';
-          import { readdirSync } from 'node:fs';
-          const { GH_REPO: repo, RELEASE_TAG: tag, RELEASE_SHA: sha, DRAFT_RELEASE_ID: id } = process.env;
-          assert.match(tag, /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
-          assert.match(id, /^[1-9]\d*$/);
-          const api = (path) => JSON.parse(execFileSync('gh', ['api', path], { encoding: 'utf8' }));
-          const release = api(`repos/${repo}/releases/${id}`);
-          assert.equal(release.tag_name, tag);
-          assert.equal(release.draft, true);
-          assert.equal(api(`repos/${repo}/commits/${tag}`).sha, sha);
-          const files = readdirSync('release').map((file) => `release/${file}`);
-          // Replacing assets is only allowed while the release is still a draft,
-          // so a failed upload can be retried. Published versions are never overwritten.
-          execFileSync('gh', ['release', 'upload', tag, ...files, '--repo', repo, '--clobber'], { stdio: 'inherit' });
-          // Retrying an older draft must not move "latest" backwards. Serialize
-          // publication and compare all published stable tags at the final step.
-          const pages = JSON.parse(execFileSync('gh', ['api', '--paginate', '--slurp', `repos/${repo}/releases?per_page=100`], { encoding: 'utf8' }));
-          const target = tag.slice(1).split('.').map(BigInt);
-          const newer = pages.flat().some((candidate) => {
-            if (candidate.draft || candidate.prerelease || !/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(candidate.tag_name)) return false;
-            const parts = candidate.tag_name.slice(1).split('.').map(BigInt);
-            for (let i = 0; i < 3; i++) {
-              if (parts[i] !== target[i]) return parts[i] > target[i];
-            }
+          import { copyFileSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
+          const e = process.env;
+          const digest = (value) => createHash('sha256').update(value).digest('hex');
+          const api = (path) => JSON.parse(execFileSync('gh', ['api', '--method', 'GET', `repos/${e.GH_REPO}/${path}`], { encoding: 'utf8' }));
+          const pages = (path) => {
+            const result = JSON.parse(execFileSync('gh', ['api', '--method', 'GET', '--paginate', '--slurp', `repos/${e.GH_REPO}/${path}`], { encoding: 'utf8' }));
+            assert.ok(Array.isArray(result) && result.length > 0 && result.every(Array.isArray));
+            return result.flat();
+          };
+          assert.equal(e.GITHUB_RUN_ATTEMPT, '1', 'Retry with a new workflow dispatch so approval cannot be reused');
+          assert.match(e.RELEASE_TAG, /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+          assert.match(e.RELEASE_SHA, /^[a-f0-9]{40}$/);
+          assert.match(e.DRAFT_RELEASE_ID, /^[1-9]\d*$/);
+          assert.equal(e.GITHUB_SHA, e.RELEASE_SHA);
+          assert.equal(e.GITHUB_REF, `refs/tags/${e.RELEASE_TAG}`);
+          const repository = api('');
+          assert.equal(String(repository.id), e.GITHUB_REPOSITORY_ID);
+          assert.equal(repository.full_name, e.GH_REPO);
+          assert.equal(repository.private, false);
+          function requireOwnerApproval() {
+            const environment = api('environments/release');
+            assert.equal(String(environment.id), e.ENVIRONMENT_ID);
+            assert.equal(environment.can_admins_bypass, false);
+            assert.deepEqual(environment.deployment_branch_policy, { protected_branches: false, custom_branch_policies: true });
+            const rules = environment.protection_rules.filter((rule) => rule.type === 'required_reviewers');
+            assert.equal(rules.length, 1);
+            assert.equal(rules[0].prevent_self_review, false);
+            assert.equal(rules[0].reviewers.length, 1);
+            assert.equal(rules[0].reviewers[0].type, 'User');
+            assert.equal(rules[0].reviewers[0].reviewer.type, 'User');
+            assert.equal(String(rules[0].reviewers[0].reviewer.id), e.APPROVER_ID);
+            assert.equal(e.APPROVER_ID, e.RELEASE_APPROVER_ID, 'Only the reviewed owner may approve');
+            const policyPages = JSON.parse(execFileSync('gh', ['api', '--method', 'GET', '--paginate', '--slurp',
+              `repos/${e.GH_REPO}/environments/release/deployment-branch-policies?per_page=100`], { encoding: 'utf8' }));
+            assert.ok(Array.isArray(policyPages) && policyPages.length > 0);
+            assert.ok(policyPages.every((page) => Array.isArray(page.branch_policies)));
+            assert.deepEqual(policyPages.flatMap((page) => page.branch_policies).map(({name, type}) => ({name, type})),
+              [{ name: 'v*', type: 'tag' }]);
+            const reviews = api(`actions/runs/${e.GITHUB_RUN_ID}/approvals`);
+            assert.ok(Array.isArray(reviews));
+            const approvals = reviews.filter((review) => review.environments.some((item) => String(item.id) === e.ENVIRONMENT_ID));
+            assert.equal(approvals.length, 1, 'Exactly one native environment decision is required for this run');
+            assert.equal(approvals[0].state, 'approved');
+            assert.equal(approvals[0].user.type, 'User');
+            assert.equal(String(approvals[0].user.id), e.APPROVER_ID, 'Only the configured owner may approve');
+          }
+          requireOwnerApproval();
+          for (const [id, expectedDigest, expectedName] of [
+            [e.RUNTIME_ID, e.RUNTIME_DIGEST, `release-assets-${e.GITHUB_RUN_ATTEMPT}`],
+            [e.NOTES_ID, e.NOTES_DIGEST, `release-notes-${e.RELEASE_TAG}-${e.GITHUB_RUN_ATTEMPT}`],
+          ]) {
+            assert.match(id, /^[1-9]\d*$/);
+            assert.match(expectedDigest, /^[a-f0-9]{64}$/);
+            const artifact = api(`actions/artifacts/${id}`);
+            assert.equal(String(artifact.id), id);
+            assert.equal(artifact.name, expectedName);
+            assert.equal(artifact.expired, false);
+            assert.equal(artifact.digest, `sha256:${expectedDigest}`);
+            assert.equal(String(artifact.workflow_run.id), e.GITHUB_RUN_ID);
+            assert.equal(String(artifact.workflow_run.repository_id), e.GITHUB_REPOSITORY_ID);
+            assert.equal(String(artifact.workflow_run.head_repository_id), e.GITHUB_REPOSITORY_ID);
+            assert.equal(artifact.workflow_run.head_sha, e.RELEASE_SHA);
+          }
+          const base = `mp3-frame-analyzer-${e.RELEASE_TAG.slice(1)}`;
+          const files = [`${base}.tar.gz`, `${base}.cdx.json`, `${base}.manifest.json`].sort();
+          assert.deepEqual(readdirSync('release').sort(), [...files, 'SHA256SUMS'].sort());
+          assert.deepEqual(readdirSync('notes').sort(), ['body.md', 'manifest.json']);
+          for (const path of [...files.map((name) => `release/${name}`), 'release/SHA256SUMS', 'notes/body.md', 'notes/manifest.json']) {
+            assert.ok(lstatSync(path).isFile());
+          }
+          const sums = readFileSync('release/SHA256SUMS', 'utf8');
+          assert.equal(digest(sums), e.RUNTIME_CHECKSUMS_SHA256);
+          const expected = new Map([['SHA256SUMS', digest(sums)]]);
+          for (const line of sums.trim().split('\n')) {
+            const match = /^([a-f0-9]{64}) {2}([A-Za-z0-9._-]+)$/.exec(line);
+            assert.ok(match && files.includes(match[2]) && !expected.has(match[2]));
+            assert.equal(digest(readFileSync(`release/${match[2]}`)), match[1]);
+            expected.set(match[2], match[1]);
+          }
+          assert.equal(expected.size, 4);
+          const runtime = JSON.parse(readFileSync(`release/${base}.manifest.json`, 'utf8'));
+          assert.equal(runtime.sourceCommit, e.RELEASE_SHA);
+          assert.equal(runtime.tag, e.RELEASE_TAG);
+          assert.equal(runtime.version, e.RELEASE_TAG.slice(1));
+          const manifest = JSON.parse(readFileSync('notes/manifest.json', 'utf8'));
+          const body = readFileSync('notes/body.md', 'utf8');
+          assert.ok(Buffer.byteLength(body) > 0 && Buffer.byteLength(body) <= 125_000);
+          assert.equal(manifest.schemaVersion, 2);
+          assert.equal(manifest.repository, e.GH_REPO);
+          assert.equal(manifest.repositoryId, e.GITHUB_REPOSITORY_ID);
+          assert.equal(manifest.sha, e.RELEASE_SHA);
+          assert.equal(manifest.tag, e.RELEASE_TAG);
+          assert.equal(manifest.producer.runId, e.GITHUB_RUN_ID);
+          assert.equal(manifest.producer.runAttempt, e.GITHUB_RUN_ATTEMPT);
+          assert.equal(manifest.producer.workflowSha, e.RELEASE_SHA);
+          assert.equal(manifest.userNotesSha256, e.ORIGINAL_NOTES_SHA256);
+          assert.equal(digest(body), e.NOTES_BODY_SHA256);
+          assert.equal(manifest.bodySha256, e.NOTES_BODY_SHA256);
+          const identity = JSON.parse(readFileSync('release-identity.json', 'utf8'));
+          assert.deepEqual(identity, { schemaVersion: 1, repository: e.GH_REPO, repositoryId: e.GITHUB_REPOSITORY_ID,
+            tag: e.RELEASE_TAG, sha: e.RELEASE_SHA, producer: manifest.producer,
+            runtime: { artifactId: e.RUNTIME_ID, artifactDigest: e.RUNTIME_DIGEST },
+            notes: { artifactId: e.NOTES_ID, artifactDigest: e.NOTES_DIGEST, bodySha256: e.NOTES_BODY_SHA256 } });
+          const bundleSums = readFileSync('BUNDLE-SHA256SUMS', 'utf8');
+          assert.equal(digest(bundleSums), e.BUNDLE_CHECKSUMS_SHA256);
+          const bundlePaths = [...files.map((name) => `release/${name}`), 'release/SHA256SUMS',
+            'notes/body.md', 'notes/manifest.json', 'release-identity.json'].sort();
+          assert.equal(bundleSums, bundlePaths.map((path) => `${digest(readFileSync(path))}  ${path}\n`).join(''));
+          assert.deepEqual(readdirSync('.').sort(), ['BUNDLE-SHA256SUMS', 'notes', 'release', 'release-identity.json']);
+          const extraAssets = new Map([
+            ['release-notes.md', 'notes/body.md'], ['release-notes.manifest.json', 'notes/manifest.json'],
+            ['release-identity.json', 'release-identity.json'], ['BUNDLE-SHA256SUMS', 'BUNDLE-SHA256SUMS'],
+          ]);
+          for (const [name, path] of extraAssets) expected.set(name, digest(readFileSync(path)));
+          function requireDraft() {
+            const release = api(`releases/${e.DRAFT_RELEASE_ID}`);
+            assert.equal(String(release.id), e.DRAFT_RELEASE_ID);
+            assert.equal(release.tag_name, e.RELEASE_TAG);
+            assert.equal(release.draft, true);
+            assert.equal(release.prerelease, false);
+            assert.equal(typeof release.body, 'string');
+            assert.ok([e.ORIGINAL_NOTES_SHA256, digest(body.trim())].includes(digest(release.body.trim())), 'Draft text changed outside this candidate');
+            assert.equal(api(`commits/${e.RELEASE_TAG}`).sha, e.RELEASE_SHA);
+          }
+          requireDraft();
+          assert.ok(pages(`releases/${e.DRAFT_RELEASE_ID}/assets?per_page=100`).every((asset) => expected.has(asset.name)), 'Unapproved draft asset');
+          for (const [name, path] of extraAssets) if (name !== path) copyFileSync(path, name);
+          const paths = [...expected.keys()].map((name) => extraAssets.has(name) ? name : `release/${name}`);
+          execFileSync('gh', ['release', 'upload', e.RELEASE_TAG, ...paths, '--repo', e.GH_REPO, '--clobber'], { stdio: 'inherit' });
+          const uploaded = pages(`releases/${e.DRAFT_RELEASE_ID}/assets?per_page=100`);
+          assert.deepEqual(uploaded.map((asset) => asset.name).sort(), [...expected.keys()].sort());
+          for (const asset of uploaded) {
+            assert.equal(asset.state, 'uploaded');
+            assert.equal(asset.digest, `sha256:${expected.get(asset.name)}`);
+          }
+          requireDraft();
+          const target = e.RELEASE_TAG.slice(1).split('.').map(BigInt);
+          const newer = pages('releases?per_page=100').some((release) => {
+            if (release.draft || release.prerelease || !/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(release.tag_name)) return false;
+            const parts = release.tag_name.slice(1).split('.').map(BigInt);
+            for (let i = 0; i < 3; i++) if (parts[i] !== target[i]) return parts[i] > target[i];
             return false;
           });
-          execFileSync('gh', ['release', 'edit', tag, '--repo', repo, '--draft=false', `--latest=${!newer}`], { stdio: 'inherit' });
+          requireOwnerApproval();
+          requireDraft();
+          // This is the sole public-release transition, after native owner approval.
+          execFileSync('gh', ['release', 'edit', e.RELEASE_TAG, '--repo', e.GH_REPO,
+            '--notes-file', 'notes/body.md', '--draft=false', `--latest=${!newer}`], { stdio: 'inherit' });
+          const published = api(`releases/${e.DRAFT_RELEASE_ID}`);
+          assert.equal(String(published.id), e.DRAFT_RELEASE_ID);
+          assert.equal(published.tag_name, e.RELEASE_TAG);
+          assert.equal(published.draft, false, 'Final publication was not confirmed');
+          assert.equal(published.prerelease, false);
+          assert.equal(published.body, body, 'Published text differs from the approved candidate');
+          assert.equal(api(`commits/${e.RELEASE_TAG}`).sha, e.RELEASE_SHA);
+          const finalAssets = pages(`releases/${e.DRAFT_RELEASE_ID}/assets?per_page=100`);
+          assert.deepEqual(finalAssets.map((asset) => asset.name).sort(), [...expected.keys()].sort());
+          for (const asset of finalAssets) {
+            assert.equal(asset.state, 'uploaded');
+            assert.equal(asset.digest, `sha256:${expected.get(asset.name)}`);
+          }
           JS

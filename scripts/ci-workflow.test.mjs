@@ -228,6 +228,28 @@ test('existing scans, production-only archive smoke and release dispatch remain 
   assert.match(release, /'ci\.yml'[^\n]+ '-f', 'full_mutation=false'/);
 });
 
+test('reusable release outputs bind the verified upload and its exact workflow attempt', () => {
+  for (const name of ['release_artifact_id', 'release_artifact_digest', 'release_run_attempt'])
+    assert.ok(ci.includes(`value: \${{ jobs.package.outputs.${name} }}`));
+  const packaging = job('package');
+  assert.match(
+    packaging,
+    /release_artifact_id: \$\{\{ steps\.release-assets\.outputs\.artifact-id \}\}/,
+  );
+  assert.match(
+    packaging,
+    /release_artifact_digest: \$\{\{ steps\.release-assets\.outputs\.artifact-digest \}\}/,
+  );
+  assert.match(packaging, /release_run_attempt: \$\{\{ github\.run_attempt \}\}/);
+  assert.match(packaging, /id: release-assets\n/);
+  assert.match(packaging, /name: release-assets-\$\{\{ github\.run_attempt \}\}/);
+  assert.ok(packaging.indexOf('npm run test:artifact') < packaging.indexOf('id: release-assets'));
+  assert.doesNotMatch(
+    packaging.slice(packaging.indexOf('id: release-assets')),
+    /npm run (build|package:release)/,
+  );
+});
+
 test('native scanner and setup commands retain pinned versions and explicit reporting controls', async () => {
   const setup = await readFile(
     new URL('../.github/actions/setup-project/action.yml', import.meta.url),

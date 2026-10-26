@@ -30,6 +30,12 @@ on:
 permissions:
   contents: read
 
+env:
+  GH_NO_UPDATE_NOTIFIER: '1'
+  GH_NO_EXTENSION_UPDATE_NOTIFIER: '1'
+  DO_NOT_TRACK: '1'
+  OTEL_SDK_DISABLED: 'true'
+
 jobs:
   plan:
     runs-on: ubuntu-latest
@@ -41,6 +47,8 @@ jobs:
       previous_tag: ${{ steps.plan.outputs.previous_tag }}
       previous_sha: ${{ steps.plan.outputs.previous_sha }}
       initial_release: ${{ steps.plan.outputs.initial_release }}
+      artifact_id: ${{ steps.plan-artifact.outputs.artifact-id }}
+      artifact_digest: ${{ steps.plan-artifact.outputs.artifact-digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -58,6 +66,7 @@ jobs:
           RELEASE_SHA: ${{ inputs.sha }}
         run: node scripts/release-notes.mjs plan
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: plan-artifact
         with:
           name: release-notes-input-${{ inputs.tag }}-${{ github.run_attempt }}
           path: .release-notes-input/plan.json
@@ -66,6 +75,9 @@ jobs:
           retention-days: 14
 
   native:
+    outputs:
+      artifact_id: ${{ steps.native-artifact.outputs.artifact-id }}
+      artifact_digest: ${{ steps.native-artifact.outputs.artifact-digest }}
     needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 3
@@ -134,6 +146,7 @@ jobs:
           writeFileSync('.release-notes-native/native.json', JSON.stringify(result));
           JS
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: native-artifact
         with:
           name: release-notes-native-${{ inputs.tag }}-${{ github.run_attempt }}
           path: .release-notes-native/native.json
@@ -147,6 +160,7 @@ jobs:
     timeout-minutes: 3
     permissions:
       contents: read
+      actions: read
     outputs:
       artifact_id: ${{ steps.artifact.outputs.artifact-id }}
       artifact_digest: ${{ steps.artifact.outputs.artifact-digest }}
@@ -159,13 +173,25 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
+      - name: Authenticate plan and native response by immutable artifact identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          PLAN_ID: ${{ needs.plan.outputs.artifact_id }}
+          PLAN_DIGEST: ${{ needs.plan.outputs.artifact_digest }}
+          NATIVE_ID: ${{ needs.native.outputs.artifact_id }}
+          NATIVE_DIGEST: ${{ needs.native.outputs.artifact_digest }}
+        run: node scripts/release-notes-artifacts.mjs
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release-notes-input-${{ inputs.tag }}-${{ github.run_attempt }}
+          artifact-ids: ${{ needs.plan.outputs.artifact_id }}
+          digest-mismatch: error
           path: .release-notes-input
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release-notes-native-${{ inputs.tag }}-${{ github.run_attempt }}
+          artifact-ids: ${{ needs.native.outputs.artifact_id }}
+          digest-mismatch: error
           path: .release-notes-native
       - name: Preserve user notes and verify complete engineering coverage
         id: compose
