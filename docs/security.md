@@ -101,6 +101,33 @@ never replace a failed digest with the observed bytes merely to make CI pass.
 Hash identity does not establish package benignness, CVE safety, or an immutable
 hosted runner/Node/tar. See [npm registry signatures](https://docs.npmjs.com/about-registry-signatures/).
 
+## Semgrep installation integrity
+
+The Semgrep CE install uses the complete reviewed version/SHA-256 wheel lock in
+`.github/security/semgrep-requirements.txt`: 66 scanner and transitive
+distributions for CPython 3.12 on Linux x86_64. Other interpreter/platform targets
+fail explicitly; this is not a universal lock. Native
+[pip hash-checking mode](https://pip.pypa.io/en/stable/topics/secure-installs/)
+checks every archive before installation. Binary-only downloads from PyPI are
+followed by a hash-required offline install and `pip check`; source builds and
+their separately resolved build dependencies are not allowed. Python isolated
+mode, pip isolated mode and `PIP_CONFIG_FILE=/dev/null` prevent accidental local
+configuration or environment overrides. The scan still uses only repository
+rules, with optional metrics, version checks and tracing disabled.
+
+`scripts/test-semgrep-lock.py` exercises native pip against the downloaded
+wheels without network access. It checks the complete graph and rejects wrong or
+missing hashes, a modified wheel, an omitted or newly introduced transitive
+dependency, and a source-only package without executing its build backend.
+
+To update, resolve the complete wheel graph for the same target, review package
+versions and official PyPI metadata against the actual wheel SHA-256s, update the
+whole lock, then repeat the native install, failure controls and scanner checks.
+Do not replace a failed hash with the newly observed value merely to pass CI.
+Hashes prevent substitution relative to reviewed bytes, not malicious upstream
+code. The hosted runner, Python and pip remain trusted platform infrastructure,
+not immutable dependencies covered by this wheel lock.
+
 ## Build dependencies and release credentials
 
 `@stryker-mutator/core@10.1.1` depends on `typed-rest-client@2.3.1`, which pins a vulnerable `qs@6.15.1`. The package override is scoped to **that parent's `qs` dependency**, selecting patched `6.16.1`; it does not force a major update of the parent client. Full mutation testing verifies the resulting toolchain. Remove the override when a compatible upstream Stryker dependency chain includes the fix ([stryker-js#6177](https://github.com/stryker-mutator/stryker-js/pull/6177)), then regenerate the lockfile and rerun mutation and audit checks. A tooling test fails when the locked parent stops pinning the vulnerable version, so the override cannot silently outlive its purpose.
@@ -127,7 +154,7 @@ Raw MP3 content types are passed directly as Node streams by Fastify, not buffer
 
 When an incomplete multipart ending is the observed failure, it maps to HTTP 400 `invalid-upload`. Known Busboy premature-ending messages and Node's `ERR_STREAM_PREMATURE_CLOSE` from the multipart reader receive that classification. If MPEG validation has already rejected the file, its response is not replaced by a later error while draining the remainder: for example, an early invalid MPEG header can produce 422 before the missing multipart ending arrives. The single-burst cutoff cases in `tests/security.test.ts` cover the 400 path; `tests/http.e2e.test.ts` covers an early 422 followed by an unterminated form during draining. These cases do not establish one status for every arrival order. A client disconnect may leave no writable response.
 
-An empty named file is HTTP 400 `empty-file`; a nonempty but malformed MPEG file remains HTTP 422. Unsupported MIME types are 415 whether rejected by the upload module or before the handler by Fastify. The API explicitly returns HTTP 405 with `Allow: POST` for other methods on `/file-upload`; unknown routes return JSON 404. Application-generated errors never include parser internals beyond the existing typed MPEG error messages.
+An empty named file is HTTP 400 `empty-file`; a nonempty but malformed MPEG file remains HTTP 422. For `POST /file-upload`, unsupported MIME types are 415 whether rejected by the upload module or before the handler by Fastify. The API explicitly returns HTTP 405 with `Allow: POST` for other methods on `/file-upload`; unknown routes return JSON 404. Application-generated errors never include parser internals beyond the existing typed MPEG error messages. Unknown routes and unsupported methods close after their existing JSON 404/405 response when a framed request body is still incomplete, rather than draining outside the upload limits. Requests without a body and already completed bodies retain keep-alive reuse. This does not bound all TCP connections or eliminate transport read-ahead; deployment ingress protections remain necessary.
 
 Early rejection of **raw** uploads closes the HTTP/1.1 connection after responding rather than consuming an unbounded remainder. This prevents attackers from using an invalid first header to force a background drain. A raw request that was cancelled at the TCP layer may be impossible to answer; these are not silently converted into HTTP 500. Multipart early rejection permits pipelining and connection reuse only when the entire body finishes within the separate aggregate body budget and transport timeouts. The per-file limit alone does not bound discarded bytes.
 
