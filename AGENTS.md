@@ -45,6 +45,16 @@ Read this file before changing parser, API, fixtures, fuzzers, or counts. This f
 
 Domain terms live in [`GLOSSARY.md`](GLOSSARY.md); architecture decisions live in [`docs/adr/`](docs/adr/).
 
-Add focused tests in `tests/` and independent generated encoder fixtures; expand `fuzz/` oracles when widening format acceptance. Run `npm run check`, `npm run fuzz:regression`, `npm run mutation` and relevant memory/HTTP benchmarks. Do not use FFprobe/MediaInfo decoded counts as an oracle for physical counts without reconciling the leading metadata frame.
+## Local preparation and required hosted verification
+
+Add focused tests in `tests/` and independent generated encoder fixtures; expand `fuzz/` oracles when widening format acceptance. Run `npm run check` and focused checks for the changed behavior locally. Run `npm run fuzz:regression` for parser, fixture, fuzz or runtime changes; run relevant memory/HTTP benchmarks when streaming, resource use, request handling or performance can change. Non-parser HTTP/runtime changes still need their focused tests, fuzz replay and relevant benchmarks; they are not documentation-only changes.
+
+Run a full native local `npm run mutation:full` for changes to parser source, parser test selection/fixtures/oracles, mutation runner/configuration, source-bound equivalence proofs, or cache validation/provenance/trust boundaries. Uncertain impact on those boundaries requires the full local campaign or explicit owner review, not an assumed exemption.
+
+For changes limited to documentation, independent scanners, tool acquisition/pinning without changing parser runtime behavior, or other non-parser tooling, focused local checks plus the required hosted exact-head PR checks are sufficient. A second local full parser campaign is not required solely because the local environment lacks an authenticated baseline. Record what actually ran and which hosted checks remain pending; do not report a deferred campaign as passed or reuse another head's CI success. Coordinate expensive campaigns rather than running multiple candidates concurrently.
+
+This distinction changes local preparation only. It does not change mutation scope or score, coverage, input invalidation, baseline authentication, or mandatory PR merge/release gates. The required hosted parser mutation job still validates the tested PR head and may correctly require full execution for tooling/dependency changes classified as global inputs. Never fabricate a baseline, transplant another candidate's results, narrow test selection, suppress a required check, or change cache classifications to save time. See [mutation-cache safety](docs/mutation-cache.md) and [hosted CI](docs/testing.md).
+
+Do not use FFprobe/MediaInfo decoded counts as an oracle for physical counts without reconciling the leading metadata frame.
 
 For standards changes, update the source registry and conformance matrix in the **same PR**. Prefer primary references linked in the registry; do not paste proprietary ISO text into the repository.
