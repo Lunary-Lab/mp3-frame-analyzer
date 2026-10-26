@@ -12,6 +12,7 @@ export default defineConfig({
       include: [
         'src/mp3/**/*.ts',
         'src/app.ts',
+        'src/logging.ts',
         'src/upload.ts',
         'src/error-response.ts',
         'src/client-error.ts',

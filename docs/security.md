@@ -11,7 +11,7 @@ Controls:
 - An already observed multipart file-size truncation is reported as HTTP 413 rather than a parser error caused by the truncated bytes. This does not give a future limit violation precedence over an earlier MPEG error. Rejected MIME/field-name uploads are consumed without buffering to avoid stalling multipart parsing.
 - Early MIME filtering followed by actual MPEG header validation. Filename is never used as a path.
 - Bounded lookahead, integer-safe offsets, per-frame range validation, deterministic termination and strict EOF handling.
-- Structured typed parser failures; generic JSON for unexpected exceptions. No upload contents or secrets are logged.
+- Structured typed parser failures; generic JSON for unexpected exceptions. Application logs use an explicit field and message allowlist; see the logging boundary below.
 - Listener binds only to `127.0.0.1` by default. Configurable bind address for intentional external deployment.
 - No spawning external binaries, decoding audio, disk writes, database, shell, or credentials.
 - CI audits both the production tree and the complete development/build tree, failing on moderate-or-higher advisories. A weekly workflow repeats these audits. It also runs full-Git-history Betterleaks secret scanning, maintained `eslint-plugin-security` rules in `src/`, and local Semgrep architecture rules prohibiting dynamic code and process execution. JavaScript build, fuzz, and benchmark tools are covered by ordinary ESLint rules.
@@ -29,6 +29,33 @@ The static checks complement behavioral tests; they do not establish comprehensi
 When the parser, or any other consumer, rejects a multipart upload before it ends, the error responds immediately and the remaining file bytes are read and discarded in the background. Abandoning the unfinished multipart stream would leave the request body unread, wedging that connection until the request timeout and preventing graceful shutdown. Early raw-upload errors instead close the connection after the response, as described below.
 
 The runtime observes shutdown failures and allows up to 10 seconds for requests and close hooks to drain. A failed close or expired deadline is logged and ends the process with a failure status. Connection-level failures and aborted requests cannot always receive JSON.
+
+## Application logging boundary
+
+`src/logging.ts` limits application logs to server-generated request correlation IDs,
+status codes, elapsed time, process metadata and static event messages. Request
+objects are empty and error objects contain only fixed placeholders: raw paths,
+queries, Host/other request headers, filenames, audio/tag bytes, and arbitrary
+error messages, names, codes, stacks and causes are not emitted. Unknown framework
+messages become `Application event`; startup retains a readiness message without
+the bind address. The application never accepts a caller's request-ID header as
+its log correlation ID. The policy applies whenever logging is enabled, not only
+when `NODE_ENV=production`.
+
+`tests/logging.test.ts` enables the real production logger and exercises synthetic
+payload/tag/filename/header/query sentinels through successful raw/multipart
+uploads, rejected options, method/route errors and unexpected failures. It also
+checks that generated IDs, HTTP status/duration and safe lifecycle/error categories
+remain observable. Detailed exception traces are deliberately unavailable in
+these logs; investigate with synthetic inputs rather than enabling payload logging.
+
+This boundary does not configure ingress/access logs, host or crash diagnostics,
+log collectors, retention, access control, tamper protection, authenticated actor
+identity, or review/alerting. Operators must verify those separately before
+processing sensitive audio. The local assessment API is not an ePHI deployment,
+and these safeguards do not establish HIPAA compliance. No uploaded audio is
+written to a temporary file by this application; host swap, core dumps and proxy
+buffering remain deployment concerns, and garbage collection is not secure erasure.
 
 ## Build dependencies and release credentials
 
