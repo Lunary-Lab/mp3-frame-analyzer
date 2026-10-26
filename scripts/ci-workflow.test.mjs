@@ -20,6 +20,7 @@ const required = [
   'mutation',
   'encoder',
   'npm-audit',
+  'guarddog',
   'secrets',
   'semgrep',
   'fuzz',
@@ -270,7 +271,8 @@ test('modularization retains the existing external action pins and read-only tok
   ]);
   assert.match(ci, /^permissions:\n {2}contents: read\n/m);
   assert.match(job('mutation'), /permissions:\n {6}contents: read\n {6}actions: read\n/);
-  assert.equal([...ci.matchAll(/permissions:/g)].length, 2);
+  assert.match(job('guarddog'), /permissions:\n {6}contents: read\n/);
+  assert.equal([...ci.matchAll(/permissions:/g)].length, 3);
   assert.doesNotMatch(ci, /secrets\.|: write\b|persist-credentials: true/);
 });
 

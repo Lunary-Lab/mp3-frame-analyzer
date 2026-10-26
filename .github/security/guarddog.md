@@ -1,0 +1,11 @@
+# GuardDog hosted-runner admission
+
+This draft initially proves **only the native sandbox prerequisite**, not a dependency scan. A successful prerequisite is not a clean package result. No existing WHOIS/capability exceptions have been imported.
+
+- GuardDog 3.2.0 and nono-py 0.16.0 have a complete hash-required, binary-wheel-only CPython 3.12 Linux x86-64 lock. The scanner is installed into a fresh virtual environment; no source distributions or package lifecycle scripts run.
+- The Ubuntu 24.04 hosted job has only `contents: read`, checkout does not persist credentials, and the probe gets an explicit clean environment. It first calls the native `nono_py.is_supported()` before importing GuardDog (whose initializer can refresh popularity data).
+- The actual kernel sandbox must allow an authorized synthetic file operation while denying a forbidden read/write and connection to a proven-live loopback listener. Time, memory, files and process counts are bounded. Unsupported capability fails closed; no `--no-sandbox`, fallback, or waiver exists.
+- Bootstrap necessarily contacts PyPI (`pypi.org`, wheel delivery `files.pythonhosted.org`) with scanner dependency names/versions. `pip --isolated --disable-pip-version-check --no-cache-dir` disables optional version requests and ambient pip config. GitHub provides runner/action/checkout infrastructure. No application source, npm metadata, secrets or findings are uploaded to a scanner service; public Actions logs are not private.
+- The prerequisite reads no project dependency archive and makes no GuardDog metadata/WHOIS/popularity requests. Full exact-lock archive scanning and findings review remain pending. Native `guarddog npm verify` re-resolves `package.json` selectors and is not claimed as complete lock-v3 coverage.
+
+Official sources verified 2026-10-26: [GuardDog 3.2.0](https://github.com/DataDog/guarddog/releases/tag/v3.2.0), [native sandbox](https://github.com/DataDog/guarddog/blob/v3.2.0/guarddog/sandbox.py), [npm project resolver](https://github.com/DataDog/guarddog/blob/v3.2.0/guarddog/scanners/npm_project_scanner.py). Review owner: repository maintainer. Revisit this admission-only status before merging; it is not the requested final malicious-dependency gate.

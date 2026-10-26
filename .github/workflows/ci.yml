@@ -266,6 +266,27 @@ jobs:
         if: matrix.scope == 'full'
         run: npm run audit:dependencies
 
+  guarddog:
+    name: GuardDog native sandbox prerequisite (not a dependency scan)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - name: Install the complete hash-locked scanner wheel graph without build scripts
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/guarddog-venv"
+          "${RUNNER_TEMP}/guarddog-venv/bin/python" -m pip --isolated --disable-pip-version-check install --no-cache-dir --require-hashes --only-binary=:all: --index-url https://pypi.org/simple -r .github/security/guarddog-requirements.txt
+          "${RUNNER_TEMP}/guarddog-venv/bin/python" -m pip --isolated --disable-pip-version-check check
+      - name: Require actual kernel support and synthetic filesystem/network denials
+        run: |
+          mkdir -p "${RUNNER_TEMP}/guarddog-home"
+          env -i PATH=/usr/bin:/bin HOME="${RUNNER_TEMP}/guarddog-home" LANG=C.UTF-8 timeout --kill-after=5s 90s "${RUNNER_TEMP}/guarddog-venv/bin/python" -I -B scripts/guarddog-prerequisite.py
+
   secrets:
     name: Secrets (complete Git history)
     runs-on: ubuntu-24.04
@@ -385,6 +406,7 @@ jobs:
         mutation,
         encoder,
         npm-audit,
+        guarddog,
         secrets,
         semgrep,
         fuzz,
@@ -402,7 +424,7 @@ jobs:
           import assert from 'node:assert/strict';
           const expected = [
             'format', 'lint', 'types', 'unit', 'compatibility', 'tooling', 'mutation-cache',
-            'mutation', 'encoder', 'npm-audit', 'secrets', 'semgrep', 'fuzz', 'package', 'governance',
+            'mutation', 'encoder', 'npm-audit', 'guarddog', 'secrets', 'semgrep', 'fuzz', 'package', 'governance',
           ];
           const jobs = JSON.parse(process.env.RESULTS);
           assert.ok(jobs && typeof jobs === 'object' && !Array.isArray(jobs), 'Missing job evidence');
