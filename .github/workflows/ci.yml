@@ -267,9 +267,9 @@ jobs:
         run: npm run audit:dependencies
 
   guarddog:
-    name: GuardDog native sandbox prerequisite (not a dependency scan)
+    name: GuardDog exact-lock investigation (coverage unresolved)
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:
@@ -286,6 +286,9 @@ jobs:
         run: |
           mkdir -p "${RUNNER_TEMP}/guarddog-home"
           env -i PATH=/usr/bin:/bin HOME="${RUNNER_TEMP}/guarddog-home" LANG=C.UTF-8 timeout --kill-after=5s 90s "${RUNNER_TEMP}/guarddog-venv/bin/python" -I -B scripts/guarddog-prerequisite.py
+      - name: Analyze exact SRI-verified archives inside the native network-blocked sandbox
+        run: |
+          env -i PATH=/usr/bin:/bin HOME="${RUNNER_TEMP}/guarddog-home" LANG=C.UTF-8 timeout --kill-after=10s 2400s "${RUNNER_TEMP}/guarddog-venv/bin/python" -I -B scripts/guarddog-gate.py
 
   secrets:
     name: Secrets (complete Git history)
