@@ -3,6 +3,7 @@ import type { Readable } from 'node:stream';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import multipart, { type MultipartFile } from '@fastify/multipart';
 import { ClientError } from './client-error.js';
+import { createUploadWork, type UploadWork } from './upload-work.js';
 import { stopAfterResponse, withMultipartBudget } from './multipart-budget.js';
 
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -57,6 +58,11 @@ export interface Uploads {
    * this cannot cancel arbitrary detached work inside a custom consumer.
    */
   consume<T>(request: FastifyRequest, reply: FastifyReply, consumer: UploadConsumer<T>): Promise<T>;
+  /**
+   * After consume settles, observe remaining multipart parsing/draining work.
+   * This does not wait for a raw consumer or replace the primary HTTP result.
+   */
+  waitForIdle(request: FastifyRequest): Promise<void>;
 }
 
 /** Register both upload forms with a shared file cap and a multipart body cap. */
@@ -94,11 +100,13 @@ export async function registerUploads(
     isPartAFile: (_fieldName, contentType, fileName) =>
       fileName !== undefined || isAcceptedMediaType(contentType ?? ''),
   });
+  const work = createUploadWork();
   return {
+    waitForIdle: (request) => work.waitForIdle(request),
     consume: (request, reply, consumer) =>
       uploadFormOf(request) === 'multipart'
         ? withMultipartBudget(request, reply, maxMultipartBytes, () =>
-            consumeMultipartUpload(request, reply, consumer),
+            work.track(request, consumeMultipartUpload(request, reply, consumer, work)),
           )
         : consumeRawUpload(request, reply, maxUploadBytes, consumer),
   };
@@ -137,6 +145,7 @@ async function consumeMultipartUpload<T>(
   request: FastifyRequest,
   reply: FastifyReply,
   consumer: UploadConsumer<T>,
+  work: UploadWork,
 ): Promise<T> {
   let consumed: { readonly result: T } | undefined;
   for await (const part of multipartParts(request, reply)) {
@@ -153,7 +162,7 @@ async function consumeMultipartUpload<T>(
       await discardPart(part.file);
       throw new ClientError(415, 'unsupported-media-type', 'Expected an MP3 file');
     }
-    consumed = { result: await consumeMultipartStream(request, part.file, consumer) };
+    consumed = { result: await consumeMultipartStream(request, part.file, consumer, work) };
   }
   if (consumed === undefined) {
     throw new ClientError(400, 'missing-file', 'A multipart field named "file" is required');
@@ -177,6 +186,7 @@ async function consumeMultipartStream<T>(
   request: FastifyRequest,
   stream: MultipartFile['file'],
   consumer: UploadConsumer<T>,
+  work: UploadWork,
 ): Promise<T> {
   try {
     // Destroying an unfinished Busboy stream stalls the request body, so a
@@ -191,7 +201,7 @@ async function consumeMultipartStream<T>(
   } catch (error) {
     // A stream truncated at the multipart limit is a transport error, not
     // whatever the consumer made of the bytes it received.
-    drainUnreadRemainder(stream);
+    drainUnreadRemainder(request, stream, work);
     if (!stream.truncated) throw error;
   }
   throw fileTooLarge();
@@ -220,9 +230,9 @@ async function discardPart(stream: Readable): Promise<void> {
  * aggregate budget remains active; reuse requires completion within that cap
  * and the transport timeouts.
  */
-function drainUnreadRemainder(stream: Readable): void {
+function drainUnreadRemainder(request: FastifyRequest, stream: Readable, work: UploadWork): void {
   // A malformed or interrupted remainder cannot change the response already sent.
-  discardPart(stream).catch(() => {});
+  void work.track(request, discardPart(stream)).catch(() => {});
 }
 
 /**

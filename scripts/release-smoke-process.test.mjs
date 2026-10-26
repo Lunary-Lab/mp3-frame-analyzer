@@ -105,7 +105,7 @@ http.createServer((request, reply) => {
   });
 }
 
-for (const name of ['MAX_UPLOAD_BYTES', 'MAX_MULTIPART_BYTES']) {
+for (const name of ['MAX_UPLOAD_BYTES', 'MAX_MULTIPART_BYTES', 'MAX_ACTIVE_UPLOADS']) {
   test(`packaged smoke ignores ${name} deployment overrides`, async () => {
     const previous = process.env[name];
     process.env[name] = 'invalid-inherited-setting';

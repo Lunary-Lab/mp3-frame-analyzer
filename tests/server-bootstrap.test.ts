@@ -18,7 +18,13 @@ const originalExitCode = process.exitCode;
 beforeEach(() => {
   vi.resetModules();
   vi.resetAllMocks();
-  for (const name of ['PORT', 'HOST', 'MAX_UPLOAD_BYTES', 'MAX_MULTIPART_BYTES']) {
+  for (const name of [
+    'PORT',
+    'HOST',
+    'MAX_UPLOAD_BYTES',
+    'MAX_MULTIPART_BYTES',
+    'MAX_ACTIVE_UPLOADS',
+  ]) {
     vi.stubEnv(name, undefined);
   }
   dependencies.buildApp.mockResolvedValue(app);
@@ -45,6 +51,7 @@ it('uses the documented bind and upload defaults when environment values are abs
   expect(dependencies.buildApp).toHaveBeenCalledExactlyOnceWith({
     maxUploadBytes: 50 * 1024 * 1024,
     maxMultipartBytes: 50 * 1024 * 1024 + 65536,
+    maxActiveUploads: 8,
   });
   expect(dependencies.listen).toHaveBeenCalledExactlyOnceWith({ host: '127.0.0.1', port: 3000 });
   expect(dependencies.close).not.toHaveBeenCalled();
@@ -57,10 +64,12 @@ it.each(['1', '65535'])(
     vi.stubEnv('HOST', '::1');
     vi.stubEnv('MAX_UPLOAD_BYTES', '1024');
     vi.stubEnv('MAX_MULTIPART_BYTES', '512');
+    vi.stubEnv('MAX_ACTIVE_UPLOADS', '2');
     await import('../src/server.js');
     expect(dependencies.buildApp).toHaveBeenCalledExactlyOnceWith({
       maxUploadBytes: 1024,
       maxMultipartBytes: 512,
+      maxActiveUploads: 2,
     });
     expect(dependencies.listen).toHaveBeenCalledExactlyOnceWith({
       host: '::1',

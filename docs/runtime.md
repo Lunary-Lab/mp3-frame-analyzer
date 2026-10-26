@@ -27,7 +27,7 @@ uses the default. Empty values, whitespace, signs, fractions, exponents, units,
 and unsafe integers fail startup before listening. There is no unlimited mode.
 The limit includes file bytes, not multipart envelope overhead, and applies
 also to raw requests without `Content-Length`. Increasing it does not increase
-request timeouts or add a concurrency limit.
+request timeouts or the separately configured upload-admission limit.
 
 `MAX_MULTIPART_BYTES` separately caps the aggregate multipart body, including its
 envelope, preamble, epilogue and discarded bytes. It defaults to the configured
@@ -40,6 +40,17 @@ The counter measures transfer-decoded HTTP body bytes, not HTTP framing, arbitra
 Content-Encoding decompression or a strict network-byte cap. Transport read-ahead
 and the crossing chunk can exceed the configured value; ingress limits are still
 needed for public deployments.
+
+`MAX_ACTIVE_UPLOADS` limits simultaneously accepted uploads in this server
+instance; default **8**, allowed decimal integers **1–1024**, leading zeros
+allowed. Invalid or empty values fail before listening; there is no unlimited
+mode. Requests over the cap receive JSON
+`{"error":"server-busy","message":"Upload capacity is temporarily exhausted"}`,
+HTTP **503**, `Retry-After: 1`, and `Connection: close`, without an application
+queue or draining the rejected body. Slots include lingering multipart cleanup,
+not just requests awaiting their response. A higher setting requires measuring
+your own memory and latency budgets. This is not a fleet-wide or per-user quota,
+nor a limit on all TCP connections; ingress protections remain necessary.
 
 From another terminal, upload a MPEG-1 Layer III file:
 

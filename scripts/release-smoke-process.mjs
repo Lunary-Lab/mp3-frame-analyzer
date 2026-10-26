@@ -54,6 +54,7 @@ export async function launchRuntime(runtime) {
   // Verify documented defaults, not the caller's deployment limits.
   delete env.MAX_UPLOAD_BYTES;
   delete env.MAX_MULTIPART_BYTES;
+  delete env.MAX_ACTIVE_UPLOADS;
   const child = spawn(process.execPath, ['dist/server.js'], {
     cwd: runtime,
     env,

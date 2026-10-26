@@ -1,3 +1,4 @@
+import { createUploadAdmission, DEFAULT_MAX_ACTIVE_UPLOADS } from './upload-admission.js';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { countMp3Frames } from './mp3/count-frames.js';
 import { ClientError } from './client-error.js';
@@ -36,6 +37,23 @@ const errorSchema = {
   },
 } as const;
 
+const uploadSchema = {
+  response: {
+    200: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['frameCount'],
+      properties: { frameCount: { type: 'integer', minimum: 0 } },
+    },
+    400: errorSchema,
+    413: errorSchema,
+    415: errorSchema,
+    422: errorSchema,
+    500: errorSchema,
+    503: errorSchema,
+  },
+};
+
 function createHttpApp(): FastifyInstance {
   const app = Fastify({
     logger: process.env['NODE_ENV'] === 'test' ? false : loggerOptions,
@@ -51,33 +69,28 @@ function createHttpApp(): FastifyInstance {
 export async function buildApp({
   maxUploadBytes = MAX_UPLOAD_BYTES,
   maxMultipartBytes = defaultMaxMultipartBytes(maxUploadBytes),
-}: { maxUploadBytes?: number; maxMultipartBytes?: number } = {}): Promise<FastifyInstance> {
+  maxActiveUploads = DEFAULT_MAX_ACTIVE_UPLOADS,
+}: {
+  maxUploadBytes?: number;
+  maxMultipartBytes?: number;
+  maxActiveUploads?: number;
+} = {}): Promise<FastifyInstance> {
   const app = createHttpApp();
   const uploads = await registerUploads(app, { maxUploadBytes, maxMultipartBytes });
+  const admission = createUploadAdmission(app, uploads, maxActiveUploads);
 
   app.post(
     '/file-upload',
     {
-      schema: {
-        response: {
-          200: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['frameCount'],
-            properties: { frameCount: { type: 'integer', minimum: 0 } },
-          },
-          400: errorSchema,
-          413: errorSchema,
-          415: errorSchema,
-          422: errorSchema,
-          500: errorSchema,
-        },
-      },
+      onRequest: admission.onRequest,
+      schema: uploadSchema,
     },
     async (request, reply) => {
       const include = includeVbrHeaderFrame(request.query);
-      const frameCount = await uploads.consume(request, reply, (upload) =>
-        countMp3Frames(upload, { includeVbrHeaderFrame: include }),
+      const frameCount = await admission.run(request, () =>
+        uploads.consume(request, reply, (upload) =>
+          countMp3Frames(upload, { includeVbrHeaderFrame: include }),
+        ),
       );
       return { frameCount };
     },
