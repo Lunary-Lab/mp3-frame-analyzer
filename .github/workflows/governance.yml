@@ -40,7 +40,7 @@ jobs:
           echo "$RUNNER_TEMP/terraform" >> "$GITHUB_PATH"
       - run: terraform fmt -check -recursive -diff
       # The provider is verified against the committed lock file. No GitHub
-      # credential is available here: tests use a mocked provider.
+      # credential is passed to Terraform; tests use a mocked provider.
       - run: terraform init -backend=false -input=false -lockfile=readonly
       - run: terraform validate
       - name: Test policy and the required-check contract against fixtures

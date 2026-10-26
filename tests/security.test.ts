@@ -37,7 +37,7 @@ it('rejects a multipart file larger than the configured limit with HTTP 413', as
   }
 });
 
-it('rejects invalid upload limits rather than running with an unbounded buffer', async () => {
+it('rejects invalid upload limits rather than allowing an unbounded upload', async () => {
   await expect(buildApp({ maxUploadBytes: 0 })).rejects.toThrow(RangeError);
   expect(MAX_UPLOAD_BYTES).toBe(50 * 1024 * 1024);
 });
@@ -144,7 +144,7 @@ it('does not trust the file extension or the client-provided MIME alone', async 
   expect(result.statusCode).toBe(422);
 });
 
-it('rejects a reserved bitrate index at a required frame boundary', async () => {
+it('rejects a forbidden bitrate index at a required frame boundary', async () => {
   const malformed = Buffer.concat([frame(), Buffer.from([0xff, 0xfb, 0xf0, 0x00])]);
   const { payload, contentType } = multipartBody(malformed);
   const result = await app.inject({
@@ -172,20 +172,23 @@ it.each([
     multipartBody(frame(), { field: 'other' }),
     cutOffForms['inside the upload bytes'],
   ] as const,
-])('rejects %s with 400 however the body arrives', async (_, { contentType, payload }, shorten) => {
-  // Injection delivers the whole cut-off body to Busboy in one burst.
-  const response = await app.inject({
-    method: 'POST',
-    url: '/file-upload',
-    headers: { 'content-type': contentType },
-    payload: shorten(payload),
-  });
-  expect(response.statusCode).toBe(400);
-  expect(response.json()).toEqual({
-    error: 'invalid-upload',
-    message: 'Invalid or incomplete multipart request',
-  });
-});
+])(
+  'rejects %s with 400 when the cut-off body is injected in one burst',
+  async (_, { contentType, payload }, shorten) => {
+    // Injection delivers the whole cut-off body to Busboy in one burst.
+    const response = await app.inject({
+      method: 'POST',
+      url: '/file-upload',
+      headers: { 'content-type': contentType },
+      payload: shorten(payload),
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: 'invalid-upload',
+      message: 'Invalid or incomplete multipart request',
+    });
+  },
+);
 
 it('rejects malformed multipart termination gracefully', async () => {
   const response = await app.inject({
