@@ -15,10 +15,16 @@ import stat
 import sys
 import tarfile
 
+DIAGNOSTIC = {"stage": "startup"}
+
+
+class PolicyError(ValueError):
+    pass
+
 
 def require(condition, message):
     if not condition:
-        raise ValueError(message)
+        raise PolicyError(message)
 
 
 def check_archive(archive, package):
@@ -32,6 +38,7 @@ def check_archive(archive, package):
             require(member.name not in seen, "Duplicate archive entry")
             seen.add(member.name)
             parts = member.name.rstrip("/").split("/")
+            DIAGNOSTIC["archiveRoot"] = parts[0][:100]
             require(parts[0] in {"package", package["name"].rsplit("/", 1)[-1]}
                     and all(p not in ("", ".", "..") for p in parts), "Unsafe archive path")
             roots.add(parts[0])
@@ -75,13 +82,13 @@ def metadata_evidence(analyzer, result, metadata, package, directory, files):
         manifest = _load_package_manifest(str(directory), package["name"])
         details = metadata["versions"][package["version"]]
         # Hash exact differing values, but expose only affected field/key identities.
-        evidence["metadata_mismatch"] = [
+        evidence["metadata_mismatch"] = sorted([
             {"field": field, "key": key,
              "registrySha256": hashlib.sha256(json.dumps(left, sort_keys=True).encode()).hexdigest(),
              "archiveSha256": hashlib.sha256(json.dumps(right, sort_keys=True).encode()).hexdigest()}
             for field, typ in MANIFEST_FIELDS_CHECKLIST.items()
             for key, left, right in difference_at_key(details, manifest, field, typ)
-        ]
+        ], key=lambda item: (item["field"], item["key"]))
     if result["results"].get("provenance_regression"):
         detector = analyzer.metadata_detectors["provenance_regression"]
         prior = detector._most_recent_attested_before(metadata, package["version"])
@@ -143,20 +150,26 @@ def main():
     require(importlib.metadata.version("guarddog") == "3.2.0", "Wrong scanner version")
     request = json.loads(Path("request.json").read_text())
     archive = Path("package.tgz")
+    DIAGNOSTIC["stage"] = "integrity"
     digest = "sha512-" + base64.b64encode(hashlib.sha512(archive.read_bytes()).digest()).decode()
     require(digest == request["package"]["integrity"], "Worker archive integrity mismatch")
     package = request["package"]
+    DIAGNOSTIC["stage"] = "archive-preflight"
     archive_root = check_archive(archive, package)
     # Native safe_extract executes inside the same nono sandbox as native
     # extract_sandboxed, without nested-sandbox bypass or package execution.
     from guarddog.utils.archives import safe_extract
     directory = Path("extracted")
     directory.mkdir()
+    DIAGNOSTIC["stage"] = "native-extraction"
     safe_extract(str(archive), str(directory))
+    DIAGNOSTIC["stage"] = "file-inventory"
     files = verified_files(directory)
+    DIAGNOSTIC["stage"] = "manifest-identity"
     require(f"{archive_root}/package.json" in files, "Missing package manifest")
     manifest = json.loads((directory / archive_root / "package.json").read_text())
     require(manifest["name"] == package["name"] and manifest["version"] == package["version"], "Archive identity mismatch")
+    DIAGNOSTIC["stage"] = "native-analysis"
     result = analyze(request, directory, files)
     print(json.dumps({"complete": True, "scanner": "3.2.0", "sandbox": True, "files": len(files), **result}))
 
@@ -165,5 +178,7 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        print(json.dumps({"complete": False, "errorType": type(error).__name__}), file=sys.stderr)
+        print(json.dumps({"complete": False, "errorType": type(error).__name__,
+                          "diagnostic": DIAGNOSTIC,
+                          "policyError": str(error) if isinstance(error, PolicyError) else None}), file=sys.stderr)
         sys.exit(2)

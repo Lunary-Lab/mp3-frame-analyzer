@@ -53,7 +53,17 @@ def scan_bytes(package, profile, scanner_root, metadata, archive, metadata_hash)
             max_processes=16, max_cpu_seconds=120, max_file_size_bytes=512 * 1024**2, max_open_files=256,
         )
         inputs.require(len(result.stdout) + len(result.stderr) < 4 * 1024**2, "Worker output exceeded bound")
-        inputs.require(result.exit_code == 0, "Native worker failed")
+        if result.exit_code != 0:
+            # Only the final structured diagnostic from our trusted worker; never
+            # print native stderr, source text, maintainer emails or subprocess args.
+            try:
+                diagnostic = json.loads(result.stderr.splitlines()[-1])
+                inputs.require(diagnostic.get("complete") is False, "Invalid worker failure")
+                print(json.dumps({"workerFailure": {"name": package["name"], "version": package["version"],
+                    **{key: diagnostic.get(key) for key in ["errorType", "diagnostic", "policyError"]}}}), flush=True)
+            except (ValueError, IndexError):
+                pass
+            raise ValueError("Native worker failed")
         inputs.require(not (work / "LIFECYCLE_EXECUTED").exists(), "Package lifecycle script executed")
         response = json.loads(result.stdout)
         inputs.require(response.get("complete") is True and response.get("sandbox") is True, "Incomplete worker result")
