@@ -81,10 +81,10 @@ export class FrameSpans {
 }
 
 function validateFreeFormatPrefix(header: FreeFormatFrameHeader, length: number, offset: number) {
-  // A nonmono MPEG-1 frame needs 4 header + 32 side-information bytes,
-  // plus its optional CRC. Mono's 23-byte maximum prefix fits the global
-  // 24-byte minimum span. These bytes cannot come from the bit reservoir.
-  if (!header.mono && length < 36 + (header.hasCrc ? 2 : 0)) {
+  // Every current span must fit its 4-byte header, optional CRC and mandatory
+  // side information. These bytes cannot come from the bit reservoir.
+  const minimum = 4 + (header.hasCrc ? 2 : 0) + (header.mono ? 17 : 32);
+  if (length < minimum) {
     throw new Mp3ParseError(
       'invalid-mp3',
       offset,

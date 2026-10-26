@@ -20,6 +20,6 @@ Only local lock files are compared against the local database. Supported `--disa
 
 No remote scan server, source/secret scanner, SARIF publication, VEX upload, raw scanner report or additional artifact upload is used. Public logs contain bounded provenance and blocking advisory/package/version/path identities only; those identities are not private. Temporary raw scanner/DB files are removed on completion. Job and subprocess time/output limits fail closed.
 
-Trivy finds known dependency vulnerabilities, not arbitrary malicious behavior or proof of security. GuardDog's separate workstream is complementary. Any future false-positive exemption must be independently investigated and committed with exact advisory/package/version/lock-path/scope, evidence, owner and review/expiry; this gate currently accepts **none**.
+Trivy finds known dependency vulnerabilities, not arbitrary malicious behavior or proof of security. Any future false-positive exemption must be independently investigated and committed with exact advisory/package/version/lock-path/scope, evidence, owner and review/expiry; this gate currently accepts **none**.
 
 Official sources verified 2026-10-26: [release](https://github.com/aquasecurity/trivy/releases/tag/v0.76.1), [npm lock coverage](https://trivy.dev/docs/latest/coverage/language/nodejs/), [telemetry opt-out](https://trivy.dev/docs/latest/advanced/telemetry/), [network resources](https://trivy.dev/docs/latest/advanced/air-gap/).

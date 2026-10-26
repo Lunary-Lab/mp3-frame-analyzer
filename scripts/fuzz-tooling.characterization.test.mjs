@@ -8,7 +8,7 @@ import { minimizeBytes } from './minimize-core.mjs';
 function constructionCorpus() {
   const inputs = [Buffer.alloc(0)];
   for (let value = 0; value < 256; value++) inputs.push(Buffer.from([value]));
-  for (let flags = 0; flags < 64; flags++) {
+  for (let flags = 0; flags < 256; flags++) {
     for (let metadata = 0; metadata < 8; metadata++) {
       const input = Buffer.alloc(160);
       for (let i = 0; i < input.length; i++) input[i] = (i * 67 + flags * 11 + metadata) & 0xff;
@@ -31,12 +31,13 @@ function constructionCorpus() {
   return inputs;
 }
 
-test('structured construction retains all bytes and count/geometry manifests for 1,281 inputs', () => {
-  // Characterized from main 28295f3 before extraction. Independent geometry and
-  // metadata assertions remain in structured-fuzz.test.mjs; this locks byte parity.
+test('structured construction retains all bytes and count/geometry manifests for 2,817 inputs', () => {
+  // Covers every placement flag with encoder variants and seeded byte inputs.
+  // Independent geometry assertions remain in structured-fuzz.test.mjs;
+  // this digest locks the short-stream, metadata and seven-kbps construction corpus.
   const digest = createHash('sha256');
   const inputs = constructionCorpus();
-  assert.equal(inputs.length, 1281);
+  assert.equal(inputs.length, 2817);
   for (const input of inputs) {
     const { bytes, ...manifest } = createStructuredMp3(input);
     digest.update(
@@ -46,7 +47,7 @@ test('structured construction retains all bytes and count/geometry manifests for
   }
   assert.equal(
     digest.digest('hex'),
-    'd1335e4257724a876bcd9d989e096b1fc358b22bbc344e0c4ce5239c115f7972',
+    '19b1463320f95ceb63050b5cff64bb0703e86aabc5ed8c3170f2f09e3ccb0252',
   );
 });
 

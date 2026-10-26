@@ -22,6 +22,7 @@ test('free-format manifests match independently tabulated bitrate/sample-rate sp
     [1306, 1200, 1800],
     [1632, 1500, 2250],
     [2089, 1920, 2880],
+    [22, 21, 31],
   ];
   for (const [bitrate, rates] of spans.entries()) {
     for (const [rate, length] of rates.entries()) {
@@ -82,9 +83,10 @@ test('frame offsets exclude surrounding tags and never trust declared VBR counts
   }
 });
 
-test('curated structured seeds exercise both smallest and largest supported free spans', async () => {
+test('curated structured seeds exercise mandatory-prefix and upper free-format bounds', async () => {
   for (const [name, count, base] of [
     ['free-format-minimum.bin', 3, 24],
+    ['free-format-seven-kbps.bin', 3, 21],
     ['free-format-maximum.bin', 7, 2880],
   ]) {
     const input = await readFile(new URL(`../fuzz/seeds/structured/${name}`, import.meta.url));
@@ -93,6 +95,26 @@ test('curated structured seeds exercise both smallest and largest supported free
     for (const [frame, offset] of fixture.frameOffsets.entries()) {
       const padding = (fixture.bytes[offset + 2] >>> 1) & 1;
       assert.equal(fixture.frameLengths[frame] - padding, base);
+    }
+  }
+});
+
+test('seven-kbps construction only sets CRC when the actual padded mono prefix fits', () => {
+  for (const [rate, base] of [22, 21, 31].entries()) {
+    for (const padding of [0, 1]) {
+      const input = seed();
+      input[4] = 10;
+      input[5] = rate;
+      for (let i = 0; i < 3; i++) {
+        input[11 + 5 * i] = padding;
+        input[12 + 5 * i] = 1;
+      }
+      const fixture = createStructuredMp3(input);
+      assert.deepEqual(fixture.frameLengths, [base + padding, base + padding, base + padding]);
+      for (const offset of fixture.frameOffsets) {
+        assert.equal(fixture.bytes[offset + 1] & 1, base + padding >= 23 ? 0 : 1);
+        assert.equal(fixture.bytes[offset + 3] >>> 6, 3);
+      }
     }
   }
 });
@@ -111,5 +133,23 @@ test('only first-frame metadata at a recognized position is an expected exclusio
     assert.equal(fixture.expectedAudioFrameCount, audio, name);
     const start = fixture.frameOffsets[frame] + offset;
     assert.equal(fixture.bytes.subarray(start, start + 4).toString(), signature, name);
+  }
+});
+
+test('short free-format and inserted metadata retain independent frame geometry', () => {
+  for (const count of [1, 2]) {
+    const input = seed(8 | 64 | 128 | 4);
+    input[0] = count - 1;
+    input[2] = 64;
+    input[4] = 2; // 128 kbps at 44.1 kHz = 417 bytes, no padding.
+    const fixture = createStructuredMp3(input);
+    assert.equal(fixture.expectedCount, count);
+    assert.deepEqual(fixture.frameLengths, Array(count).fill(417));
+    assert.deepEqual(fixture.frameOffsets, count === 1 ? [0] : [0, 435]);
+    if (count === 2) assert.equal(fixture.bytes.subarray(417, 420).toString(), 'ID3');
+    const tail = fixture.frameOffsets.at(-1) + 417;
+    assert.equal(fixture.bytes.subarray(tail, tail + 3).toString(), 'ID3');
+    assert.equal(fixture.bytes.subarray(-138, -135).toString(), '3DI');
+    assert.equal(fixture.bytes.subarray(-128, -125).toString(), 'TAG');
   }
 });

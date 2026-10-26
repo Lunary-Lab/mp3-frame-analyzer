@@ -37,9 +37,12 @@ _Avoid_: VBR header, Xing header, metadata frame
 ## Metadata
 
 **Leading tag**:
-An ID3v2 tag before the first MPEG frame; at most eight may precede the audio.
+An ID3v2 tag before the first MPEG frame; each tag is streamed by its encoded size without a tag-count cap.
 _Avoid_: header tag, prefix
 
 **Trailing metadata**:
-The ID3 tags after the last MPEG frame: at most one appended ID3v2.4 tag with a footer, then at most one ID3v1 tag, and nothing after them.
+The ID3 tags after the last MPEG frame: consecutive appended ID3v2.4 tags, each with a footer, then at most one ID3v1 tag, and nothing after them.
 _Avoid_: trailer, trailing tags
+
+**Embedded tag**:
+An ID3v2 tag between MPEG frames. Consecutive tags may occur at one boundary; traversal resumes in the same audio mode. Each tag consumes at least its header bytes.
