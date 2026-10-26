@@ -160,7 +160,7 @@ Terraform in [`governance/`](../governance/) manages the repository's settings; 
 
 - Squash merging only, titled by the PR title with a blank body; merged branches are deleted.
 - The default `GITHUB_TOKEN` is read-only; only GitHub-owned, verified-creator and the two listed third-party actions may run, each pinned to a full commit SHA.
-- The `main` ruleset requires a pull request, passing `All checks` and `Conventional Commit PR title` checks on an up-to-date branch, resolved conversations, and linear, signed history; it blocks force pushes and deletion and has no bypass.
+- The `main` ruleset requires a pull request, passing `All checks` and `Conventional Commit PR title` checks on an up-to-date branch, resolved conversations, and linear history; it blocks force pushes and deletion and has no bypass.
 - `v*` tags cannot be moved or deleted, and publication waits for the release approver in the `release` environment.
 - Workflows from forks wait for approval before running, and never receive write tokens or secrets.
 
