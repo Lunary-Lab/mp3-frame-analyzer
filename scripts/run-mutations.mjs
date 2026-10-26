@@ -1,6 +1,5 @@
 import { createWriteStream } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { createRequire } from 'node:module';
 import { readFile, readdir, rm, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,10 +14,10 @@ import {
   executionSummary,
 } from './mutation-cache.mjs';
 import { planReuse } from './mutation-impact.mjs';
+import { changedInputPaths, reuseContext } from './mutation-compatibility.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = join(root, 'reports/mutation');
-const require = createRequire(import.meta.url);
 
 async function parserSources(directory = join(root, 'src/mp3')) {
   const result = new Map();
@@ -120,7 +119,7 @@ try {
   const inputs = await mutationInputs(root, env);
   const inputsHash = fingerprint(inputs);
   if (args.includes('--cache-key')) {
-    console.log(`mutation-v2-${inputsHash}`);
+    console.log(`mutation-v3-${inputsHash}`);
   } else {
     // Only the current invocation writes reports. Working/partial incremental
     // state is never restored or saved by GitHub Actions.
@@ -154,14 +153,14 @@ try {
       };
     let prepared = null;
     if (cache.report) {
-      const currentFiles = new Map(
-        await Promise.all(
-          inputs.files
-            .filter(([file]) => /\.[cm]?[jt]sx?$/.test(file))
-            .map(async ([file]) => [file, await readFile(join(root, file), 'utf8')]),
-        ),
-      );
-      prepared = planReuse(cache.report, currentFiles);
+      const current = reuseContext(inputs);
+      const baseline = reuseContext(cache.manifest.inputs);
+      prepared = planReuse(cache.report, current.files, {
+        baselineFiles: baseline.files,
+        baselineTestFiles: baseline.testFiles,
+        testFiles: current.testFiles,
+        changedInputs: changedInputPaths(cache.manifest.inputs, inputs),
+      });
       if (!prepared.report) cache = { report: null, reason: prepared.reason };
       else cache.reason = prepared.reason;
     }
@@ -172,10 +171,13 @@ try {
     const started = performance.now();
     // A normal unmutated run is mandatory even for a 100% cache hit. Stryker
     // subsequently performs its own fresh discovery/coverage dry run as well.
-    const vitest = join(dirname(require.resolve('vitest/package.json')), 'vitest.mjs');
+    const vitest = join(
+      dirname(fileURLToPath(import.meta.resolve('vitest/package.json'))),
+      'vitest.mjs',
+    );
     await run(vitest, ['run', '--no-fsModuleCache'], env, log);
     const stryker = join(
-      dirname(require.resolve('@stryker-mutator/core/package.json')),
+      dirname(fileURLToPath(import.meta.resolve('@stryker-mutator/core/package.json'))),
       'bin/stryker.js',
     );
     await run(stryker, ['run', ...(!cache.report ? ['--force'] : [])], env, log);
@@ -209,7 +211,11 @@ try {
     await writeFile(join(output, 'inputs.json'), JSON.stringify(inputs, null, 2) + '\n');
     // Promotion is last, after clean process exits, complete scope/equivalence
     // audit, freshness, and execution accounting. Failed/partial runs cannot win.
-    await promoteCache(root, report, inputs, summary, policy);
+    if (
+      !process.env.GITHUB_ACTIONS ||
+      (process.env.GITHUB_EVENT_NAME === 'push' && process.env.GITHUB_REF === 'refs/heads/main')
+    )
+      await promoteCache(root, report, inputs, summary, policy);
     console.log(
       `Mutants executed this invocation: ${execution.executed}; reused validated results: ${execution.reused}.`,
     );

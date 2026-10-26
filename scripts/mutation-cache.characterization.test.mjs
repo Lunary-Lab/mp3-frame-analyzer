@@ -12,6 +12,7 @@ import {
   validateCache,
 } from './mutation-cache.mjs';
 import { sha256 } from './mutation-policy.mjs';
+import { fixtureInputs } from './mutation-cache-fixture.mjs';
 
 const sourceFile = 'src/mp3/value.ts';
 const testFile = 'tests/value.test.ts';
@@ -35,13 +36,12 @@ function fixture() {
       },
     },
   };
-  const inputs = {
-    files: Object.entries({ ...report.files, ...report.testFiles }).map(([file, record]) => [
+  const inputs = fixtureInputs(
+    Object.entries({ ...report.files, ...report.testFiles }).map(([file, record]) => [
       file,
-      420,
-      sha256(record.source),
+      record.source,
     ]),
-  };
+  );
   const policy = { contextSha256: 'context', equivalents: [] };
   const summary = { status: 'passed', total: 1 };
   const cache = createCache(report, inputs, summary, policy);
@@ -258,7 +258,7 @@ test('changed unauthenticated inputs are rejected before stale report sources', 
   f.reportText = JSON.stringify(f.report);
   f.manifest.reportSha256 = sha256(f.reportText);
   assert.throws(() => validateCache(f.manifest, f.reportText, current, () => f.summary, f.policy), {
-    message: 'Changed input lacks authenticated prior source: tests/unreported.test.ts',
+    message: 'Incomplete authenticated dependency sources',
   });
 });
 
@@ -266,6 +266,7 @@ test('successful cache authentication passes exact old sources and policy to the
   const f = fixture();
   const current = structuredClone(f.inputs);
   current.files[0][2] = sha256('changed source');
+  current.sources[sourceFile] = 'changed source';
   const policy = { ...f.policy, contextSha256: 'reviewed new context' };
   let calls = 0;
   const validated = validateCache(

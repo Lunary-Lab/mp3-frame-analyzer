@@ -4,8 +4,9 @@ import { access, readFile, readdir, readlink, realpath, lstat } from 'node:fs/pr
 import { delimiter, isAbsolute, join, relative, win32 } from 'node:path';
 import { arch, platform, release, version } from 'node:os';
 import { sha256 } from './mutation-policy.mjs';
+import { compatibilityInputs, sourceInput } from './mutation-compatibility.mjs';
 
-export const CACHE_SCHEMA = 2;
+export const CACHE_SCHEMA = 3;
 
 // No arbitrary inherited variables (including credentials) reach test code.
 // New supported inputs must be added here AND to the invalidation tests.
@@ -53,8 +54,8 @@ const generated = new Set([
 export function isMutationInput(path) {
   if (generated.has(path.split('/')[0])) return false;
   if (/^fuzz\/(crashes|tmp)(\/|$)/.test(path)) return false;
-  // Markdown can be executable test data too. Do not guess relevance from
-  // extension or location: even documentation edits invalidate this cache.
+  // Preserve every project byte for forensic evidence and the end-of-run
+  // immutability check. Cross-run compatibility is a separate guarded decision.
   return true;
 }
 
@@ -137,9 +138,22 @@ export async function mutationInputs(root, env = mutationEnvironment()) {
   // cannot silently reuse a lockfile-matching result. Runtime caches are excluded.
   const dependencies = await fileInventory(join(root, 'node_modules'), { dependencies: true });
   const sample = env.ASSESSMENT_SAMPLE_PATH;
+  const files = await fileInventory(root);
+  const sources = Object.fromEntries(
+    await Promise.all(
+      files
+        .filter(([path]) => sourceInput(path))
+        .map(async ([path, , hash]) => {
+          const source = await readFile(join(root, path), 'utf8');
+          if (sha256(source) !== hash) throw new Error(`Input changed during capture: ${path}`);
+          return [path, source];
+        }),
+    ),
+  );
   return {
     schemaVersion: CACHE_SCHEMA,
-    files: await fileInventory(root),
+    files,
+    sources,
     dependenciesSha256: fingerprint(dependencies),
     dependencyRootLink: (await lstat(join(root, 'node_modules'))).isSymbolicLink()
       ? await readlink(join(root, 'node_modules'))
@@ -163,17 +177,8 @@ export async function mutationInputs(root, env = mutationEnvironment()) {
   };
 }
 
-export const mutableInput = (path) =>
-  (/^src\/mp3\/.*\.ts$/.test(path) && !path.endsWith('.d.ts')) ||
-  /^tests\/.*\.test\.ts$/.test(path);
+export { mutableInput } from './mutation-compatibility.mjs';
 
 export function globalFingerprint(inputs) {
-  return fingerprint({
-    ...inputs,
-    files: inputs.files.map((entry) =>
-      mutableInput(entry[0]) || entry[0] === 'mutation-equivalents.json'
-        ? [...entry.slice(0, -1), null]
-        : entry,
-    ),
-  });
+  return fingerprint(compatibilityInputs(inputs));
 }

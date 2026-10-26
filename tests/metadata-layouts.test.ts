@@ -1,4 +1,4 @@
-import fc from 'fast-check';
+import { array, assert, asyncProperty, boolean, constantFrom, integer, record } from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { countMp3Frames } from '../src/mp3/count-frames.js';
 import { chunks, frame } from './helpers/mp3-fixtures.js';
@@ -185,17 +185,17 @@ describe('source-backed ID3 layouts', () => {
   });
 
   it('insertion and repartition preserve independently constructed indexed counts (seed 0x1d324)', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.array(
-          fc.record({
-            version: fc.constantFrom<Id3Version>(2, 3, 4),
-            padding: fc.boolean(),
-            crc: fc.boolean(),
+    await assert(
+      asyncProperty(
+        array(
+          record({
+            version: constantFrom<Id3Version>(2, 3, 4),
+            padding: boolean(),
+            crc: boolean(),
           }),
           { minLength: 1, maxLength: 12 },
         ),
-        fc.array(fc.integer({ min: 1, max: 129 }), { minLength: 1, maxLength: 8 }),
+        array(integer({ min: 1, max: 129 }), { minLength: 1, maxLength: 8 }),
         async (specs, sizes) => {
           const body = specs.flatMap(({ version, padding, crc }) => {
             const audio = frame({ padding: padding ? 1 : 0, hasCrc: crc });

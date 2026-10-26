@@ -28,9 +28,9 @@ async function verifyWarmBaseline(context) {
   await restore();
   await put('README.md', 'Unrelated documentation\n');
   assert.equal(
-    (await run('docs-only-invalidates', { reason: /Global mutation inputs changed/ })).execution
+    (await run('docs-only-reuses', { reason: /unaffected killing-test witnesses/ })).execution
       .reused,
-    0,
+    cold.total,
   );
   await rm(join(root, 'README.md'));
 }
@@ -55,12 +55,15 @@ async function verifyChangedTests(context) {
   );
   await restore();
   await rm(join(root, 'tests/add.test.ts'));
-  await run('removed-test', { fails: true, reason: /Global mutation inputs changed/ });
+  await run('removed-test', {
+    fails: true,
+    reason: /Unresolved import impact|Unsupported execution isolation/,
+  });
   await restore();
   await put('tests/helpers/check.ts', strongHelper.replace('.toBe(5)', '.toBeDefined()'));
   await run('changed-imported-helper-new-survivor', {
     fails: true,
-    reason: /Global mutation inputs changed[\s\S]*Unreviewed Survived/,
+    reason: /unaffected killing-test witnesses[\s\S]*Unreviewed Survived/,
   });
 }
 
@@ -72,7 +75,7 @@ async function verifySourceContext(context) {
   await policy(changed);
   await put('tests/helpers/check.ts', strongHelper.replace('.toBe(5)', '.toBe(6)'));
   assert.equal(
-    (await run('changed-mutated-source', { reason: /Global mutation inputs changed/ })).execution
+    (await run('changed-mutated-source', { reason: /unaffected killing-test witnesses/ })).execution
       .reused,
     0,
   );
@@ -172,7 +175,7 @@ async function verifyTrustAndExternalInputs(context) {
   await put('docs/expectation.md', 'defined');
   await run('markdown-fixture-new-survivor', {
     fails: true,
-    reason: /Global mutation inputs changed[\s\S]*Unreviewed Survived/,
+    reason: /unaffected killing-test witnesses[\s\S]*Unreviewed Survived/,
   });
 }
 
