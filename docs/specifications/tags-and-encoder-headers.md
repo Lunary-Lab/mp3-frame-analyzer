@@ -53,15 +53,17 @@ ID3v2.4 trailing footer:
 - Exactly 10 bytes, begins with ASCII `3DI`, then mirrors the corresponding header's version, flags and encoded size.
 - Footer flags/size must match the header, and truncated/mismatched footers are errors.
 - ID3v2.4 disallows padding when a footer is used (specification detail, **not currently verified by the structural tag skipper**, which does not decode internal records).
-- ID3v2.4 §5 allows prepend, append, and prepend-plus-append (with a SEEK frame required for its recommended paired-tag layout). The endpoint currently accepts multiple **leading** ID3v2 tags, up to 8, and one trailing v2.4-with-footer followed by optional ID3v1. The count of 8 and restriction to one appended tag are **project limits**, not ID3 standards.
+- ID3v2.4 §5 allows prepend, append, and prepend-plus-append (with a SEEK frame required for its recommended paired-tag layout). The endpoint accepts **consecutive ID3v2 tags per MPEG boundary**, including repeated appended v2.4 tags, followed by at most one final ID3v1. Every tag in a trailing run needs its own matching footer. The former eight-tag restriction was removed: every iteration consumes at least ten bytes, so memory and work remain bounded by the streaming cursor and total input bytes, not a tag-count limit.
 
-The ID3.org [FAQ](https://id3.org/FAQ) notes that ID3v2 may also appear at MPEG frame boundaries within a stream. The current strict parser does **not** support arbitrary in-stream ID3 insertion: document that as a compatibility gap, not as proof that every such MP3 is invalid.
+Embedded placement is explicit in the author specifications: ID3v2.2 §4.19 (`BUF`), ID3v2.3 §4.19 (`RBUF`) and [ID3v2.4 Frames §4.18](https://id3.org/id3v2.4.0-frames) describe tags **between MPEG frames**. The [FAQ](https://id3.org/FAQ) corroborates this. Such tags may be footerless; parsing resumes in the existing MPEG mode. A footerless tag followed only by EOF or ID3v1 is appended, not embedded, and is rejected.
+
+The skipper validates outer version/flags/synchsafe size and matching footer, not internal records. It does not enforce minimum record counts, extended-header semantics, padding restrictions, SEEK/RBUF contents, compression, encryption or unsynchronization correctness. The new layout fixtures include actual title, buffer, SEEK and update records; this is not a claim that every accepted metadata body conforms. A SEEK fixture points from the current tag's end to the **next** tag, not past an intervening tag.
 
 ## 3. ID3v1 and ID3v1.1
 
 [ID3.org's original ID3v1 description](https://id3.org/ID3v1) documents a **fixed 128-byte** trailing metadata block with ASCII `TAG` at its start. ID3v1.1 reuses the same block size; the track number alters only its internal interpretation. Neither should count as MPEG audio.
 
-At an expected post-frame boundary, accept a final 128-byte `TAG` block and then require EOF. **Do not** treat an incidental `TAG` occurrence _inside_ an MPEG frame payload as a tag. The project's strict EOF handling rejects arbitrary extra trailing data.
+At an expected post-frame boundary, accept a final 128-byte `TAG` block and then require EOF. **Do not** treat an incidental `TAG` occurrence _inside_ an MPEG frame payload as a tag. After a known indexed or locked free-format frame boundary, strict EOF handling rejects arbitrary extra trailing data. Initial short free-format EOF inference has the separate ambiguity limits described in [MPEG syntax](mpeg-1-layer-iii.md#4-free-format-layer-iii-bitrate-index-zero).
 
 ## 4. Xing / Info / LAME metadata
 
@@ -91,16 +93,16 @@ HTTP default and explicit `includeVbrHeaderFrame=false`: exclude at most **one**
 VBRI is a Fraunhofer-associated encoder header convention, **not part of ISO MPEG-1 Layer III's four-byte header**. A freely accessible, authoritative normative _VBRI specification_ was not established for this assessment, so treat the observed layout in [FFmpeg's reader](https://github.com/FFmpeg/FFmpeg/blob/master/libavformat/mp3dec.c) (`mp3_parse_vbri_tag`) and [TagLib's parser](https://github.com/taglib/taglib/blob/master/taglib/mpeg/xingheader.cpp) as corroborating implementation references, **not an ISO standard**.
 
 - FFmpeg probes signature `VBRI` at byte offset `4 + 32 = 36` from the MPEG frame start.
-- A recognized version-1 header carries declared byte/frame counts and optional seeking-table information. Validate its declared lengths/entry width before classifying it as an encoder header.
+- A recognized version-1 header carries declared byte/frame counts and seeking-table information. The current project requires a nonempty table with widths 1–4 and a complete `26 + entries × width` body. [GStreamer's reader](https://github.com/GStreamer/gstreamer/blob/main/subprojects/gst-plugins-good/gst/audioparsers/gstmpegaudioparse.c) corroborates those fields, but accepts some headers without a usable table. Thus our nonempty-table recognition is a **stricter project policy**, not proven universal VBRI validity.
 - Its presence never authorizes accepting a malformed MPEG frame, trusting the declared count for physical traversal, or subtracting an unconditional frame.
 
 ## 6. Other tag families / strict-policy boundaries
 
-- **APE/APE2** and **Lyrics3** metadata occur in some real `.mp3` files. [ID3.org's Lyrics3 page](https://id3.org/Lyrics3) describes Lyrics3 placement; these are not Layer III header types. Their support is a **separate interoperability decision**, outside the stated assessment and the current trailing-tag parser.
-- MPEG payloads can contain false sync words, `ID3` strings or `TAG` strings. Never scan for metadata inside a declared complete audio frame.
+- **APE/APE2** and **Lyrics3** metadata occur in some real `.mp3` files. [ID3.org's Lyrics3 page](https://id3.org/Lyrics3) describes Lyrics3 placement; these are not Layer III header types. Neither is explicitly required by the assessment; the owner kept additional families outside this change. Their absence is a compatibility limitation, not proof that a tagged MPEG-1 Layer III file changes codec. No arbitrary other-family trailer is skipped.
+- MPEG payloads can contain false sync words, `ID3` strings or `TAG` strings. Indexed and locked traversal never scans inside a declared frame. During initial free-format inference, metadata is examined only at each proposed fixed-span boundary; short candidates with still-plausible supported metadata prefixes are conservatively rejected. Known-invalid ID3 bytes and TAG strings ruled out by the candidate/available-byte length are not metadata evidence; a bounded probe end is not assumed to be EOF.
 - [RFC 3003 §1](https://www.rfc-editor.org/rfc/rfc3003.html) allows `audio/mpeg` streams with interspersed non-MPEG material. This endpoint deliberately implements a **stricter validated-file policy**. Do not describe the broader RFC's permitted material as inherently forbidden by MPEG.
 - Distinguish a corrupt tag (incorrect synchsafe size, unsupported version/flags, missing bytes/footer) from absent metadata. Never silently walk bytes of a malformed tag as though they were audio.
 
 ## 7. Relevant source and tests
 
-[`id3.ts`](../../src/mp3/id3.ts), [`count-frames.ts`](../../src/mp3/count-frames.ts), [`encoder-frame.ts`](../../src/mp3/encoder-frame.ts), [`id3.test.ts`](../../tests/id3.test.ts), [`count-frames.test.ts`](../../tests/count-frames.test.ts), and [`frame-count-contract.md`](../frame-count-contract.md).
+[`id3.ts`](../../src/mp3/id3.ts), [`count-frames.ts`](../../src/mp3/count-frames.ts), [`encoder-frame.ts`](../../src/mp3/encoder-frame.ts), [`id3.test.ts`](../../tests/id3.test.ts), [`metadata-layouts.test.ts`](../../tests/metadata-layouts.test.ts), [`encoder-layouts.test.ts`](../../tests/encoder-layouts.test.ts), [`count-frames.test.ts`](../../tests/count-frames.test.ts), and [`frame-count-contract.md`](../frame-count-contract.md).

@@ -9,7 +9,7 @@
  */
 const BITRATE_KBPS = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0];
 const SAMPLE_RATE_HZ = [44_100, 48_000, 32_000];
-const FREE_BITRATE_KBPS = [8, 32, 128, 137, 256, 320, 384, 400, 500, 640];
+const FREE_BITRATE_KBPS = [8, 32, 128, 137, 256, 320, 384, 400, 500, 640, 7];
 
 function synchsafe(value) {
   return Buffer.from([
@@ -70,9 +70,10 @@ function writeXingMetadata(frame, { channelMode, hasCrc, kind, count, shifted })
 
 function constructionParameters(at, flags) {
   const freeFormat = Boolean(flags & 8);
-  // Free-format acquisition requires at least three headers under this
-  // parser's documented contract. Short ambiguous inputs belong to raw fuzzing.
-  const frameCount = (freeFormat ? 3 : 1) + (at(0) % 24);
+  // Bit 6 of byte 2 enables short free-format construction. Payload masking
+  // below excludes competing sync/tag anchors: the count oracle is unambiguous.
+  const minimumFrames = freeFormat && (at(2) & 64) === 0 ? 3 : 1;
+  const frameCount = minimumFrames + (at(0) % 24);
   const freeSampleRateIndex = at(5) % 3;
   const freeBaseLength = Math.floor(
     (144000 * FREE_BITRATE_KBPS[at(4) % FREE_BITRATE_KBPS.length]) /
@@ -113,11 +114,11 @@ function createFrame(at, i, { freeFormat, freeSampleRateIndex, freeBaseLength })
   const bitrateIndex = freeFormat ? 0 : 1 + (bits % 14);
   const sampleRateIndex = freeFormat ? freeSampleRateIndex : at(10 + 5 * i) % 3;
   const padding = at(11 + 5 * i) & 1;
-  const hasCrc = Boolean(at(12 + 5 * i) & 1);
   const bitrate = BITRATE_KBPS[bitrateIndex];
   const sampleRate = SAMPLE_RATE_HZ[sampleRateIndex];
   const length =
     (freeFormat ? freeBaseLength : Math.floor((144000 * bitrate) / sampleRate)) + padding;
+  const hasCrc = length >= 23 && Boolean(at(12 + 5 * i) & 1);
   const block = Buffer.alloc(length);
   // Force mono below 38 bytes: nonmono needs 36 bytes, or 38 with CRC.
   const channelMode = length < 38 ? 3 : at(14 + 5 * i) % 4;
@@ -134,16 +135,30 @@ function createFrame(at, i, { freeFormat, freeSampleRateIndex, freeBaseLength })
       emphasis) >>>
     0;
   for (let j = 0; j < length; j++) {
-    // Keep free-format geometry unambiguous. Competing sync patterns belong
-    // in a separate raw/ambiguity corpus, not this known-valid count oracle.
-    block[j] = at(i * 7 + j + 16) & (freeFormat ? 0x7f : 0xff);
+    // Exclude sync bytes and ASCII ID3/TAG from free-format payloads. Competing
+    // patterns belong in a separate raw/ambiguity corpus, not this count oracle.
+    block[j] = at(i * 7 + j + 16) & (freeFormat ? 0x3f : 0xff);
   }
   block.writeUInt32BE(header, 0);
   return { block, channelMode, hasCrc };
 }
 
-function trailingTags(flags) {
+/** Complete title records supply new placement cases without empty-tag assumptions. */
+function titleTag(version, footer = false) {
+  return id3(
+    version === 2
+      ? Buffer.from([84, 84, 50, 0, 0, 2, 0, 65])
+      : Buffer.from([84, 73, 84, 50, 0, 0, 0, 2, 0, 0, 0, 65]),
+    version,
+    footer,
+  );
+}
+
+function trailingTags(at, flags) {
   const tail = [];
+  if ((flags & 128) !== 0) {
+    for (let i = 0; i < 1 + (at(3) % 3); i++) tail.push(titleTag(4, true));
+  }
   if ((flags & 4) !== 0) {
     const id3v1 = Buffer.alloc(128, 0);
     id3v1.write('TAG', 0, 'ascii');
@@ -165,6 +180,11 @@ export function createStructuredMp3(input) {
   let offset = intro.reduce((total, tag) => total + tag.length, 0);
   let metadataFrameCount = 0;
   for (let i = 0; i < frameCount; i++) {
+    if (i > 0 && (flags & 64) !== 0) {
+      const tag = titleTag(2 + (at(i + 8) % 3));
+      frames.push(tag);
+      offset += tag.length;
+    }
     const { block, channelMode, hasCrc } = createFrame(at, i, parameters);
     if (i === 0) {
       const metadata = { channelMode, hasCrc, kind: metadataKind, shifted: metadataShifted };
@@ -178,7 +198,7 @@ export function createStructuredMp3(input) {
     offset += block.length;
   }
   return {
-    bytes: Buffer.concat([...intro, ...frames, ...trailingTags(flags)]),
+    bytes: Buffer.concat([...intro, ...frames, ...trailingTags(at, flags)]),
     expectedCount: frameCount,
     expectedAudioFrameCount: frameCount - metadataFrameCount,
     metadataFrameCount,

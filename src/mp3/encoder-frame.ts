@@ -1,6 +1,6 @@
 import type { FrameHeader } from './frame-header.js';
 
-/** All signature offsets are positive constants determined by MPEG-1 headers. */
+/** Callers use fixed positive offsets from the supported encoder conventions. */
 const textAt = (frame: Uint8Array, offset: number, text: string): boolean =>
   offset + text.length <= frame.length &&
   [...text].every((character, index) => frame[offset + index] === character.charCodeAt(0));
@@ -45,7 +45,7 @@ function vbriAt(frame: Uint8Array): boolean {
 
 /**
  * Whether a complete physical frame carries Xing/Info (optionally extended by
- * LAME) or VBRI metadata at the position its header dictates. Traversal asks
+ * LAME) or VBRI metadata at the supported conventional offsets. Traversal asks
  * only about the stream's first frame, which makes such a frame its encoder
  * frame. `frame` holds exactly the frame's span. LAME is an extension to
  * Xing/Info, never an independent MPEG frame. Do not search arbitrary payload

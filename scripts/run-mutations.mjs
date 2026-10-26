@@ -60,13 +60,13 @@ function run(cli, args, env, log) {
         }
       } else child.kill('SIGKILL');
     }
-    // Per-mutant timeouts are in stryker.config.json. This one-hour deadline
+    // Per-mutant timeouts are in stryker.config.json. This 90-minute deadline
     // bounds each child process, including the complete Stryker campaign.
     const onInterrupt = () => stop('SIGINT');
     const onTerminate = () => stop('SIGTERM');
     process.once('SIGINT', onInterrupt);
     process.once('SIGTERM', onTerminate);
-    const timer = setTimeout(stop, 60 * 60 * 1000);
+    const timer = setTimeout(stop, 90 * 60 * 1000);
     function cleanup() {
       clearTimeout(timer);
       process.removeListener('SIGINT', onInterrupt);
