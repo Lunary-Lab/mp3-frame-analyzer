@@ -3,6 +3,22 @@ import assert from 'node:assert/strict';
 export const TRIVY_VERSION = '0.76.1';
 export const BLOCKING_SEVERITIES = ['HIGH', 'CRITICAL', 'UNKNOWN'];
 const npmName = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
+const exactVersion = new RegExp(
+  '^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)' +
+    '(?:-([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?' +
+    '(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$',
+);
+
+function validateVersion(version) {
+  assert.equal(typeof version, 'string', 'Not an exact version');
+  const match = exactVersion.exec(version);
+  assert.ok(match && match[0] === version, 'Not an exact version');
+  // SemVer permits leading zeroes in build metadata, but not numeric prerelease identifiers.
+  assert.ok(
+    (match[4]?.split('.') ?? []).every((part) => !/^0\d+$/.test(part)),
+    'Invalid numeric prerelease identifier',
+  );
+}
 
 export function lockInventory(lock, production = false) {
   assert.equal(lock.lockfileVersion, 3, 'Expected npm lock-v3');
@@ -14,7 +30,7 @@ export function lockInventory(lock, production = false) {
     assert.ok(!pkg.link && !pkg.inBundle, 'Linked/bundled dependency is not supported');
     const name = pkg.name ?? path.split('node_modules/').at(-1);
     assert.match(name, npmName, 'Invalid locked package name');
-    assert.match(pkg.version, /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/, 'Not an exact version');
+    validateVersion(pkg.version);
     const key = `${name}@${pkg.version}`;
     inventory.set(key, [...(inventory.get(key) ?? []), path]);
   }

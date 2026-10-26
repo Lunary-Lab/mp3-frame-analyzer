@@ -71,6 +71,35 @@ test('complete inventory retains all exact aliases, optional/platform and transi
   }
 });
 
+test('locked versions are exact SemVer, including prerelease plus build metadata', () => {
+  const inventory = (version) => {
+    const value = structuredClone(lock);
+    value.packages['node_modules/a'].version = version;
+    return lockInventory(value);
+  };
+  for (const version of ['0.0.0', '1.2.3-0', '1.2.3-beta.1+build.07', '1.2.3+001']) {
+    assert.ok(inventory(version).has(`a@${version}`));
+  }
+  for (const version of [
+    '01.2.3',
+    '1.02.3',
+    '1.2.03',
+    '1.2.3-01',
+    '1.2.3-beta.01',
+    '1.2.3-..',
+    '1.2.3+..',
+    '1.2.3-',
+    '1.2.3+',
+    '1.2.3\n',
+    '^1.2.3',
+    'v1.2.3',
+    null,
+    123,
+  ]) {
+    assert.throws(() => inventory(version), undefined, `Accepted malformed version ${version}`);
+  }
+});
+
 test('all HIGH/CRITICAL and unknown severity fail, including unfixed findings', () => {
   assert.deepEqual(inspect(report()), []);
   for (const severity of ['HIGH', 'CRITICAL', 'UNKNOWN', 'MEDIUM', 'LOW']) {
@@ -83,6 +112,23 @@ test('all HIGH/CRITICAL and unknown severity fail, including unfixed findings', 
       !['LOW', 'MEDIUM'].includes(severity),
     );
   }
+});
+
+test('a vulnerable alias version reports every original transitive lock path', () => {
+  const inventory = lockInventory(lock);
+  const value = report();
+  value.Results[0].Packages = [
+    { Name: 'a', Version: '1.0.0' },
+    { Name: 'b', Version: '2.0.0' },
+    { Name: 'actual', Version: '3.0.0' },
+  ];
+  value.Results[0].Vulnerabilities = [{ ...finding, PkgName: 'actual', InstalledVersion: '3.0.0' }];
+  assert.deepEqual(
+    trivyFindings(value, inventory, 'full').map(({ path }) => path),
+    ['node_modules/alias', 'node_modules/a/node_modules/alias'],
+  );
+  value.Results[0].Packages.pop();
+  assert.throws(() => trivyFindings(value, inventory, 'full'), /Incomplete dependency coverage/);
 });
 
 test('partial, malformed, extra target, wrong scanner and missing inventory fail closed', () => {
@@ -109,7 +155,28 @@ test('partial, malformed, extra target, wrong scanner and missing inventory fail
       value.Trivy.Version = 'latest';
     },
     (value) => {
+      value.ArtifactType = 'repository';
+    },
+    (value) => {
+      value.Results[0].Class = 'os-pkgs';
+    },
+    (value) => {
+      value.Results[0].Type = 'yarn';
+    },
+    (value) => {
+      value.Results[0].Vulnerabilities = null;
+    },
+    (value) => {
+      value.Results[0].Vulnerabilities = {};
+    },
+    (value) => {
       value.Results[0].Vulnerabilities = [{ ...finding, Severity: 'banana' }];
+    },
+    (value) => {
+      value.Results[0].Vulnerabilities = [{ ...finding, VulnerabilityID: '' }];
+    },
+    (value) => {
+      value.Results[0].Vulnerabilities = [{ ...finding, InstalledVersion: '1.0.1' }];
     },
     (value) => {
       value.Results[0].Vulnerabilities = [{ ...finding, PkgName: 'unscanned' }];
