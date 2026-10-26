@@ -31,6 +31,10 @@ def check_archive(archive, package):
     seen = set()
     roots = set()
     total = 0
+    allowed_roots = {"package", package["name"].rsplit("/", 1)[-1]}
+    if package["name"].startswith("@types/"):
+        # Older DefinitelyTyped npm tar prefixes include their major.minor line.
+        allowed_roots.add(package["name"].split("/", 1)[1] + " v" + ".".join(package["version"].split(".")[:2]))
     # Parsing and extraction both happen inside the kernel sandbox and hard limits.
     with tarfile.open(archive, "r:gz") as stream:
         for member in stream:
@@ -39,7 +43,7 @@ def check_archive(archive, package):
             seen.add(member.name)
             parts = member.name.rstrip("/").split("/")
             DIAGNOSTIC["archiveRoot"] = parts[0][:100]
-            require(parts[0] in {"package", package["name"].rsplit("/", 1)[-1]}
+            require(parts[0] in allowed_roots
                     and all(p not in ("", ".", "..") for p in parts), "Unsafe archive path")
             roots.add(parts[0])
             require(len(roots) == 1, "Mixed package archive roots")
@@ -146,7 +150,7 @@ def analyze(request, directory, files):
 
 
 def main():
-    resource.setrlimit(resource.RLIMIT_AS, (3 * 1024**3, 3 * 1024**3))
+    resource.setrlimit(resource.RLIMIT_AS, (2 * 1024**3, 2 * 1024**3))
     require(importlib.metadata.version("guarddog") == "3.2.0", "Wrong scanner version")
     request = json.loads(Path("request.json").read_text())
     archive = Path("package.tgz")
@@ -169,8 +173,24 @@ def main():
     require(f"{archive_root}/package.json" in files, "Missing package manifest")
     manifest = json.loads((directory / archive_root / "package.json").read_text())
     require(manifest["name"] == package["name"] and manifest["version"] == package["version"], "Archive identity mismatch")
+    original_root = archive_root
+    if " v" in archive_root:
+        # Native npm metadata lookup only understands package/ or unscoped-name/.
+        # Rename this single verified root, never a file or its bytes. Return every
+        # finding with its original archive path and retain the normalization fact.
+        archive_root = package["name"].rsplit("/", 1)[-1]
+        (directory / original_root).rename(directory / archive_root)
+        files = {archive_root + path[len(original_root):]: digest for path, digest in files.items()}
     DIAGNOSTIC["stage"] = "native-analysis"
     result = analyze(request, directory, files)
+    if original_root != archive_root:
+        for finding in result["findings"]:
+            if finding["path"] != "$metadata":
+                finding["path"] = original_root + finding["path"][len(archive_root):]
+                finding["location"] = original_root + finding["location"][len(archive_root):]
+        for indicator in result["indicators"]:
+            indicator["location"] = original_root + indicator["location"][len(archive_root):]
+        result["archiveRootAdaptation"] = {"original": original_root, "analyzedAs": archive_root}
     print(json.dumps({"complete": True, "scanner": "3.2.0", "sandbox": True, "files": len(files), **result}))
 
 

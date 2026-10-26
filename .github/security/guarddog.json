@@ -83,5 +83,855 @@
       "reason": "Bundled popularity data is stale. A fresh bounded popularity source/profile has not been approved; no stale or fabricated-current result is accepted."
     }
   ],
-  "exceptions": []
+  "exceptions": [
+    {
+      "id": "source-babel-parser",
+      "decision": "false-positive",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "The matched long string is the JavaScript parser Unicode identifier-character table/regular expression, not an encoded executable payload. The exact lib/index.js file and matching line were inspected; the character classes are used for identifier parsing.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "source-babel-parser"
+      },
+      "matches": [
+        {
+          "name": "@babel/parser",
+          "version": "8.0.8",
+          "integrity": "sha512-Gq65JogAr0S2p0BzvfSJboyuiRnxDQApyOqHkKmkrvm+VlLK4gC3pKsiOKEdnhFBemrFbSnOu90mZZWDpiJnmQ==",
+          "paths": [
+            "node_modules/@babel/helper-member-expression-to-functions/node_modules/@babel/parser",
+            "node_modules/@babel/helper-skip-transparent-expression-wrappers/node_modules/@babel/parser",
+            "node_modules/@stryker-mutator/instrumenter/node_modules/@babel/parser"
+          ],
+          "rule": "threat-runtime-obfuscation",
+          "capabilityRule": null,
+          "path": "package/lib/index.js",
+          "location": "package/lib/index.js:1356",
+          "contextSha256": "687860d40a126108176fcf0ff32f56c164c81fb045fffb7e2b246117fd6fa3a9"
+        }
+      ]
+    },
+    {
+      "id": "source-fastify-busboy",
+      "decision": "false-positive",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "The long repeated-character string is multipart body test fixture data in test/types-multipart.test.js. The matched test builds a Buffer and validates parsing; it does not decode or execute an obfuscated payload.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "source-fastify-busboy"
+      },
+      "matches": [
+        {
+          "name": "@fastify/busboy",
+          "version": "3.2.4",
+          "integrity": "sha512-lQS8xcXT54rdJb+wlG/Q7SMSdtkZEpLPHooSDUZyyZm9LJD7X1kONPhVoPaHq+dsPtWUGGLIz9gBNhs9qKbylw==",
+          "paths": ["node_modules/@fastify/busboy"],
+          "rule": "threat-runtime-obfuscation",
+          "capabilityRule": null,
+          "path": "package/test/types-multipart.test.js",
+          "location": "package/test/types-multipart.test.js:26",
+          "contextSha256": "5a31c50f42de183e8e24cd0bd3e24343dbac14c5b2a06d1ecbe4f2d26fc242b4"
+        }
+      ]
+    },
+    {
+      "id": "source-cmake-js",
+      "decision": "expected-behavior",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "The two matches are its documented native-build distribution downloader: lib/dist.js writes runtime import libraries and lib/downloader.js fetches text. The surrounding runtimePaths.js selects Node/Electron/NW headers and libraries, with optional user mirrors; these specific sites are not download-and-execute commands. This is expected build-tool capability, not a claim that arbitrary mirror execution is safe.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "source-cmake-js"
+      },
+      "matches": [
+        {
+          "name": "cmake-js",
+          "version": "8.0.0",
+          "integrity": "sha512-YbUP88RDwCvoQkZhRtGURYm9RIpWdtvZuhT87fKNoLjk8kIFIFeARpKfuZQGdwfH99GZpUmqSfcDrK62X7lTgg==",
+          "paths": ["node_modules/cmake-js"],
+          "rule": "threat-process-download-exec",
+          "capabilityRule": null,
+          "path": "package/lib/dist.js",
+          "location": "package/lib/dist.js:164",
+          "contextSha256": "d908ede8be1ea3ee47c4c0e2a1097ba6605efa76176ccf62cfe5e78030d67d08"
+        },
+        {
+          "name": "cmake-js",
+          "version": "8.0.0",
+          "integrity": "sha512-YbUP88RDwCvoQkZhRtGURYm9RIpWdtvZuhT87fKNoLjk8kIFIFeARpKfuZQGdwfH99GZpUmqSfcDrK62X7lTgg==",
+          "paths": ["node_modules/cmake-js"],
+          "rule": "threat-process-download-exec",
+          "capabilityRule": null,
+          "path": "package/lib/downloader.js",
+          "location": "package/lib/downloader.js:72",
+          "contextSha256": "6b566bbe14501453e0e2c0693455fb4f77bf2cb85a771bbe4935141c8bdd8e39"
+        }
+      ]
+    },
+    {
+      "id": "metadata-deep-extend",
+      "decision": "false-positive",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "The sole native manifest difference is scripts.test: registry mocha versus archive ./node_modules/.bin/mocha. npm adds dependency executables to script PATH, making this standard local executable normalization. Neither form is a lifecycle hook; no dependency or runtime entry-point differs.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "metadata-deep-extend"
+      },
+      "matches": [
+        {
+          "name": "deep-extend",
+          "version": "0.6.0",
+          "integrity": "sha512-LOHxIOaPYdHlJRtCQfDIVZtfw/ufM8+rVj649RIHzcm/vGwQRXFt6OPqIFWsm2XEMrNIEtWR64sY1LEKD2vAOA==",
+          "paths": ["node_modules/deep-extend"],
+          "rule": "metadata_mismatch",
+          "capabilityRule": null,
+          "path": "$metadata",
+          "location": "",
+          "contextSha256": "f04c5af64bc3bd8428aadda4aecbba608ac04185d581d25e82e0c707e7db5e2e"
+        }
+      ]
+    },
+    {
+      "id": "metadata-dunder-proto",
+      "decision": "false-positive",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "Both the registry manifest and SRI-bound archive have main:false, with matching boolean type. Native metadata_mismatch assumes main must be a string and reports a difference even when both boolean values agree. The evidence records identical native type hashes; manual comparison confirmed equal values and no listed dependency/script difference.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "metadata-dunder-proto"
+      },
+      "matches": [
+        {
+          "name": "dunder-proto",
+          "version": "1.0.1",
+          "integrity": "sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==",
+          "paths": ["node_modules/dunder-proto"],
+          "rule": "metadata_mismatch",
+          "capabilityRule": null,
+          "path": "$metadata",
+          "location": "",
+          "contextSha256": "3ae4b433b350603a714e639084b843e391618deaaf5c225f70c9b2034dc2739c"
+        }
+      ]
+    },
+    {
+      "id": "source-esbuild",
+      "decision": "expected-behavior",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "The package.json postinstall invokes the shipped install.js native binary selector/installer. A lifecycle hook really exists, so this is expected-behavior review rather than denial of the capability. Repository installs use --ignore-scripts, and GuardDog never installs or invokes the package.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "source-esbuild"
+      },
+      "matches": [
+        {
+          "name": "esbuild",
+          "version": "0.28.2",
+          "integrity": "sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==",
+          "paths": ["node_modules/esbuild"],
+          "rule": "threat-process-hooks",
+          "capabilityRule": "capability-process-hooks",
+          "path": "package/package.json",
+          "location": "package/package.json:10",
+          "contextSha256": "9d0bc453f4e791553c4cc2298ba023b409241fd9801e494741666eb0f6051490"
+        }
+      ]
+    },
+    {
+      "id": "source-fast-uri",
+      "decision": "false-positive",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "The matched ../../../etc/passwd literals are URN preservation/normalization test inputs and expected output strings. They are passed to URI parsing/assertions, not filesystem reads. The nested locked package path and exact source hash were checked, rather than confusing it with another fast-uri version.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "source-fast-uri"
+      },
+      "matches": [
+        {
+          "name": "fast-uri",
+          "version": "4.2.3",
+          "integrity": "sha512-I1PXwP5eAhlNlcdpjt9CgB59op2ZvZfxw+BkqGFVIUOgNpCVTcTqp3HhTX7brxj5vsip+nSY4nTvff+eIA76hg==",
+          "paths": [
+            "node_modules/@fastify/ajv-compiler/node_modules/fast-uri",
+            "node_modules/fast-json-stringify/node_modules/fast-uri"
+          ],
+          "rule": "threat-filesystem-read",
+          "capabilityRule": "capability-network-outbound",
+          "path": "package/test/urn-full-input.test.js",
+          "location": "package/test/urn-full-input.test.js:33",
+          "contextSha256": "dbc0f83921364a51c4f572f0d7a8cd758de6610837ea06bc49a7cbde8db867d7"
+        },
+        {
+          "name": "fast-uri",
+          "version": "4.2.3",
+          "integrity": "sha512-I1PXwP5eAhlNlcdpjt9CgB59op2ZvZfxw+BkqGFVIUOgNpCVTcTqp3HhTX7brxj5vsip+nSY4nTvff+eIA76hg==",
+          "paths": [
+            "node_modules/@fastify/ajv-compiler/node_modules/fast-uri",
+            "node_modules/fast-json-stringify/node_modules/fast-uri"
+          ],
+          "rule": "threat-filesystem-read",
+          "capabilityRule": "capability-network-outbound",
+          "path": "package/test/urn-full-input.test.js",
+          "location": "package/test/urn-full-input.test.js:37",
+          "contextSha256": "dbc0f83921364a51c4f572f0d7a8cd758de6610837ea06bc49a7cbde8db867d7"
+        }
+      ]
+    },
+    {
+      "id": "source-fastify",
+      "decision": "expected-behavior",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "The maintenance-only scripts/validate-ecosystem-links.js reads an optional GITHUB_TOKEN for HEAD requests to fixed https://api.github.com/repos/<validated-owner>/<validated-repo>. The other two matches delete that variable in its MockAgent tests. This is documented tooling authentication, not application-runtime credential exfiltration; repository CI does not invoke this dependency maintenance script.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "source-fastify"
+      },
+      "matches": [
+        {
+          "name": "fastify",
+          "version": "5.12.7",
+          "integrity": "sha512-v4pEPsTRPuqlDIYiQFB+BHjVN4SdHX9u0ABk0ZDUKbbdY1vsNryUd1j4Z+jQEZajvYIVk047Kimva9/AJ79GYw==",
+          "paths": ["node_modules/fastify"],
+          "rule": "threat-runtime-environment-read",
+          "capabilityRule": null,
+          "path": "package/scripts/validate-ecosystem-links.js",
+          "location": "package/scripts/validate-ecosystem-links.js:24",
+          "contextSha256": "b1d8089b962e5341a1e92cb25c135006ec08bbf4b1cb8781e74ff7abd3e9fbe3"
+        },
+        {
+          "name": "fastify",
+          "version": "5.12.7",
+          "integrity": "sha512-v4pEPsTRPuqlDIYiQFB+BHjVN4SdHX9u0ABk0ZDUKbbdY1vsNryUd1j4Z+jQEZajvYIVk047Kimva9/AJ79GYw==",
+          "paths": ["node_modules/fastify"],
+          "rule": "threat-runtime-environment-read",
+          "capabilityRule": null,
+          "path": "package/test/scripts/validate-ecosystem-links.test.js",
+          "location": "package/test/scripts/validate-ecosystem-links.test.js:133",
+          "contextSha256": "70c17ff78e003d6bda2639aa921f3e2c038c4587ff1ac8764949b0fa40803b27"
+        },
+        {
+          "name": "fastify",
+          "version": "5.12.7",
+          "integrity": "sha512-v4pEPsTRPuqlDIYiQFB+BHjVN4SdHX9u0ABk0ZDUKbbdY1vsNryUd1j4Z+jQEZajvYIVk047Kimva9/AJ79GYw==",
+          "paths": ["node_modules/fastify"],
+          "rule": "threat-runtime-environment-read",
+          "capabilityRule": null,
+          "path": "package/test/scripts/validate-ecosystem-links.test.js",
+          "location": "package/test/scripts/validate-ecosystem-links.test.js:145",
+          "contextSha256": "70c17ff78e003d6bda2639aa921f3e2c038c4587ff1ac8764949b0fa40803b27"
+        }
+      ]
+    },
+    {
+      "id": "source-find-my-way",
+      "decision": "false-positive",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "The IP-address URLs are literal router.find inputs compared with relative-path route lookups in test/full-url.test.js. These matching statements perform in-memory URL/routing assertions, not requests to that IP address; unrelated HTTP server tests in the file do not create the alleged exfiltration flow.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "source-find-my-way"
+      },
+      "matches": [
+        {
+          "name": "find-my-way",
+          "version": "9.10.0",
+          "integrity": "sha512-eru+uCPQ2g+nLBkf84MHP/KyNNMar0BDy0j+i8Fb72GF9/YHBZ58q7FODUtfVV7XU9nfRUHXSmaM8NmZcIbZ4Q==",
+          "paths": ["node_modules/find-my-way"],
+          "rule": "threat-network-exfiltration",
+          "capabilityRule": "capability-network-outbound",
+          "path": "package/test/full-url.test.js",
+          "location": "package/test/full-url.test.js:30",
+          "contextSha256": "75759b6222fd9f47a20a6bc52e5dee28f376971517074edb485c5f3a74430d8c"
+        },
+        {
+          "name": "find-my-way",
+          "version": "9.10.0",
+          "integrity": "sha512-eru+uCPQ2g+nLBkf84MHP/KyNNMar0BDy0j+i8Fb72GF9/YHBZ58q7FODUtfVV7XU9nfRUHXSmaM8NmZcIbZ4Q==",
+          "paths": ["node_modules/find-my-way"],
+          "rule": "threat-network-exfiltration",
+          "capabilityRule": "capability-network-outbound",
+          "path": "package/test/full-url.test.js",
+          "location": "package/test/full-url.test.js:35",
+          "contextSha256": "75759b6222fd9f47a20a6bc52e5dee28f376971517074edb485c5f3a74430d8c"
+        }
+      ]
+    },
+    {
+      "id": "metadata-fsevents",
+      "decision": "expected-behavior",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "The only difference is registry scripts.install=\"node-gyp rebuild\" versus no archive install key. The official v2.3.3 package manifest has no install/preinstall and its source root contains binding.gyp; npm documents this exact implicit install default. The archive ships the prebuilt Darwin module. This is a bounded packaging-normalization inference, not proof that arbitrary injected scripts are safe; lifecycle scripts remain disabled.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "metadata-fsevents"
+      },
+      "matches": [
+        {
+          "name": "fsevents",
+          "version": "2.3.3",
+          "integrity": "sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==",
+          "paths": ["node_modules/fsevents"],
+          "rule": "metadata_mismatch",
+          "capabilityRule": null,
+          "path": "$metadata",
+          "location": "",
+          "contextSha256": "79d8ce3c2f7e4f9bd9ed726b18a4eb2ab0dc6a54a491ae145f90c8c2dfcb61ed"
+        }
+      ]
+    },
+    {
+      "id": "source-lefthook",
+      "decision": "expected-behavior",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "The package.json hook calls the shipped postinstall.js, which skips ordinary CI and otherwise runs the selected lefthook binary with literal install to configure Git hooks. Lifecycle execution is disabled here. This review is ONLY the exact source hook finding: the separate real provenance_regression remains unreviewed and blocking.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "source-lefthook"
+      },
+      "matches": [
+        {
+          "name": "lefthook",
+          "version": "2.2.2",
+          "integrity": "sha512-37fYHAhL12r1twaEV0PA5TwoIT491eTGGYjhhXxlYNMq3DSkiGZBQ++Jfk5maXj0vq52NRauLtMikBKtbNJs3Q==",
+          "paths": ["node_modules/lefthook"],
+          "rule": "threat-process-hooks",
+          "capabilityRule": "capability-process-hooks",
+          "path": "package/package.json",
+          "location": "package/package.json:44",
+          "contextSha256": "ec18e6107a588b913d91144c35ccabd43c4b736d39b9a0a2c0a85cb1409e88ee"
+        }
+      ]
+    },
+    {
+      "id": "metadata-math-intrinsics",
+      "decision": "false-positive",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "Both the registry manifest and SRI-bound archive have main:false, with matching boolean type. Native metadata_mismatch assumes main must be a string and reports a difference even when both boolean values agree. The evidence records identical native type hashes; manual comparison confirmed equal values and no listed dependency/script difference.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "metadata-math-intrinsics"
+      },
+      "matches": [
+        {
+          "name": "math-intrinsics",
+          "version": "1.1.0",
+          "integrity": "sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==",
+          "paths": ["node_modules/math-intrinsics"],
+          "rule": "metadata_mismatch",
+          "capabilityRule": null,
+          "path": "$metadata",
+          "location": "",
+          "contextSha256": "3ae4b433b350603a714e639084b843e391618deaaf5c225f70c9b2034dc2739c"
+        }
+      ]
+    },
+    {
+      "id": "source-pino",
+      "decision": "false-positive",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "All matched files are packaged tests: HTTP logger assertions use os.hostname as expected log data and make requests to their localhost test server; transport tests inspect NODE_OPTIONS/worker.env and use hostname/temp paths as fixtures. Inspection found no external system-information sink at these matched sites. This does not suppress any runtime source path or future test-file change.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "source-pino"
+      },
+      "matches": [
+        {
+          "name": "pino",
+          "version": "10.4.0",
+          "integrity": "sha512-bk1ZMTwG/Vymx+zPoa28MhNzucFvXJWp3csrSuxuHPSMeUettaCoQ5Jvg07mtC4JGNpcfTwz41oVCnNgBK9+vA==",
+          "paths": ["node_modules/pino"],
+          "rule": "threat-filesystem-read",
+          "capabilityRule": "capability-filesystem-read",
+          "path": "package/test/transport/node-options.test.js",
+          "location": "package/test/transport/node-options.test.js:95",
+          "contextSha256": "5f22453a509dcaeeb8c56bba5fb4417f5af160aeea893297fe62931d073abec7"
+        },
+        {
+          "name": "pino",
+          "version": "10.4.0",
+          "integrity": "sha512-bk1ZMTwG/Vymx+zPoa28MhNzucFvXJWp3csrSuxuHPSMeUettaCoQ5Jvg07mtC4JGNpcfTwz41oVCnNgBK9+vA==",
+          "paths": ["node_modules/pino"],
+          "rule": "threat-network-exfil-sysinfo",
+          "capabilityRule": null,
+          "path": "package/test/http.test.js",
+          "location": "package/test/http.test.js:12",
+          "contextSha256": "24ae6707e495be8f2ee60da7cf76abb1cb64cf8b2307e77e9716671196e4a7a4"
+        },
+        {
+          "name": "pino",
+          "version": "10.4.0",
+          "integrity": "sha512-bk1ZMTwG/Vymx+zPoa28MhNzucFvXJWp3csrSuxuHPSMeUettaCoQ5Jvg07mtC4JGNpcfTwz41oVCnNgBK9+vA==",
+          "paths": ["node_modules/pino"],
+          "rule": "threat-network-exfil-sysinfo",
+          "capabilityRule": null,
+          "path": "package/test/http.test.js",
+          "location": "package/test/http.test.js:44",
+          "contextSha256": "24ae6707e495be8f2ee60da7cf76abb1cb64cf8b2307e77e9716671196e4a7a4"
+        },
+        {
+          "name": "pino",
+          "version": "10.4.0",
+          "integrity": "sha512-bk1ZMTwG/Vymx+zPoa28MhNzucFvXJWp3csrSuxuHPSMeUettaCoQ5Jvg07mtC4JGNpcfTwz41oVCnNgBK9+vA==",
+          "paths": ["node_modules/pino"],
+          "rule": "threat-network-exfil-sysinfo",
+          "capabilityRule": null,
+          "path": "package/test/http.test.js",
+          "location": "package/test/http.test.js:86",
+          "contextSha256": "24ae6707e495be8f2ee60da7cf76abb1cb64cf8b2307e77e9716671196e4a7a4"
+        },
+        {
+          "name": "pino",
+          "version": "10.4.0",
+          "integrity": "sha512-bk1ZMTwG/Vymx+zPoa28MhNzucFvXJWp3csrSuxuHPSMeUettaCoQ5Jvg07mtC4JGNpcfTwz41oVCnNgBK9+vA==",
+          "paths": ["node_modules/pino"],
+          "rule": "threat-runtime-system-info",
+          "capabilityRule": null,
+          "path": "package/test/transport/core.transpiled.test.ts",
+          "location": "package/test/transport/core.transpiled.test.ts:14",
+          "contextSha256": "27e4f188d772c45c9c7daa3c7ae8eb8da5a492c16eb123b2ce6b2ec026766569"
+        },
+        {
+          "name": "pino",
+          "version": "10.4.0",
+          "integrity": "sha512-bk1ZMTwG/Vymx+zPoa28MhNzucFvXJWp3csrSuxuHPSMeUettaCoQ5Jvg07mtC4JGNpcfTwz41oVCnNgBK9+vA==",
+          "paths": ["node_modules/pino"],
+          "rule": "threat-runtime-system-info",
+          "capabilityRule": null,
+          "path": "package/test/transport/core.transpiled.test.ts",
+          "location": "package/test/transport/core.transpiled.test.ts:20",
+          "contextSha256": "27e4f188d772c45c9c7daa3c7ae8eb8da5a492c16eb123b2ce6b2ec026766569"
+        },
+        {
+          "name": "pino",
+          "version": "10.4.0",
+          "integrity": "sha512-bk1ZMTwG/Vymx+zPoa28MhNzucFvXJWp3csrSuxuHPSMeUettaCoQ5Jvg07mtC4JGNpcfTwz41oVCnNgBK9+vA==",
+          "paths": ["node_modules/pino"],
+          "rule": "threat-runtime-system-info",
+          "capabilityRule": null,
+          "path": "package/test/transport/core.transpiled.test.ts",
+          "location": "package/test/transport/core.transpiled.test.ts:66",
+          "contextSha256": "27e4f188d772c45c9c7daa3c7ae8eb8da5a492c16eb123b2ce6b2ec026766569"
+        }
+      ]
+    },
+    {
+      "id": "source-prettier",
+      "decision": "false-positive",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "The long index.mjs string/regular expression belongs to bundled JSON5 Unicode identifier character handling. It is parser data, not a decoded or dynamically executed payload. The exact file hash and location bind this review to the inspected table.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "source-prettier"
+      },
+      "matches": [
+        {
+          "name": "prettier",
+          "version": "3.9.10",
+          "integrity": "sha512-skGHTH1Yb9QvaTC4hWnRTzEYtCpApF0UMBPz+t/0ZPzP8ihefo/btKd+QA7pUE0fEwA1SbS/NmhyEcstdXOIdA==",
+          "paths": ["node_modules/prettier"],
+          "rule": "threat-runtime-obfuscation",
+          "capabilityRule": null,
+          "path": "package/index.mjs",
+          "location": "package/index.mjs:11272",
+          "contextSha256": "b12454ed7e201b8abe8d2333dd46b6b58af1b3eaaa9aeda2c1e6947828574268"
+        }
+      ]
+    },
+    {
+      "id": "metadata-retry",
+      "decision": "false-positive",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "The sole native manifest difference is scripts.test: registry istanbul cover ./node_modules/tape/bin/tape ./test/integration/*.js versus the same command with ./node_modules/.bin/istanbul. npm script PATH resolves the same local executable; no dependency or lifecycle entry-point differs.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "metadata-retry"
+      },
+      "matches": [
+        {
+          "name": "retry",
+          "version": "0.12.0",
+          "integrity": "sha512-9LkiTwjUh6rT555DtE9rTX+BKByPfrMzEAtnlEtdEwr3Nkffwiihqe2bWADg+OQRjt9gl6ICdmB/ZFDCGAtSow==",
+          "paths": ["node_modules/retry"],
+          "rule": "metadata_mismatch",
+          "capabilityRule": null,
+          "path": "$metadata",
+          "location": "",
+          "contextSha256": "e33101b139e0b892ebeceff90b709fcabddf552099a42c665e2581a35f4faa48"
+        }
+      ]
+    },
+    {
+      "id": "source-set-cookie-parser",
+      "decision": "false-positive",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "The matched computed property finds a header whose key lowercases to set-cookie, then reads that header. It is case-insensitive HTTP header selection; no encoded string is decoded/evaluated and no obfuscated executable is constructed at the matched expression.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "source-set-cookie-parser"
+      },
+      "matches": [
+        {
+          "name": "set-cookie-parser",
+          "version": "3.2.1",
+          "integrity": "sha512-Npd1Pt+4zb3BrSZDPd2qFwRpS6b1EUEasRrO8xS0zMJi0fApXXK5YuzP0minyJnxwnFHoVoJwA55q0A0cu63gQ==",
+          "paths": ["node_modules/set-cookie-parser"],
+          "rule": "threat-runtime-obfuscation-api",
+          "capabilityRule": null,
+          "path": "package/dist/set-cookie.cjs",
+          "location": "package/dist/set-cookie.cjs:165",
+          "contextSha256": "a2b14f96e92c6e91e2d70d5cf40dd232022c3f104f23824e4fc125f858693675"
+        }
+      ]
+    },
+    {
+      "id": "source-tree-kill",
+      "decision": "false-positive",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "The three HTTP strings in package.json are author/contributor homepage URLs, not dependency selectors or executable downloads. The native text heuristic conflates these metadata URLs with HTTP dependencies; only these exact manifest locations and bytes are reviewed.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "source-tree-kill"
+      },
+      "matches": [
+        {
+          "name": "tree-kill",
+          "version": "1.2.2",
+          "integrity": "sha512-L0Orpi8qGpRG//Nd+H90vFB+3iHnue1zSSGmNOOCh1GLJ7rUKVwV2HvijphGQS2UmhUZewS9VgvxYIdgr+fG1A==",
+          "paths": ["node_modules/tree-kill"],
+          "rule": "threat-npm-http-dependency",
+          "capabilityRule": null,
+          "path": "package/package.json",
+          "location": "package/package.json:29",
+          "contextSha256": "085e475aa81fe90a8e42d92c7348f259e370e0fc74b5d1982c6e80fc21c1f12d"
+        },
+        {
+          "name": "tree-kill",
+          "version": "1.2.2",
+          "integrity": "sha512-L0Orpi8qGpRG//Nd+H90vFB+3iHnue1zSSGmNOOCh1GLJ7rUKVwV2HvijphGQS2UmhUZewS9VgvxYIdgr+fG1A==",
+          "paths": ["node_modules/tree-kill"],
+          "rule": "threat-npm-http-dependency",
+          "capabilityRule": null,
+          "path": "package/package.json",
+          "location": "package/package.json:35",
+          "contextSha256": "085e475aa81fe90a8e42d92c7348f259e370e0fc74b5d1982c6e80fc21c1f12d"
+        },
+        {
+          "name": "tree-kill",
+          "version": "1.2.2",
+          "integrity": "sha512-L0Orpi8qGpRG//Nd+H90vFB+3iHnue1zSSGmNOOCh1GLJ7rUKVwV2HvijphGQS2UmhUZewS9VgvxYIdgr+fG1A==",
+          "paths": ["node_modules/tree-kill"],
+          "rule": "threat-npm-http-dependency",
+          "capabilityRule": null,
+          "path": "package/package.json",
+          "location": "package/package.json:40",
+          "contextSha256": "085e475aa81fe90a8e42d92c7348f259e370e0fc74b5d1982c6e80fc21c1f12d"
+        }
+      ]
+    },
+    {
+      "id": "metadata-typescript",
+      "decision": "false-positive",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "All twenty differing dependencies entries are exactly version7.0.2 platform packages also present, identically, in optionalDependencies in BOTH registry and archive. The registry repeats optional dependencies under dependencies while the archive keeps them only optional. The complete exact-lock scan still includes all platform archives; no dependency is waived or substituted.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "metadata-typescript"
+      },
+      "matches": [
+        {
+          "name": "typescript",
+          "version": "7.0.2",
+          "integrity": "sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==",
+          "paths": ["node_modules/@typescript/native"],
+          "rule": "metadata_mismatch",
+          "capabilityRule": null,
+          "path": "$metadata",
+          "location": "",
+          "contextSha256": "3ed0da4c3ef9b8134e6da5cf491f457f3f31143e1a03095000a410e82476ff1d"
+        }
+      ]
+    },
+    {
+      "id": "source-vite",
+      "decision": "expected-behavior",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "The matched bundle sites implement documented tool behavior: .env identifiers/denylist and define transforms, Docker/WSL detection from /proc and os.release, editor-path conversion and homedir config search. The base64-exec/steganography matches correlate unrelated strings within the bundled file with a literal exec(\"net use\") for Windows mapped-drive canonicalization; no encoded/image bytes reach that command. Review is exact-file/line-bound, not a general environment-read or process-spawn exception.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "source-vite"
+      },
+      "matches": [
+        {
+          "name": "vite",
+          "version": "8.3.5",
+          "integrity": "sha512-z1YpjieJ9g0ebTmQpLBv/oq9E3F9EIlOe+7LahW8SrE3LTiG3udBRUXQOlYXP9b+IC2q2phHeVxj9xGlw34OEQ==",
+          "paths": ["node_modules/vite"],
+          "rule": "threat-filesystem-read",
+          "capabilityRule": "capability-filesystem-read",
+          "path": "package/dist/node/module-runner.js",
+          "location": "package/dist/node/module-runner.js:786",
+          "contextSha256": "7dcee739418a576f8089c0b682b979ec191ef64dce9ec8380cf8162b69df9e0d"
+        },
+        {
+          "name": "vite",
+          "version": "8.3.5",
+          "integrity": "sha512-z1YpjieJ9g0ebTmQpLBv/oq9E3F9EIlOe+7LahW8SrE3LTiG3udBRUXQOlYXP9b+IC2q2phHeVxj9xGlw34OEQ==",
+          "paths": ["node_modules/vite"],
+          "rule": "threat-filesystem-read",
+          "capabilityRule": "capability-filesystem-read",
+          "path": "package/dist/node/chunks/node.js",
+          "location": "package/dist/node/chunks/node.js:17138",
+          "contextSha256": "5d40302b2d86ff8f3501df6503a69908dce2c2eab4ce03c154cd8745c0bec5f2"
+        },
+        {
+          "name": "vite",
+          "version": "8.3.5",
+          "integrity": "sha512-z1YpjieJ9g0ebTmQpLBv/oq9E3F9EIlOe+7LahW8SrE3LTiG3udBRUXQOlYXP9b+IC2q2phHeVxj9xGlw34OEQ==",
+          "paths": ["node_modules/vite"],
+          "rule": "threat-filesystem-read",
+          "capabilityRule": "capability-filesystem-read",
+          "path": "package/dist/node/chunks/node.js",
+          "location": "package/dist/node/chunks/node.js:25177",
+          "contextSha256": "5d40302b2d86ff8f3501df6503a69908dce2c2eab4ce03c154cd8745c0bec5f2"
+        },
+        {
+          "name": "vite",
+          "version": "8.3.5",
+          "integrity": "sha512-z1YpjieJ9g0ebTmQpLBv/oq9E3F9EIlOe+7LahW8SrE3LTiG3udBRUXQOlYXP9b+IC2q2phHeVxj9xGlw34OEQ==",
+          "paths": ["node_modules/vite"],
+          "rule": "threat-filesystem-read",
+          "capabilityRule": "capability-filesystem-read",
+          "path": "package/dist/node/chunks/node.js",
+          "location": "package/dist/node/chunks/node.js:26685",
+          "contextSha256": "5d40302b2d86ff8f3501df6503a69908dce2c2eab4ce03c154cd8745c0bec5f2"
+        },
+        {
+          "name": "vite",
+          "version": "8.3.5",
+          "integrity": "sha512-z1YpjieJ9g0ebTmQpLBv/oq9E3F9EIlOe+7LahW8SrE3LTiG3udBRUXQOlYXP9b+IC2q2phHeVxj9xGlw34OEQ==",
+          "paths": ["node_modules/vite"],
+          "rule": "threat-filesystem-read",
+          "capabilityRule": "capability-filesystem-read",
+          "path": "package/dist/node/chunks/node.js",
+          "location": "package/dist/node/chunks/node.js:37502",
+          "contextSha256": "5d40302b2d86ff8f3501df6503a69908dce2c2eab4ce03c154cd8745c0bec5f2"
+        },
+        {
+          "name": "vite",
+          "version": "8.3.5",
+          "integrity": "sha512-z1YpjieJ9g0ebTmQpLBv/oq9E3F9EIlOe+7LahW8SrE3LTiG3udBRUXQOlYXP9b+IC2q2phHeVxj9xGlw34OEQ==",
+          "paths": ["node_modules/vite"],
+          "rule": "threat-runtime-enumeration",
+          "capabilityRule": null,
+          "path": "package/dist/node/chunks/node.js",
+          "location": "package/dist/node/chunks/node.js:14813",
+          "contextSha256": "5d40302b2d86ff8f3501df6503a69908dce2c2eab4ce03c154cd8745c0bec5f2"
+        },
+        {
+          "name": "vite",
+          "version": "8.3.5",
+          "integrity": "sha512-z1YpjieJ9g0ebTmQpLBv/oq9E3F9EIlOe+7LahW8SrE3LTiG3udBRUXQOlYXP9b+IC2q2phHeVxj9xGlw34OEQ==",
+          "paths": ["node_modules/vite"],
+          "rule": "threat-runtime-enumeration",
+          "capabilityRule": null,
+          "path": "package/dist/node/chunks/node.js",
+          "location": "package/dist/node/chunks/node.js:14846",
+          "contextSha256": "5d40302b2d86ff8f3501df6503a69908dce2c2eab4ce03c154cd8745c0bec5f2"
+        },
+        {
+          "name": "vite",
+          "version": "8.3.5",
+          "integrity": "sha512-z1YpjieJ9g0ebTmQpLBv/oq9E3F9EIlOe+7LahW8SrE3LTiG3udBRUXQOlYXP9b+IC2q2phHeVxj9xGlw34OEQ==",
+          "paths": ["node_modules/vite"],
+          "rule": "threat-runtime-enumeration",
+          "capabilityRule": null,
+          "path": "package/dist/node/chunks/node.js",
+          "location": "package/dist/node/chunks/node.js:14848",
+          "contextSha256": "5d40302b2d86ff8f3501df6503a69908dce2c2eab4ce03c154cd8745c0bec5f2"
+        },
+        {
+          "name": "vite",
+          "version": "8.3.5",
+          "integrity": "sha512-z1YpjieJ9g0ebTmQpLBv/oq9E3F9EIlOe+7LahW8SrE3LTiG3udBRUXQOlYXP9b+IC2q2phHeVxj9xGlw34OEQ==",
+          "paths": ["node_modules/vite"],
+          "rule": "threat-runtime-obfuscation-base64exec",
+          "capabilityRule": null,
+          "path": "package/dist/node/chunks/node.js",
+          "location": "package/dist/node/chunks/node.js:2492",
+          "contextSha256": "5d40302b2d86ff8f3501df6503a69908dce2c2eab4ce03c154cd8745c0bec5f2"
+        },
+        {
+          "name": "vite",
+          "version": "8.3.5",
+          "integrity": "sha512-z1YpjieJ9g0ebTmQpLBv/oq9E3F9EIlOe+7LahW8SrE3LTiG3udBRUXQOlYXP9b+IC2q2phHeVxj9xGlw34OEQ==",
+          "paths": ["node_modules/vite"],
+          "rule": "threat-runtime-obfuscation-steganography",
+          "capabilityRule": null,
+          "path": "package/dist/node/chunks/node.js",
+          "location": "package/dist/node/chunks/node.js:2492",
+          "contextSha256": "5d40302b2d86ff8f3501df6503a69908dce2c2eab4ce03c154cd8745c0bec5f2"
+        },
+        {
+          "name": "vite",
+          "version": "8.3.5",
+          "integrity": "sha512-z1YpjieJ9g0ebTmQpLBv/oq9E3F9EIlOe+7LahW8SrE3LTiG3udBRUXQOlYXP9b+IC2q2phHeVxj9xGlw34OEQ==",
+          "paths": ["node_modules/vite"],
+          "rule": "threat-runtime-system-info",
+          "capabilityRule": null,
+          "path": "package/dist/node/chunks/node.js",
+          "location": "package/dist/node/chunks/node.js:14262",
+          "contextSha256": "5d40302b2d86ff8f3501df6503a69908dce2c2eab4ce03c154cd8745c0bec5f2"
+        },
+        {
+          "name": "vite",
+          "version": "8.3.5",
+          "integrity": "sha512-z1YpjieJ9g0ebTmQpLBv/oq9E3F9EIlOe+7LahW8SrE3LTiG3udBRUXQOlYXP9b+IC2q2phHeVxj9xGlw34OEQ==",
+          "paths": ["node_modules/vite"],
+          "rule": "threat-runtime-system-info",
+          "capabilityRule": null,
+          "path": "package/dist/node/chunks/node.js",
+          "location": "package/dist/node/chunks/node.js:14841",
+          "contextSha256": "5d40302b2d86ff8f3501df6503a69908dce2c2eab4ce03c154cd8745c0bec5f2"
+        },
+        {
+          "name": "vite",
+          "version": "8.3.5",
+          "integrity": "sha512-z1YpjieJ9g0ebTmQpLBv/oq9E3F9EIlOe+7LahW8SrE3LTiG3udBRUXQOlYXP9b+IC2q2phHeVxj9xGlw34OEQ==",
+          "paths": ["node_modules/vite"],
+          "rule": "threat-runtime-system-info",
+          "capabilityRule": null,
+          "path": "package/dist/node/chunks/node.js",
+          "location": "package/dist/node/chunks/node.js:6590",
+          "contextSha256": "5d40302b2d86ff8f3501df6503a69908dce2c2eab4ce03c154cd8745c0bec5f2"
+        }
+      ]
+    },
+    {
+      "id": "source-vitest",
+      "decision": "expected-behavior",
+      "owner": "Lunary-Lab repository security maintainer",
+      "reviewedOn": "2026-10-26",
+      "expiresOn": "2026-11-25",
+      "explanation": "The matched code tracks project .env/.env.local files, handles Vite process.env define keys, includes the filesystem denylist and removes selected define entries. These are expected test-runner configuration transformations/watch inputs, not evidence of credential extraction. Exact file/line/hash matches prevent covering other filesystem accesses.",
+      "evidence": {
+        "path": ".github/security/guarddog-findings-2026-10-26.md",
+        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "section": "source-vitest"
+      },
+      "matches": [
+        {
+          "name": "vitest",
+          "version": "5.0.5",
+          "integrity": "sha512-cPODOMF8YnkiiYtDdHo6n4wWmBrOBBbOIYH2d33M4l3CdNn72h+qMmO6uXffUN6A5AZFXNND/d+krS9mgkXRfg==",
+          "paths": ["node_modules/vitest"],
+          "rule": "threat-filesystem-read",
+          "capabilityRule": "capability-filesystem-read",
+          "path": "package/dist/chunks/cli-api.De07GUeT.js",
+          "location": "package/dist/chunks/cli-api.De07GUeT.js:10080",
+          "contextSha256": "8b75d08fd468ac1428ef5562e43883e2cf1953c8953a7eab95da17b30ed97945"
+        },
+        {
+          "name": "vitest",
+          "version": "5.0.5",
+          "integrity": "sha512-cPODOMF8YnkiiYtDdHo6n4wWmBrOBBbOIYH2d33M4l3CdNn72h+qMmO6uXffUN6A5AZFXNND/d+krS9mgkXRfg==",
+          "paths": ["node_modules/vitest"],
+          "rule": "threat-filesystem-read",
+          "capabilityRule": "capability-filesystem-read",
+          "path": "package/dist/chunks/cli-api.De07GUeT.js",
+          "location": "package/dist/chunks/cli-api.De07GUeT.js:10081",
+          "contextSha256": "8b75d08fd468ac1428ef5562e43883e2cf1953c8953a7eab95da17b30ed97945"
+        },
+        {
+          "name": "vitest",
+          "version": "5.0.5",
+          "integrity": "sha512-cPODOMF8YnkiiYtDdHo6n4wWmBrOBBbOIYH2d33M4l3CdNn72h+qMmO6uXffUN6A5AZFXNND/d+krS9mgkXRfg==",
+          "paths": ["node_modules/vitest"],
+          "rule": "threat-filesystem-read",
+          "capabilityRule": "capability-filesystem-read",
+          "path": "package/dist/chunks/index.1TqnEahn.js",
+          "location": "package/dist/chunks/index.1TqnEahn.js:2008",
+          "contextSha256": "4e311af8b4db378a5c3d4e768b5210b0779d2ae0d0ec05f81a72378dbaf25412"
+        },
+        {
+          "name": "vitest",
+          "version": "5.0.5",
+          "integrity": "sha512-cPODOMF8YnkiiYtDdHo6n4wWmBrOBBbOIYH2d33M4l3CdNn72h+qMmO6uXffUN6A5AZFXNND/d+krS9mgkXRfg==",
+          "paths": ["node_modules/vitest"],
+          "rule": "threat-filesystem-read",
+          "capabilityRule": "capability-filesystem-read",
+          "path": "package/dist/chunks/index.1TqnEahn.js",
+          "location": "package/dist/chunks/index.1TqnEahn.js:2051",
+          "contextSha256": "4e311af8b4db378a5c3d4e768b5210b0779d2ae0d0ec05f81a72378dbaf25412"
+        },
+        {
+          "name": "vitest",
+          "version": "5.0.5",
+          "integrity": "sha512-cPODOMF8YnkiiYtDdHo6n4wWmBrOBBbOIYH2d33M4l3CdNn72h+qMmO6uXffUN6A5AZFXNND/d+krS9mgkXRfg==",
+          "paths": ["node_modules/vitest"],
+          "rule": "threat-filesystem-read",
+          "capabilityRule": "capability-filesystem-read",
+          "path": "package/dist/chunks/index.1TqnEahn.js",
+          "location": "package/dist/chunks/index.1TqnEahn.js:7209",
+          "contextSha256": "4e311af8b4db378a5c3d4e768b5210b0779d2ae0d0ec05f81a72378dbaf25412"
+        }
+      ]
+    }
+  ]
 }

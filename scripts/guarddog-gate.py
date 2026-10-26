@@ -7,6 +7,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import resource
 import shutil
 import sys
 import tempfile
@@ -50,6 +51,7 @@ def scan_bytes(package, profile, scanner_root, metadata, archive, metadata_hash)
         result = nono_py.sandboxed_exec(
             caps, [sys.executable, "-I", "-B", str(work / "worker.py")], cwd=str(work),
             timeout_secs=180, env=environment, inherit_env=False,
+            enforcement_mode="seccomp",
             max_processes=16, max_cpu_seconds=120, max_file_size_bytes=512 * 1024**2, max_open_files=256,
         )
         inputs.require(len(result.stdout) + len(result.stderr) < 4 * 1024**2, "Worker output exceeded bound")
@@ -73,6 +75,10 @@ def scan_bytes(package, profile, scanner_root, metadata, archive, metadata_hash)
 
 
 def main():
+    resource.setrlimit(resource.RLIMIT_AS, (2 * 1024**3, 2 * 1024**3))
+    resource.setrlimit(resource.RLIMIT_CPU, (1800, 1800))
+    resource.setrlimit(resource.RLIMIT_FSIZE, (512 * 1024**2, 512 * 1024**2))
+    resource.setrlimit(resource.RLIMIT_NOFILE, (256, 256))
     inputs.require(importlib.metadata.version("guarddog") == "3.2.0", "Wrong GuardDog version")
     inputs.require(importlib.metadata.version("nono-py") == "0.16.0", "Wrong sandbox version")
     import nono_py
@@ -83,7 +89,9 @@ def main():
     packages = inputs.locked_packages(json.loads(lock_bytes))
     profile = json.loads((ROOT / ".github/security/guarddog.json").read_text())
     inputs.require(profile["scannerVersion"] == "3.2.0" and profile["schemaVersion"] == 1, "Wrong profile version")
-    inputs.require(profile["exceptions"] == [], "No finding exemptions have been reviewed yet")
+    policy_spec = importlib.util.spec_from_file_location("guarddog_policy", ROOT / "scripts/guarddog-policy.py")
+    policy = importlib.util.module_from_spec(policy_spec)
+    policy_spec.loader.exec_module(policy)
     controls_spec = importlib.util.spec_from_file_location("guarddog_controls", ROOT / "scripts/guarddog-native-controls.py")
     controls = importlib.util.module_from_spec(controls_spec)
     controls_spec.loader.exec_module(controls)
@@ -113,10 +121,12 @@ def main():
     identities = sorted(result["name"] + "@" + result["version"] for result in results)
     expected = sorted(package["name"] + "@" + package["version"] for package in packages)
     findings = sum(len(result["findings"]) for result in results)
+    reviews = policy.review_findings(results, profile["exceptions"], ROOT, [x["rule"] for x in profile["unavailable"]])
     evidence = {"scanner": "GuardDog 3.2.0", "lockSha256": hashlib.sha256(lock_bytes).hexdigest(),
                 "expectedPackages": len(packages), "completePackages": len(results), "failures": failures,
                 "complete": identities == expected and not failures, "findings": findings,
                 "unresolvedCapabilities": profile["unavailable"], "profileStatus": profile["status"],
+                "reviewedFindings": reviews["reviewedFindings"], "blockingFindings": len(reviews["blockingFindings"]),
                 "accepted": False}
     print(json.dumps(evidence), flush=True)
     output = ROOT / "reports/security"
@@ -124,7 +134,7 @@ def main():
     (output / "guarddog-summary.json").write_text(json.dumps({**evidence, "packages": results}, indent=2))
     inputs.require(evidence["complete"], "Missing or failed package scans")
     inputs.require(not profile["unavailable"] and profile["status"] == "accepted", "Coverage profile unresolved")
-    inputs.require(findings == 0, "Unreviewed GuardDog findings")
+    inputs.require(not reviews["blockingFindings"], "Unreviewed GuardDog findings")
 
 
 if __name__ == "__main__":

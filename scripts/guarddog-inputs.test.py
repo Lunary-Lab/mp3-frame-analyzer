@@ -80,6 +80,8 @@ class ArchiveTests(unittest.TestCase):
         for members, valid in [
             ([("package/package.json", "file")], True),
             ([("node/package.json", "file")], True),
+            ([("node v24.19/package.json", "file")], True),
+            ([("node v24.18/package.json", "file")], False),
             ([("../escape", "file")], False),
             ([("package/a", "link")], False),
             ([("package/a", "file"), ("package/a", "file")], False),
@@ -90,10 +92,10 @@ class ArchiveTests(unittest.TestCase):
                 path = Path(temporary, "package.tgz")
                 path.write_bytes(self.archive(members))
                 if valid:
-                    self.assertIn(worker.check_archive(path, {"name": "@types/node"}), ["package", "node"])
+                    self.assertIn(worker.check_archive(path, {"name": "@types/node", "version": "24.19.2"}), ["package", "node", "node v24.19"])
                 else:
                     with self.assertRaises(ValueError):
-                        worker.check_archive(path, {"name": "@types/node"})
+                        worker.check_archive(path, {"name": "@types/node", "version": "24.19.2"})
 
 
 if __name__ == "__main__":

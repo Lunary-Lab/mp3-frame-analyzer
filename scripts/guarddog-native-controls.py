@@ -7,13 +7,13 @@ import json
 import tarfile
 
 
-def fixture(source, preinstall=False, unsafe=False):
-    manifest = {"name": "guarddog-synthetic-control", "version": "1.0.0"}
+def fixture(source, preinstall=False, unsafe=False, root="package", name="guarddog-synthetic-control"):
+    manifest = {"name": name, "version": "1.0.0"}
     if preinstall:
         manifest["scripts"] = {"preinstall": "node -e \"require('fs').writeFileSync('LIFECYCLE_EXECUTED','bad')\""}
     stream = io.BytesIO()
     with tarfile.open(fileobj=stream, mode="w:gz") as archive:
-        for path, content in {"package/package.json": json.dumps(manifest), "package/index.js": source}.items():
+        for path, content in {f"{root}/package.json": json.dumps(manifest), f"{root}/index.js": source}.items():
             data = content.encode()
             entry = tarfile.TarInfo(path)
             entry.size = len(data)
@@ -40,6 +40,17 @@ def verify(scan, profile, scanner_root):
     rules = {item["rule"] for item in result["indicators"]}
     assert {"threat-npm-preinstall-script", "threat-runtime-obfuscation-base64exec"} <= rules
     assert result["findings"], "Synthetic native positive was not detected"
+    normalized = []
+    for root in ("synthetic", "synthetic v1.0"):
+        package, metadata, archive = fixture("module.exports = (x) => eval(Buffer.from(x, 'base64').toString());",
+                                             True, root=root, name="@types/synthetic")
+        response = scan(package, profile, scanner_root, metadata, archive, "synthetic")
+        findings = [{**item, "path": item["path"].replace(root + "/", "root/", 1),
+                     "location": item["location"].replace(root + "/", "root/", 1)} for item in response["findings"]]
+        normalized.append({"score": response["score"], "findings": findings, "metadataFindings": response["metadataFindings"]})
+        if " v" in root:
+            assert response["archiveRootAdaptation"] == {"original": root, "analyzedAs": "synthetic"}
+    assert normalized[0] == normalized[1], "Versioned-root native analysis was not equivalent"
     for unsafe in (False, True):
         package, metadata, archive = fixture("module.exports = 42;", unsafe=unsafe)
         if not unsafe:

@@ -48,6 +48,12 @@ def main():
             # Prove the target really is reachable before asking for a denial.
             with socket.create_connection(("127.0.0.1", port), timeout=2):
                 pass
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
+                udp.bind(("127.0.0.1", 0))
+                udp.settimeout(2)
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sender:
+                    sender.sendto(b"synthetic", udp.getsockname())
+                require(udp.recv(32) == b"synthetic", "UDP positive control unavailable")
             caps = nono_py.CapabilitySet()
             for path in {sys.prefix, sys.base_prefix, "/usr", "/lib", "/lib64"}:
                 if Path(path).exists():
@@ -70,17 +76,20 @@ def denied(operation):
 denied(lambda: (Path(forbidden) / 'read.txt').read_text())
 denied(lambda: (Path(forbidden) / 'write.txt').write_text('not allowed'))
 denied(lambda: socket.create_connection(('127.0.0.1', int(port)), timeout=2))
-print(json.dumps({'filesystemDenied': True, 'networkDenied': True, 'allowedIO': True}))
+denied(lambda: socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
+denied(lambda: socket.socket(socket.AF_INET6, socket.SOCK_DGRAM))
+print(json.dumps({'filesystemDenied': True, 'tcpDenied': True, 'udpDenied': True, 'allowedIO': True}))
 '''
             result = nono_py.sandboxed_exec(
                 caps, [sys.executable, "-I", "-B", "-c", code, str(allowed), str(forbidden), str(port)],
                 cwd=str(allowed), timeout_secs=30, inherit_env=False,
+                enforcement_mode="seccomp",
                 env=[("HOME", str(allowed)), ("LANG", "C.UTF-8")],
                 max_processes=8, max_cpu_seconds=30, max_file_size_bytes=1024**2, max_open_files=64,
             )
             require(result.exit_code == 0, "Native sandbox probe failed (no dependency scan attempted)")
             result = json.loads(result.stdout)
-            require(result == {"filesystemDenied": True, "networkDenied": True, "allowedIO": True},
+            require(result == {"filesystemDenied": True, "tcpDenied": True, "udpDenied": True, "allowedIO": True},
                     "Malformed sandbox evidence")
             print(json.dumps({"prerequisiteComplete": True, "dependencyScanAttempted": False, **result}))
 
