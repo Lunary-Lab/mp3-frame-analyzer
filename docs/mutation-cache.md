@@ -24,24 +24,80 @@ Stryker's [incremental mechanism](https://stryker-mutator.io/docs/stryker-js/inc
 tracks source/test changes but does not establish arbitrary cross-module impact.
 Our additional boundary deliberately supports this project's static ESM layout:
 
-1. Compare the authenticated old and current input inventories. Only existing
-   parser-module and `tests/**/*.test.ts` **content** changes can be selective.
-   Added, removed, renamed or mode-changed files force full execution. A changed
-   file absent from the baseline's authenticated source report also forces full.
-2. Compute each test file's transitive imports in **both old and current** sources,
-   including re-exports, cycles and literal dynamic imports. Unresolved/ambiguous
-   paths, nonliteral imports, unsupported packages or opaque execution force full.
-3. Mark changed test files and files importing changed modules affected. A test
-   with filesystem-read capability is **never a reusable killing witness**, even
-   on unchanged inputs: the import graph cannot establish its actual read paths,
-   and excluded/generated/external bytes could differ. Changed filesystem-read
-   tests and known external-state-writing graphs conservatively force full.
-4. Retain only an **unchanged mutant source file's `Killed` result** with at least
-   one unaffected prior killing-test file. Test witnesses bind source text, file,
-   exact test name and location—not unstable numeric IDs. Stryker performs its
-   own fresh discovery/mapping too; accounting verifies the resulting witness.
-5. Always rerun **equivalents, static mutants and timeouts**. Re-audit the complete
-   current parser population and equivalence context, then publish successful state.
+1. Authenticate complete old and current source snapshots against their full
+   file inventories. Schema 3 stores prior transitive helper sources; current
+   bytes are never substituted for missing old dependency evidence.
+2. Recognize the bounded **data-only** Stryker/Vitest configuration without
+   executing it. Only the pinned Vitest runner plugin is loaded, with isolated
+   fork test files, persistent module caching disabled, and a literal parser-test
+   selection (explicit paths, `tests/**/*.test.ts`, or the bounded mirrored
+   `tests/mp3/**/*.test.ts` glob). Config imports other than the reviewed base spread/re-export,
+   setup/globalSetup, plugins, transforms, custom resolvers/loaders, alternate
+   config roots, nested packages/tsconfigs and external tsconfig inheritance are
+   unsupported and force full execution. The pinned installed transformer and
+   package bytes remain global inputs. A bounded root `tsconfig.json` is mandatory;
+   absence must not inherit an external parent config.
+3. Allow content and path changes to unrelated `src/**/*.ts`, `tests/**/*.ts`,
+   `docs/**/*.md` and named root documents (`README`, `AGENTS`, `GLOSSARY`,
+   `CHANGELOG`, `CLAUDE`, `TODO`) and the exact `.github/copilot-instructions.md`
+   instruction document. Other `.github` paths remain global. Declaration files and `docs/mutation-review.md` stay global.
+   The two release-smoke process modules may change independently too, but the
+   wrapper/auditor's entire static import closure always stays global, including
+   a normally mutable file if it becomes a runtime dependency. All other tooling
+   remains global. Parser additions/removals/renames and existing file-mode
+   changes still force full execution; new eligible files require mode 0644.
+4. Compute selected test closures in **both authenticated old and current**
+   sources, including helpers, re-exports, cycles and literal module imports.
+   Inspect newly selected tests even when they were absent from the old report.
+   Unknown resolution, nonliteral/indirect loading, opaque execution and
+   shared-state writers force full. Baseline-selected roots are retained in this
+   analysis even if skipped/unreported or removed from the current inventory. Unselected nonparser tests still execute in
+   the mandatory normal suite, but are not mutation-test execution roots.
+5. Mark changed or import-affected tests as affected. A filesystem-reading closure
+   is **never a reusable killing witness**, even on unchanged inputs. Resource
+   paths may be computed, external or generated; fresh normal tests alone do not
+   prove that an old mutant remains killed. Changed reader tests force full;
+   other reader-dependent witnesses rerun while independent pure kills may remain.
+6. Retain only an **unchanged mutant source file's `Killed` result** with an
+   unaffected prior killing witness. Witnesses bind source text, file, exact test
+   name and location, not unstable IDs. Always rerun equivalents, static mutants
+   and timeouts; freshly discover and audit the complete current population and
+   source-bound equivalence context at the unchanged 100% adjusted gate.
+
+### Reviewed execution shapes, not a JavaScript purity claim
+
+Nonliteral computed property extraction is unsupported unless its runtime key is
+syntactically numeric or it is one of the exact reviewed data-index sites in
+`mutation-reviewed-data-access.mjs`. Each exception binds path, **whole source
+SHA-256**, and individual AST site. It waives only that element-access check;
+imports, nested nodes, readers, reflective/destructuring access and privileged
+Vitest assertion-state APIs still undergo every other check. Thirteen current
+parser/fixture/test modules have these narrowly reviewed numeric-index sites.
+Reflective Object APIs and JSON callback/alias access are unsupported, as are
+native TestContext assertion extraction and legacy getter/setter introspection.
+Moving or editing an indexed module invalidates its exception and forces full
+until independently reviewed; TypeScript annotations are not runtime permission.
+No capture, baseline or runner automatically updates these source hashes.
+
+External imports also have a bounded binding contract, not a module-wide
+"harmless" designation: only the reviewed Vitest/fast-check named APIs and
+`createHash`, `Readable`, and promise `setImmediate` builtin bindings qualify.
+Namespace/default/unknown imports and exports fall back full. In particular,
+`crypto.setEngine` is a native loader, not a hash function. The property suite
+uses the same fast-check functions through named imports; no assertions change.
+
+`mutation-runtime-witness.mjs` similarly binds the complete reviewed executable
+wrapper/auditor closure. A successful full run of unfamiliar runtime code cannot
+self-authorize later reuse. The runtime validator and witness are the explicit
+trusted implementation root; their own bytes remain globally fingerprinted.
+The wrapper resolves only the two literal pinned tool package locations and does
+not expose an aliased `createRequire` loader.
+
+The mixed encoder test was mechanically separated: all parser checks remain in
+native-selected `encoder-layouts.test.ts`; HTTP checks retain their names and
+assertions in ordinary `encoder-layouts-http.test.ts`. No mutant is excluded and
+all HTTP tests still run every invocation. This removes the opaque Fastify graph
+from parser-witness selection rather than pretending it is a pure dependency.
 
 Vitest uses isolated fork workers per test file. A real two-file regression
 verified module-cache, `globalThis` and `process.env` separation. This does not
@@ -61,9 +117,11 @@ never updates equivalence proofs or their context automatically.
 
 The SHA-256 manifest binds:
 
-- All other project files, including untracked files, helpers/setup, fixtures,
-  snapshots, generators, config/workflows, lockfile and **Markdown/docs**. Markdown
-  can be test input; a docs-only change therefore currently falls back to full.
+- **Every project file**, including untracked files, docs, helpers, fixtures,
+  snapshots, generators and configuration. This full forensic inventory is not
+  the cross-run compatibility key. The guarded classes above can differ between
+  runs, but remain present in before/after evidence and the final immutability
+  check. Fixtures, proof review, workflows, lockfile and unknown paths stay global.
   Known generated/build/runtime directories are excluded.
 - Installed dependency bytes, modes and symlink destinations, not just the
   lockfile. Dependency links must remain inside the fingerprinted tree and out of
@@ -106,10 +164,18 @@ Missing/expired artifacts, API permission failures, corrupt data or any mismatch
 clear restored state and fall back to full. There is no fallback to an older or
 PR-produced baseline. The first rollout necessarily runs full until successful
 main artifacts exist; a PR whose exact base has no finished successful CI also
-runs full. Actual hosted transport must be verified after that first main run.
+runs full. Artifact availability is evaluated once at restore time: a baseline
+finishing later does not retroactively seed the running campaign. No wait,
+restart, older-ancestor fallback or provenance relaxation is added here.
 
-Only successful main-push mutation jobs publish the two validated JSON files;
-consumers additionally require the entire run's final success. Artifact actions
+Schema 3 and explicit plugin isolation intentionally require a **one-time cold
+bootstrap**. Schema 2 artifacts are not silently upgraded: a successful new main
+run must establish the authenticated dependency/isolation evidence first. Actual
+hosted transport must be verified after that first main run.
+
+Only successful main-push mutation jobs promote and publish the two validated JSON files;
+PR invocations do not promote a local reusable baseline. Consumers additionally
+require the entire run's final success. Artifact actions
 are pinned to full SHAs; only the mutation job needs `actions: read`. The reusable
 release caller grants that read-permission ceiling but **always forces full**.
 No PR cache authorizes privileged release publication. Local caches are local
@@ -119,7 +185,7 @@ trust, not imported artifact authorization; do not copy arbitrary third-party ca
 
 - `npm run mutation`: native execution with validated selective reuse if available.
 - `npm run mutation:full`: forced full execution.
-- `npm run test:mutation-cache`: fast invalidation, impact and provenance tests.
+- `npm run test:mutation-cache`: fast invalidation, isolation, impact and provenance tests.
 - `npm run test:mutation-cache:integration`: real Stryker/Vitest scenarios.
 
 Only `.cache/mutation/validated/{manifest,report}.json` is reusable. The disposable

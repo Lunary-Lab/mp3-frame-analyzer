@@ -8,6 +8,10 @@ import { fileURLToPath } from 'node:url';
 import { sourceContext } from './mutation-policy.mjs';
 import { runInvalidationScenarios } from './mutation-invalidation-scenarios.mjs';
 import { runImpactScenarios } from './mutation-impact-scenarios.mjs';
+import {
+  runCompatibilityScenarios,
+  runInstructionDocumentScenarios,
+} from './mutation-compatibility-scenarios.mjs';
 
 const project = fileURLToPath(new URL('../', import.meta.url));
 const evidence = resolve(process.argv[2] ?? 'reports/mutation-cache-validation');
@@ -90,17 +94,26 @@ async function prepareProject() {
     'mutation-cache.mjs',
     'mutation-cache-inputs.mjs',
     'mutation-impact.mjs',
+    'mutation-import-capabilities.mjs',
+    'mutation-compatibility.mjs',
+    'mutation-execution-guard.mjs',
+    'mutation-loader-inputs.mjs',
+    'mutation-runtime-inputs.mjs',
+    'mutation-runtime-witness.mjs',
+    'mutation-module-capabilities.mjs',
+    'mutation-reviewed-data-access.mjs',
   ])
     await cp(join(project, 'scripts', name), join(root, 'scripts', name));
   await symlink(join(project, 'node_modules'), join(root, 'node_modules'), 'dir');
   await put('package.json', '{"type":"module","private":true}\n');
+  await put('tsconfig.json', '{}\n');
   await put('src/mp3/add.ts', source);
   await put('tests/add.test.ts', strongTest);
   await put('tests/helpers/check.ts', strongHelper);
   await policy();
   await put(
     'vitest.config.ts',
-    "import { defineConfig } from 'vitest/config'; export default defineConfig({ test: { include: ['tests/**/*.test.ts'], maxWorkers: 1, fsModuleCache: false } });\n",
+    "import { defineConfig } from 'vitest/config'; export default defineConfig({ test: { include: ['tests/**/*.test.ts'], maxWorkers: 1, fsModuleCache: false, isolate: true } });\n",
   );
   await put('vitest.mutation.config.ts', "export { default } from './vitest.config.js';\n");
   const config = JSON.parse(await readFile(join(project, 'stryker.config.json'), 'utf8'));
@@ -111,8 +124,12 @@ async function prepareProject() {
 try {
   await prepareProject();
   const campaign = { root, evidence, put, policy, run, source, strongTest, strongHelper };
-  if (!process.argv.includes('--impact-only')) await runInvalidationScenarios(campaign);
-  await runImpactScenarios(campaign);
+  if (!process.argv.includes('--documents-only')) {
+    if (!process.argv.includes('--impact-only')) await runInvalidationScenarios(campaign);
+    await runImpactScenarios(campaign);
+    await runCompatibilityScenarios(campaign);
+  }
+  await runInstructionDocumentScenarios(campaign);
   await writeFile(join(evidence, 'summary.json'), JSON.stringify(results, null, 2) + '\n');
   console.log(`Verified ${results.length} actual Stryker/Vitest scenarios. Evidence: ${evidence}`);
 } finally {

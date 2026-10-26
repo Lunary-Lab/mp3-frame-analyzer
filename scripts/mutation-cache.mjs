@@ -3,12 +3,9 @@ import { readFile, lstat, mkdir, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { sha256 } from './mutation-policy.mjs';
 import { testWitnesses } from './mutation-impact.mjs';
-import {
-  CACHE_SCHEMA,
-  fingerprint,
-  globalFingerprint,
-  mutableInput,
-} from './mutation-cache-inputs.mjs';
+import { CACHE_SCHEMA, fingerprint, globalFingerprint } from './mutation-cache-inputs.mjs';
+
+import { assertCompatibleModes, reuseContext } from './mutation-compatibility.mjs';
 
 export {
   CACHE_SCHEMA,
@@ -16,7 +13,6 @@ export {
   globalFingerprint,
   isContainedRelativePath,
   isMutationInput,
-  mutableInput,
   mutationEnvironment,
   mutationInputs,
 } from './mutation-cache-inputs.mjs';
@@ -73,21 +69,11 @@ function validateManifest(manifest, inputs, policy) {
     throw new Error('Corrupt cached input manifest');
   if (globalFingerprint(manifest.inputs) !== globalFingerprint(inputs))
     throw new Error('Global mutation inputs changed');
+  assertCompatibleModes(manifest.inputs, inputs);
+  reuseContext(manifest.inputs);
+  reuseContext(inputs);
   if (policy && !samePolicyExceptContext(manifest.policy, policy))
     throw new Error('Equivalence policy changed beyond parser context');
-}
-
-function authenticateChangedInputs(report, baselineFiles, currentFiles) {
-  const authenticated = { ...report.files, ...report.testFiles };
-  const oldInputs = new Map(baselineFiles.map((entry) => [entry[0], entry.at(-1)]));
-  for (const entry of currentFiles) {
-    if (
-      mutableInput(entry[0]) &&
-      oldInputs.get(entry[0]) !== entry.at(-1) &&
-      !authenticated[entry[0]]
-    )
-      throw new Error(`Changed input lacks authenticated prior source: ${entry[0]}`);
-  }
 }
 
 function authenticatedBaselineSources(report, baselineFiles) {
@@ -106,7 +92,6 @@ export function validateCache(manifest, reportText, inputs, audit, policy) {
   validateManifest(manifest, inputs, policy);
   if (manifest.reportSha256 !== sha256(reportText)) throw new Error('Corrupt cached report');
   const report = JSON.parse(reportText);
-  authenticateChangedInputs(report, manifest.inputs.files, inputs.files);
   const baselineSources = authenticatedBaselineSources(report, manifest.inputs.files);
   const summary = audit(report, manifest.policy, baselineSources);
   if (

@@ -1,4 +1,4 @@
-import fc from 'fast-check';
+import { array, assert, asyncProperty, boolean, integer } from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { countMp3Frames } from '../src/mp3/count-frames.js';
 import { chunks } from './helpers/mp3-fixtures.js';
@@ -174,13 +174,13 @@ describe('mandatory-prefix-sized free-format streams', () => {
   });
 
   it('preserves constructed counts under padding, metadata insertion and chunk partitions', async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.integer({ min: 21, max: 24 }),
-        fc.array(fc.boolean(), { minLength: 1, maxLength: 24 }),
-        fc.boolean(),
-        fc.integer({ min: 0, max: 2 }),
-        fc.array(fc.integer({ min: 1, max: 97 }), { minLength: 1, maxLength: 8 }),
+    await assert(
+      asyncProperty(
+        integer({ min: 21, max: 24 }),
+        array(boolean(), { minLength: 1, maxLength: 24 }),
+        boolean(),
+        integer({ min: 0, max: 2 }),
+        array(integer({ min: 1, max: 97 }), { minLength: 1, maxLength: 8 }),
         async (base, padding, crc, rate, sizes) => {
           const blocks = padding.map((pad) =>
             minimumFreeFrame(base, { padding: Number(pad), crc: crc && base >= 23, rate }),

@@ -87,7 +87,7 @@ async function verifyTestAndModuleRenames(context) {
   await put('tests/renamed.test.ts', pairTest);
   await rm(join(root, 'tests/pair.test.ts'));
   assert.equal(
-    (await run('impact-renamed-test-full', { reason: /Global mutation inputs changed/ })).execution
+    (await run('impact-renamed-test-full', { reason: /Unresolved import impact/ })).execution
       .reused,
     0,
   );

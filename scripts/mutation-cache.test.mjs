@@ -19,13 +19,11 @@ import {
 } from './mutation-cache.mjs';
 
 import { planReuse } from './mutation-impact.mjs';
-import { sha256 } from './mutation-policy.mjs';
-const inputHash = {
-  files: [
-    ['src/mp3/example.ts', 420, sha256('// +')],
-    ['tests/example.test.ts', 420, sha256("import '../src/mp3/example.js';")],
-  ],
-};
+import { fixtureInputs } from './mutation-cache-fixture.mjs';
+const inputHash = fixtureInputs([
+  ['src/mp3/example.ts', '// +'],
+  ['tests/example.test.ts', "import '../src/mp3/example.js';"],
+]);
 function fixture() {
   const mutant = {
     id: '0',

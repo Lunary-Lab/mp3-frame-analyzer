@@ -1,9 +1,11 @@
 import ts from 'typescript';
 import { posix } from 'node:path';
+import { opaqueCapability } from './mutation-module-capabilities.mjs';
+import { reviewedDataAccess } from './mutation-reviewed-data-access.mjs';
+import { supportedExternalImport } from './mutation-import-capabilities.mjs';
 
 // Deliberately bounded to this project's static ESM layout. Unknown resolution
 // is a cache miss, never an optimistic guess about an unaffected test.
-const packages = new Set(['vitest', 'fast-check']);
 const readOnlyFs = new Set([
   'readFile',
   'readFileSync',
@@ -19,19 +21,6 @@ const readOnlyFs = new Set([
   'existsSync',
   'realpath',
   'realpathSync',
-]);
-const harmlessBuiltins = new Set([
-  'node:assert',
-  'node:assert/strict',
-  'node:buffer',
-  'node:crypto',
-  'node:events',
-  'node:os',
-  'node:path',
-  'node:stream',
-  'node:timers',
-  'node:timers/promises',
-  'node:util',
 ]);
 
 function recordFilesystemAccess(result, declaration) {
@@ -100,6 +89,7 @@ function inspectCall(node, ast, result, add) {
 
 function imports(file, source, files) {
   const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  const reviewedSites = reviewedDataAccess(file, source);
   const result = {
     dependencies: new Set(),
     uncertain: ast.parseDiagnostics.length > 0,
@@ -111,7 +101,7 @@ function imports(file, source, files) {
       recordFilesystemAccess(result, declaration);
       return;
     }
-    if (packages.has(specifier) || harmlessBuiltins.has(specifier)) return;
+    if (supportedExternalImport(specifier, declaration)) return;
     if (!specifier.startsWith('.')) {
       result.uncertain = true;
       return;
@@ -119,18 +109,13 @@ function imports(file, source, files) {
     resolveDependency(file, specifier, files, result);
   }
   function visit(node) {
+    if (opaqueCapability(node, reviewedSites)) result.uncertain = true;
     if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier) {
       if (ts.isStringLiteral(node.moduleSpecifier)) add(node.moduleSpecifier.text, node);
       else result.uncertain = true;
     }
     if (ts.isImportEqualsDeclaration(node)) result.uncertain = true;
     if (ts.isCallExpression(node)) inspectCall(node, ast, result, add);
-    if (
-      ts.isNewExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      ['Function', 'Worker', 'WebSocket'].includes(node.expression.text)
-    )
-      result.uncertain = true;
     ts.forEachChild(node, visit);
   }
   visit(ast);
@@ -176,46 +161,74 @@ export function testWitnesses(report) {
   );
 }
 
+function unsupportedClosure(closure, test) {
+  if (closure.uncertain) return `Unresolved import impact: ${test}`;
+  if (closure.writes) return `Shared external-state capability: ${test}`;
+  return null;
+}
+
 function unsupportedImpact(tests, before, after, changed) {
   for (const test of tests) {
     const old = before.get(test);
     const current = after.get(test);
-    if (old.uncertain || current.uncertain) return `Unresolved import impact: ${test}`;
+    if (!current) return `Unresolved import impact: ${test}`;
+    const reason = unsupportedClosure(current, test) || (old && unsupportedClosure(old, test));
+    if (reason) return reason;
     // Fork isolation does not isolate shared files, subprocesses or services.
-    // Opaque/state-writing graphs are outside this incremental contract.
-    if (old.writes || current.writes) return `Shared external-state capability: ${test}`;
-    if (changed.has(test) && (old.reads || current.reads))
+    if (changed.has(test) && (old?.reads || current.reads))
       return `Changed external-input test: ${test}`;
   }
   return null;
 }
 
-/** Keep only an unchanged killed mutant with an unaffected source-backed killer. */
-export function planReuse(report, currentFiles) {
-  const oldFiles = new Map(currentFiles);
-  for (const [file, record] of Object.entries({ ...report.files, ...report.testFiles }))
-    oldFiles.set(file, record.source);
-  const changed = new Set(
-    [...oldFiles.keys(), ...currentFiles.keys()].filter(
-      (file) => oldFiles.get(file) !== currentFiles.get(file),
-    ),
-  );
-  const tests = Object.keys(report.testFiles);
-  const before = testClosures(oldFiles, tests);
-  const after = testClosures(currentFiles, tests);
-  const reason = unsupportedImpact(tests, before, after, changed);
-  if (reason) return { report: null, reason };
-  const affected = new Set(
+function affectedTests(tests, before, after, changed) {
+  return new Set(
     tests.filter(
       (test) =>
         changed.has(test) ||
-        before.get(test).reads ||
+        before.get(test)?.reads ||
         after.get(test).reads ||
         [...changed].some(
-          (file) => before.get(test).files.has(file) || after.get(test).files.has(file),
+          (file) => before.get(test)?.files.has(file) || after.get(test).files.has(file),
         ),
     ),
   );
+}
+
+function previousFiles(report, currentFiles, baselineFiles) {
+  const oldFiles = new Map(baselineFiles ?? currentFiles);
+  if (!baselineFiles)
+    for (const [file, record] of Object.entries({ ...report.files, ...report.testFiles }))
+      oldFiles.set(file, record.source);
+  return oldFiles;
+}
+
+/** Keep only an unchanged killed mutant with an unaffected source-backed killer. */
+export function planReuse(
+  report,
+  currentFiles,
+  { baselineFiles, testFiles, baselineTestFiles = [], changedInputs = [] } = {},
+) {
+  const oldFiles = previousFiles(report, currentFiles, baselineFiles);
+  const changed = new Set(
+    [...oldFiles.keys(), ...currentFiles.keys(), ...changedInputs].filter(
+      (file) => changedInputs.includes(file) || oldFiles.get(file) !== currentFiles.get(file),
+    ),
+  );
+  const tests = [
+    ...new Set([...Object.keys(report.testFiles), ...baselineTestFiles, ...(testFiles ?? [])]),
+  ];
+  const before = testClosures(
+    oldFiles,
+    tests.filter((test) => oldFiles.has(test)),
+  );
+  const after = testClosures(
+    currentFiles,
+    tests.filter((test) => currentFiles.has(test)),
+  );
+  const reason = unsupportedImpact(tests, before, after, changed);
+  if (reason) return { report: null, reason };
+  const affected = affectedTests(tests, before, after, changed);
   const witnesses = testWitnesses(report);
   const copy = structuredClone(report);
   let eligible = 0;

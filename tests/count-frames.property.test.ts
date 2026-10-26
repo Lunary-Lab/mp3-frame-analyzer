@@ -1,18 +1,28 @@
-import fc from 'fast-check';
+import {
+  array,
+  assert,
+  asyncProperty,
+  boolean,
+  constantFrom,
+  integer,
+  record,
+  uint8Array,
+  type Parameters,
+} from 'fast-check';
 import { expect, it } from 'vitest';
 import { countMp3Frames } from '../src/mp3/count-frames.js';
 import { Mp3ParseError } from '../src/mp3/errors.js';
 import { chunks, frame, id3v1, id3v2, mp3 } from './helpers/mp3-fixtures.js';
 
-const frameOptions = fc.record({
-  bitrateIndex: fc.integer({ min: 1, max: 14 }),
-  sampleRateIndex: fc.integer({ min: 0, max: 2 }),
-  padding: fc.constantFrom(0 as const, 1 as const),
-  hasCrc: fc.boolean(),
-  seed: fc.integer({ min: 0, max: 255 }),
+const frameOptions = record({
+  bitrateIndex: integer({ min: 1, max: 14 }),
+  sampleRateIndex: integer({ min: 0, max: 2 }),
+  padding: constantFrom(0 as const, 1 as const),
+  hasCrc: boolean(),
+  seed: integer({ min: 0, max: 255 }),
 });
 
-function options(runs: number): fc.Parameters<unknown> {
+function options(runs: number): Parameters<unknown> {
   const seed = process.env['PROPERTY_SEED'];
   const path = process.env['PROPERTY_PATH'];
   return {
@@ -22,18 +32,18 @@ function options(runs: number): fc.Parameters<unknown> {
   };
 }
 
-const partition = fc.array(fc.integer({ min: 1, max: 8192 }), {
+const partition = array(integer({ min: 1, max: 8192 }), {
   minLength: 1,
   maxLength: 15,
 });
 
 it('property: VBR frame counts are invariant across chunk boundaries', async () => {
-  const cases = fc.record({
-    frames: fc.array(frameOptions, { minLength: 1, maxLength: 40 }),
+  const cases = record({
+    frames: array(frameOptions, { minLength: 1, maxLength: 40 }),
     chunkSizes: partition,
   });
-  await fc.assert(
-    fc.asyncProperty(cases, async ({ frames, chunkSizes }) => {
+  await assert(
+    asyncProperty(cases, async ({ frames, chunkSizes }) => {
       const bytes = mp3(frames.map((spec) => frame(spec)));
       expect(await countMp3Frames(chunks(bytes, chunkSizes))).toBe(frames.length);
     }),
@@ -42,9 +52,9 @@ it('property: VBR frame counts are invariant across chunk boundaries', async () 
 });
 
 it('property: arbitrary payload bytes including sync markers never introduce extra frames', async () => {
-  await fc.assert(
-    fc.asyncProperty(
-      fc.array(fc.uint8Array({ minLength: 1, maxLength: 256 }), {
+  await assert(
+    asyncProperty(
+      array(uint8Array({ minLength: 1, maxLength: 256 }), {
         minLength: 1,
         maxLength: 40,
       }),
@@ -64,10 +74,10 @@ it('property: arbitrary payload bytes including sync markers never introduce ext
 });
 
 it('property: concatenating independently generated frame sequences adds their counts', async () => {
-  await fc.assert(
-    fc.asyncProperty(
-      fc.array(frameOptions, { minLength: 1, maxLength: 30 }),
-      fc.array(frameOptions, { minLength: 1, maxLength: 30 }),
+  await assert(
+    asyncProperty(
+      array(frameOptions, { minLength: 1, maxLength: 30 }),
+      array(frameOptions, { minLength: 1, maxLength: 30 }),
       partition,
       async (left, right, sizes) => {
         const bytes = mp3([...left, ...right].map((spec) => frame(spec)));
@@ -79,14 +89,14 @@ it('property: concatenating independently generated frame sequences adds their c
 });
 
 it('property: leading and appended ID3 metadata never change counts', async () => {
-  await fc.assert(
-    fc.asyncProperty(
-      fc.array(frameOptions, { minLength: 1, maxLength: 20 }),
-      fc.uint8Array({ minLength: 0, maxLength: 512 }),
-      fc.constantFrom(2 as const, 3 as const, 4 as const),
-      fc.boolean(),
-      fc.boolean(),
-      fc.boolean(),
+  await assert(
+    asyncProperty(
+      array(frameOptions, { minLength: 1, maxLength: 20 }),
+      uint8Array({ minLength: 0, maxLength: 512 }),
+      constantFrom(2 as const, 3 as const, 4 as const),
+      boolean(),
+      boolean(),
+      boolean(),
       partition,
       async (frames, body, version, withFooter, withV1, withAppendedTag, sizes) => {
         const tag = id3v2(body, version, version === 4 && withFooter);
@@ -107,11 +117,11 @@ it('property: leading and appended ID3 metadata never change counts', async () =
 });
 
 it('property: truncating a final frame always yields a typed truncation error', async () => {
-  await fc.assert(
-    fc.asyncProperty(
+  await assert(
+    asyncProperty(
       frameOptions,
       frameOptions,
-      fc.integer({ min: 1, max: 99 }),
+      integer({ min: 1, max: 99 }),
       async (first, last, percentage) => {
         const initial = frame(first);
         const final = frame(last);
@@ -127,15 +137,15 @@ it('property: truncating a final frame always yields a typed truncation error', 
 });
 
 it('property: representative invalid MPEG header fields are rejected', async () => {
-  const modeArb = fc.constantFrom(
+  const modeArb = constantFrom(
     'unsupported-version',
     'unsupported-layer',
     'invalid-rate',
     'invalid-bitrate',
     'reserved-emphasis' as const,
   );
-  await fc.assert(
-    fc.asyncProperty(frameOptions, modeArb, async (spec, mode) => {
+  await assert(
+    asyncProperty(frameOptions, modeArb, async (spec, mode) => {
       const bytes = frame(spec);
       switch (mode) {
         case 'unsupported-version':
@@ -174,14 +184,10 @@ it('property: parsing arbitrary byte streams is independent of chunk partitionin
       return { kind: error.kind, offset: error.offset };
     }
   };
-  await fc.assert(
-    fc.asyncProperty(
-      fc.uint8Array({ minLength: 0, maxLength: 512 }),
-      partition,
-      async (bytes, sizes) => {
-        expect(await outcome(bytes, sizes)).toEqual(await outcome(bytes, [1]));
-      },
-    ),
+  await assert(
+    asyncProperty(uint8Array({ minLength: 0, maxLength: 512 }), partition, async (bytes, sizes) => {
+      expect(await outcome(bytes, sizes)).toEqual(await outcome(bytes, [1]));
+    }),
     options(180),
   );
 });

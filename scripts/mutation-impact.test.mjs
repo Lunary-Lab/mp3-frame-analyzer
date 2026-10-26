@@ -4,10 +4,12 @@ import { planReuse, testClosures } from './mutation-impact.mjs';
 import {
   createCache,
   globalFingerprint,
+  fingerprint,
   validateCache,
   executionSummary,
 } from './mutation-cache.mjs';
 import { sha256 } from './mutation-policy.mjs';
+import { fixtureInputs } from './mutation-cache-fixture.mjs';
 const location = { start: { line: 1, column: 1 }, end: { line: 1, column: 2 } };
 function fixture() {
   const files = new Map([
@@ -120,7 +122,7 @@ test('equivalents, static and timeout outcomes never seed selective reuse', () =
   assert.equal(plan.eligible, 3);
   assert.equal(plan.rerun, 3);
 });
-test('global invalidation retains path/mode identity and all non-parser/test inputs', () => {
+test('comparison key retains parser paths and global inputs, not guarded dependency content', () => {
   const input = {
     files: [
       ['src/mp3/a.ts', 420, 'a'],
@@ -129,7 +131,7 @@ test('global invalidation retains path/mode identity and all non-parser/test inp
       ['tests/helper.ts', 420, 'a'],
     ],
   };
-  for (const index of [0, 1, 2]) {
+  for (const index of [0, 1, 2, 3]) {
     const changed = structuredClone(input);
     changed.files[index][2] = 'b';
     assert.equal(globalFingerprint(changed), globalFingerprint(input));
@@ -137,9 +139,7 @@ test('global invalidation retains path/mode identity and all non-parser/test inp
   for (const edit of [
     (x) => x.files[0][1]++,
     (x) => (x.files[0][0] = 'src/mp3/renamed.ts'),
-    (x) => x.files.pop(),
-    (x) => x.files.push(['tests/new.test.ts', 420, 'a']),
-    (x) => (x.files[3][2] = 'b'),
+    (x) => x.files.push(['scripts/runner.mjs', 420, 'a']),
   ]) {
     const changed = structuredClone(input);
     edit(changed);
@@ -148,7 +148,7 @@ test('global invalidation retains path/mode identity and all non-parser/test inp
 });
 test('changed unreported tests and any equivalence proof changes invalidate baseline', () => {
   const f = fixture();
-  const inputs = { files: [...f.files].map(([name, source]) => [name, 420, sha256(source)]) };
+  const inputs = fixtureInputs(f.files);
   inputs.files.push(['tests/unreported.test.ts', 420, sha256('before')]);
   const policy = { contextSha256: 'before', equivalents: [{ proof: 'same' }] };
   const summary = { total: 3 };
@@ -157,8 +157,10 @@ test('changed unreported tests and any equivalence proof changes invalidate base
   current.files.at(-1)[2] = sha256('after');
   assert.throws(
     () => validateCache(cache.manifest, cache.reportText, current, () => summary, policy),
-    /lacks authenticated prior source/,
+    /Incomplete authenticated dependency sources/,
   );
+  inputs.sources['tests/unreported.test.ts'] = 'before';
+  cache.manifest.inputsHash = fingerprint(inputs);
   assert.doesNotThrow(() =>
     validateCache(cache.manifest, cache.reportText, inputs, () => summary, {
       ...policy,
