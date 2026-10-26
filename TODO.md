@@ -46,8 +46,8 @@ make the alias obsolete cannot pass CI until this item is reassessed.
 - [x] **Owner decision:** default HTTP counts exclude one recognized initial
       Xing/Info/VBRI metadata frame (6089 for the sample); explicit
       `includeVbrHeaderFrame=true` returns 6090 physical frames. This is a
-      breaking API contract change. The evaluator's intended convention remains
-      unconfirmed. Evidence and the compatibility plan are in
+      breaking API contract change. Current evaluator clarification, evidence,
+      and the compatibility plan are in
       [the frame-count contract](docs/frame-count-contract.md).
 
 ## Repository settings and supported format
