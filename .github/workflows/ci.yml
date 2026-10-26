@@ -80,6 +80,9 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-project
       - run: npm run lint
+      - uses: ./.github/actions/setup-zizmor
+      - name: Require immutable workflow dependencies with native negative controls
+        run: node scripts/verify-workflow-pins.mjs "${RUNNER_TEMP}/zizmor-tool/zizmor"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.3'

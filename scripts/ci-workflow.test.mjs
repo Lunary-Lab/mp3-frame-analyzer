@@ -300,6 +300,16 @@ test('modularization retains the existing external action pins and read-only tok
   assert.doesNotMatch(ci, /secrets\.|: write\b|persist-credentials: true/);
 });
 
+test('required lint runs repository-wide native pin enforcement without a skipped lane', () => {
+  const lint = job('lint');
+  assert.match(lint, /uses: \.\/\.github\/actions\/setup-zizmor/);
+  assert.match(
+    lint,
+    /node scripts\/verify-workflow-pins\.mjs "\$\{RUNNER_TEMP\}\/zizmor-tool\/zizmor"/,
+  );
+  assert.doesNotMatch(lint, /if:|continue-on-error:|--no-exit-codes|--format=sarif/);
+});
+
 test('governance is mandatory and checks the same explicit source ref as the CI caller', async () => {
   const governance = await readFile(
     new URL('../.github/workflows/governance.yml', import.meta.url),
