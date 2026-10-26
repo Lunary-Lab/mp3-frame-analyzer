@@ -13,7 +13,7 @@ export async function outcome(bytes, chunkSize, options = {}) {
     const count = await countMp3Frames(chunks(bytes, chunkSize), options);
     // A complete mono free-format frame can contain only its 4-byte header
     // and 17-byte side information (21 bytes); bitrate-table minima do not apply.
-    // Excluding a lone initial encoder frame can leave zero audio frames.
+    // Excluding a lone initial encoder frame can leave zero counted frames.
     const fewestValidFrames = options.includeVbrHeaderFrame === false ? 0 : 1;
     if (!Number.isSafeInteger(count) || count < fewestValidFrames || count * 21 > bytes.length) {
       throw new Error(`Impossible frame count: ${count} for ${bytes.length} bytes`);

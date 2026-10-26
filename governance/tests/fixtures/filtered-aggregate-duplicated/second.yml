@@ -1,0 +1,10 @@
+name: Filtered duplicate
+on:
+  pull_request:
+    paths: [docs/**]
+jobs:
+  docs:
+    name: All checks
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "documentation validation"

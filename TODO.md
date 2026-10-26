@@ -67,7 +67,7 @@ Verified on 2026-10-24; details in [release setup](docs/releasing.md).
       published, independently smoke-tested assets (1.1.0 through 2.1.0).
 - [x] Rulesets enforce a pull request, both required checks
       (`All checks` and the Conventional Commit PR title), an up-to-date
-      branch, resolved conversations, signed linear history and protected
+      branch, resolved conversations, linear history and protected
       release tags, with no bypass (`governance/`).
 - [x] Build provenance attestations run for every release, and publication
       waits for the release approver in the `release` environment.

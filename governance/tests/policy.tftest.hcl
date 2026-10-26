@@ -146,7 +146,7 @@ run "aggregate_running_only_on_success_is_rejected" {
   expect_failures = [output.required_status_checks, output.aggregate_status_check]
 }
 
-# Two jobs named "All checks" would let the weaker one satisfy the requirement.
+# Duplicate check names make required-check resolution ambiguous.
 run "duplicate_aggregate_is_rejected" {
   command = plan
 
@@ -154,7 +154,7 @@ run "duplicate_aggregate_is_rejected" {
     workflow_directory = "tests/fixtures/aggregate-duplicated"
   }
 
-  expect_failures = [output.aggregate_status_check]
+  expect_failures = [output.required_status_checks, output.aggregate_status_check]
 }
 
 run "aggregate_must_be_required" {
@@ -166,6 +166,51 @@ run "aggregate_must_be_required" {
   }
 
   expect_failures = [output.aggregate_status_check]
+}
+
+run "duplicate_required_name_in_any_workflow_is_rejected" {
+  command = plan
+  variables { workflow_directory = "tests/fixtures/required-check-duplicated" }
+  expect_failures = [output.required_status_checks]
+}
+
+run "filtered_duplicate_aggregate_is_rejected" {
+  command = plan
+  variables { workflow_directory = "tests/fixtures/filtered-aggregate-duplicated" }
+  expect_failures = [output.required_status_checks, output.aggregate_status_check]
+}
+
+run "title_check_must_report_after_edits" {
+  command = plan
+  variables { workflow_directory = "tests/fixtures/title-without-edited" }
+  expect_failures = [output.required_status_checks]
+}
+
+run "main_only_branch_filters_are_accepted" {
+  command = plan
+  variables { workflow_directory = "tests/fixtures/main-only-branches" }
+}
+
+run "filters_excluding_main_are_rejected" {
+  command = plan
+  variables { workflow_directory = "tests/fixtures/wrong-branch" }
+  expect_failures = [output.required_status_checks, output.aggregate_status_check]
+}
+
+run "ignoring_main_is_rejected" {
+  command = plan
+  variables { workflow_directory = "tests/fixtures/ignored-main" }
+  expect_failures = [output.required_status_checks]
+}
+
+run "compact_always_expression_is_accepted" {
+  command = plan
+  variables { workflow_directory = "tests/fixtures/always-compact" }
+}
+
+run "spaced_always_expression_is_accepted" {
+  command = plan
+  variables { workflow_directory = "tests/fixtures/always-spaced" }
 }
 
 run "rulesets_can_be_disabled_in_an_emergency" {
@@ -190,8 +235,11 @@ run "main_ruleset_requires_checks_not_reviews" {
   }
 
   assert {
-    condition     = github_repository_ruleset.main[0].conditions[0].ref_name[0].include == tolist(["~DEFAULT_BRANCH"])
-    error_message = "The main ruleset must target the default branch."
+    condition = (
+      github_repository_ruleset.main[0].conditions[0].ref_name[0].include == tolist(["~DEFAULT_BRANCH"]) &&
+      length(github_repository_ruleset.main[0].conditions[0].ref_name[0].exclude) == 0
+    )
+    error_message = "The main ruleset must target the default branch with no exclusions."
   }
 
   assert {
@@ -199,23 +247,27 @@ run "main_ruleset_requires_checks_not_reviews" {
       github_repository_ruleset.main[0].rules[0].deletion,
       github_repository_ruleset.main[0].rules[0].non_fast_forward,
       github_repository_ruleset.main[0].rules[0].required_linear_history,
-      github_repository_ruleset.main[0].rules[0].required_signatures,
+      !github_repository_ruleset.main[0].rules[0].required_signatures,
     ])
-    error_message = "main must block deletion and force pushes and require linear, signed history."
+    error_message = "main must block deletion and force pushes and require linear history, without requiring signed commits."
   }
 
   assert {
     condition = (
       github_repository_ruleset.main[0].rules[0].pull_request[0].required_approving_review_count == 0 &&
+      github_repository_ruleset.main[0].rules[0].pull_request[0].dismiss_stale_reviews_on_push &&
+      !github_repository_ruleset.main[0].rules[0].pull_request[0].require_last_push_approval &&
+      !github_repository_ruleset.main[0].rules[0].pull_request[0].require_code_owner_review &&
       github_repository_ruleset.main[0].rules[0].pull_request[0].required_review_thread_resolution &&
       github_repository_ruleset.main[0].rules[0].pull_request[0].allowed_merge_methods == tolist(["squash"])
     )
-    error_message = "Pull requests must need no approving review, resolved conversations, and squash merging."
+    error_message = "Pull requests must need no approving review, dismiss stale approvals, require resolved conversations, and squash merge."
   }
 
   assert {
     condition = (
       github_repository_ruleset.main[0].rules[0].required_status_checks[0].strict_required_status_checks_policy &&
+      !github_repository_ruleset.main[0].rules[0].required_status_checks[0].do_not_enforce_on_create &&
       toset([for check in github_repository_ruleset.main[0].rules[0].required_status_checks[0].required_check : check.context]) == toset(["All checks", "Conventional Commit PR title"]) &&
       alltrue([for check in github_repository_ruleset.main[0].rules[0].required_status_checks[0].required_check : check.integration_id == 15368])
     )
@@ -223,16 +275,16 @@ run "main_ruleset_requires_checks_not_reviews" {
   }
 }
 
-run "signed_commits_can_be_relaxed" {
+run "signed_commits_can_be_required_again" {
   command = plan
 
   variables {
-    require_signed_commits = false
+    require_signed_commits = true
   }
 
   assert {
-    condition     = !github_repository_ruleset.main[0].rules[0].required_signatures
-    error_message = "require_signed_commits = false must drop only the signature rule."
+    condition     = github_repository_ruleset.main[0].rules[0].required_signatures
+    error_message = "require_signed_commits = true must add the signature rule."
   }
 }
 
@@ -242,7 +294,10 @@ run "release_tags_cannot_move_or_disappear" {
   assert {
     condition = (
       github_repository_ruleset.release_tags[0].target == "tag" &&
+      github_repository_ruleset.release_tags[0].enforcement == "active" &&
       github_repository_ruleset.release_tags[0].conditions[0].ref_name[0].include == tolist(["refs/tags/v*"]) &&
+      length(github_repository_ruleset.release_tags[0].conditions[0].ref_name[0].exclude) == 0 &&
+      github_repository_ruleset.release_tags[0].rules[0].non_fast_forward &&
       github_repository_ruleset.release_tags[0].rules[0].update &&
       github_repository_ruleset.release_tags[0].rules[0].deletion &&
       !github_repository_ruleset.release_tags[0].rules[0].creation &&

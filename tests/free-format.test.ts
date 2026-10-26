@@ -94,7 +94,7 @@ describe('free-format MPEG-1 Layer III', () => {
       'Invalid MPEG-1 Layer III frame header',
     ],
     [
-      'a reserved-bitrate MPEG-1 Layer III',
+      'a forbidden-bitrate MPEG-1 Layer III',
       Buffer.from([0xff, 0xfb, 0xf0, 0xc4]),
       'invalid-mp3',
       'Invalid MPEG-1 Layer III frame header',

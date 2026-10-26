@@ -68,7 +68,7 @@ test('changed test invalidates its old kills while numeric IDs are not witness i
   warm.testFiles['tests/b.test.ts'].tests[0].name = 'different';
   assert.throws(() => executionSummary(warm, plan.report), /No fresh execution/);
 });
-test('old and new re-exports, cycles and literal imports are followed', () => {
+test('follows re-exports, cycles and literal imports', () => {
   const files = new Map([
     ['tests/x.test.ts', "import '../src/a.js'; import('../src/c.js');"],
     ['src/a.ts', "export * from './b.js';"],

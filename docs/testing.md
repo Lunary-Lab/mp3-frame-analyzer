@@ -142,6 +142,35 @@ and explicit `false` return 6089 in both upload modes, while `true` returns 6090
 expectations. See
 [the frame-count contract](frame-count-contract.md).
 
+## Native CI jobs and scheduling
+
+The required `All checks` aggregate waits for every native validation job and
+rejects failures, cancellation, missing evidence and skipped jobs. Formatting,
+lint/workflow syntax, types, runtime coverage, compatibility, tooling, the complete
+mutation-cache campaign, parser mutation, encoder provenance, dependency CVEs,
+secrets, Semgrep, bounded fuzz/resource checks, packaged-runtime verification and
+repository governance validation are visible separately. The cache campaign is
+independent of parser mutation;
+both remain mandatory. Packaging keeps artifact verification and real runtime
+smoke together so the existing publisher receives only the same tested bytes.
+Governance reuses its existing pinned Terraform validation and mocked tests, with
+an explicit source ref for exact-tag callers; it does not apply repository settings.
+
+Ordinary main/PR validation and manual runs with `full_mutation=false` supersede
+older validation for the same branch. Fork PRs have separate identities. Scheduled
+runs and explicitly full manual runs use unique run groups: `cancel-in-progress:
+false` alone does not prevent GitHub from replacing a pending run. Release-tag
+validation uses its own noncanceling group, and publication keeps its independent
+lock. Release Please explicitly dispatches non-full PR validation; the normal
+baseline, fresh discovery, exact-main cache authentication and fail-closed reuse
+policy still apply. Full scheduled/release/manual validation never restores a
+result baseline. These are scheduling changes, not measured hosted speedup claims.
+
+Optional npm update notices, pip version checks, Go telemetry, Semgrep metrics,
+Semgrep version checks and tracing are disabled in this workflow. Required package
+and advisory downloads are distinct from telemetry; GitHub service logs remain.
+New scanner policies and final-publication approval are separate changes.
+
 ## Upload lifecycle and release verification
 
 HTTP tests cover the accepted MIME types, malformed multipart classification, rejected text/additional file parts, exact file-limit boundaries, sanitized application failures, cancellation, continued service after rejection, and demonstrated keep-alive connection reuse, including pipelined requests behind a large upload that the parser rejected early. Shutdown tests exercise successful close hooks, rejected hooks, the drain deadline, invalid startup configuration, and a real child process receiving SIGTERM on POSIX. A transport abort is not asserted to produce an application JSON response.

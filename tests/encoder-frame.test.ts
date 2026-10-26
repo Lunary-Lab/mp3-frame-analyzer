@@ -42,7 +42,7 @@ function withSideInformation(bytes: Buffer): Buffer {
   return bytes;
 }
 
-/** Free-format frames have no table-defined length, so any exact size is possible. */
+/** Exact free-format fixture spans exercise metadata-field bounds without a bitrate table. */
 function freeFormatXing(length: number, flags: number): Buffer {
   const bytes = Buffer.alloc(length, 0x11);
   bytes.set([0xff, 0xfb, 0x00, 0x04]);
@@ -57,7 +57,7 @@ function xingFieldBytes(flags: number): number {
 
 describe('first MPEG frame encoder header policy', () => {
   it.each(['Info', 'Xing', 'VBRI'] as const)(
-    'counts an initial %s header by default but can exclude it',
+    'counts an initial %s header when explicitly included and can exclude it',
     async (kind) => {
       const audio = mp3([tag(kind), frame(), frame()], id3v2(Buffer.alloc(5)));
       expect(await count(audio, true)).toBe(3);
@@ -83,7 +83,7 @@ describe('first MPEG frame encoder header policy', () => {
     expect(recognized(badFlags)).toBe(false);
   });
 
-  it('rejects truncated Xing optional fields and invalid VBRI TOC layout', () => {
+  it('rejects invalid Xing flags and oversized VBRI tables while ignoring a late marker', () => {
     const xing = tag('Xing');
     xing.write('Xing', xing.length - 7, 'ascii');
     const onlyMarker = frame();
