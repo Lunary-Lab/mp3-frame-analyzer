@@ -19,7 +19,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: node scripts/bootstrap-npm.mjs 11.19.0
-      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: |
+          node scripts/verify-npm-lock.mjs
+          npm ci --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org --replace-registry-host=never
       - name: Replay tracked fuzz cases
         run: npm run fuzz:regression
       - name: Run extended coverage-guided campaign (4 minutes total)

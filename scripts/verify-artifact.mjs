@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadVersionMetadata } from './verify-version.mjs';
 import { smokeRuntime } from './release-smoke.mjs';
+import { verifyNpmLock } from './npm-lock-policy.mjs';
 import {
   isMain,
   parseChecksums,
@@ -31,6 +32,22 @@ async function verifyReleaseMetadata(output, names, expected) {
     assert.equal(metadata[key], expected[key], `Release manifest ${key} mismatch`);
   }
   return metadata;
+}
+
+export async function installRuntimeDependencies(pkg, lock, runtime) {
+  verifyNpmLock(pkg, lock);
+  await runNpm(
+    [
+      'ci',
+      '--omit=dev',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      '--registry=https://registry.npmjs.org',
+      '--replace-registry-host=never',
+    ],
+    { cwd: runtime, timeout: 180_000 },
+  );
 }
 
 export async function verifyArtifact() {
@@ -67,10 +84,7 @@ export async function verifyArtifact() {
     assert.equal(pkg.version, expected.version);
     assert.equal(lock.version, expected.version);
     assert.equal(lock.packages[''].version, expected.version);
-    await runNpm(['ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], {
-      cwd: runtime,
-      timeout: 180_000,
-    });
+    await installRuntimeDependencies(pkg, lock, runtime);
     const result = await smokeRuntime(runtime);
     console.log(
       JSON.stringify(
