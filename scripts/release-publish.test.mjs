@@ -583,3 +583,10 @@ test('hosted prerequisite never executes project artifacts or requests publicati
   );
   assert.doesNotMatch(preview, /environment:|--draft=false|release.*upload/);
 });
+
+test('notes caller permits metadata authentication without elevating composition', () => {
+  const notes = workflow.split('\n  notes:\n')[1].split('\n  candidate:\n')[0];
+  assert.match(notes, /actions: read/);
+  assert.match(notes, /pull-requests: read/);
+  assert.match(notes, /contents: write/);
+});

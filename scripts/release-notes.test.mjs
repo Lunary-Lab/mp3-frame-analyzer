@@ -569,3 +569,13 @@ test('duplicate native comparison lines cannot conceal a different release bound
   const initial = duplicate.replace(compareUrl, `https://github.com/${repository}/commits/${tag}`);
   assert.throws(() => composeReleaseNotes(prepared, { body: initial }), /duplicate comparison/);
 });
+
+test('repository metadata uses the canonical endpoint without a trailing slash', async () => {
+  let actual;
+  const read = githubReader(repository, async (_command, args) => {
+    actual = args;
+    return { stdout: '{}' };
+  });
+  await read('');
+  assert.deepEqual(actual, ['api', '--method', 'GET', `repos/${repository}`]);
+});

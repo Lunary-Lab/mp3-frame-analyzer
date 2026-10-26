@@ -117,6 +117,7 @@ jobs:
     permissions:
       contents: write # Ceiling only; the generator executes project code read-only.
       pull-requests: read
+      actions: read # Compose authenticates immutable input artifact metadata.
     with:
       tag: ${{ inputs.tag }}
       sha: ${{ inputs.sha }}
@@ -154,7 +155,7 @@ jobs:
           import { execFileSync } from 'node:child_process';
           const e = process.env;
           const api = (path) => JSON.parse(execFileSync('gh', ['api', '--method', 'GET',
-            `repos/${e.GH_REPO}/${path}`], { encoding: 'utf8' }));
+            `repos/${e.GH_REPO}${path ? '/' + path : ''}`], { encoding: 'utf8' }));
           assert.equal(e.GITHUB_RUN_ATTEMPT, '1', 'Start a new dispatch for a fresh owner decision');
           assert.equal(e.GITHUB_SHA, e.RELEASE_SHA);
           assert.equal(e.GITHUB_WORKFLOW_SHA, e.RELEASE_SHA);
@@ -223,7 +224,7 @@ jobs:
           import { appendFileSync, cpSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
           const e = process.env;
           const digest = (value) => createHash('sha256').update(value).digest('hex');
-          const api = (path) => JSON.parse(execFileSync('gh', ['api', '--method', 'GET', `repos/${e.GH_REPO}/${path}`], { encoding: 'utf8' }));
+          const api = (path) => JSON.parse(execFileSync('gh', ['api', '--method', 'GET', `repos/${e.GH_REPO}${path ? '/' + path : ''}`], { encoding: 'utf8' }));
           assert.equal(e.GITHUB_RUN_ATTEMPT, '1', 'Retry with a new workflow dispatch, not a job rerun');
           assert.equal(e.RUNTIME_ATTEMPT, e.GITHUB_RUN_ATTEMPT);
           assert.equal(e.GITHUB_SHA, e.RELEASE_SHA);
@@ -400,9 +401,9 @@ jobs:
           import { copyFileSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
           const e = process.env;
           const digest = (value) => createHash('sha256').update(value).digest('hex');
-          const api = (path) => JSON.parse(execFileSync('gh', ['api', '--method', 'GET', `repos/${e.GH_REPO}/${path}`], { encoding: 'utf8' }));
+          const api = (path) => JSON.parse(execFileSync('gh', ['api', '--method', 'GET', `repos/${e.GH_REPO}${path ? '/' + path : ''}`], { encoding: 'utf8' }));
           const pages = (path) => {
-            const result = JSON.parse(execFileSync('gh', ['api', '--method', 'GET', '--paginate', '--slurp', `repos/${e.GH_REPO}/${path}`], { encoding: 'utf8' }));
+            const result = JSON.parse(execFileSync('gh', ['api', '--method', 'GET', '--paginate', '--slurp', `repos/${e.GH_REPO}${path ? '/' + path : ''}`], { encoding: 'utf8' }));
             assert.ok(Array.isArray(result) && result.length > 0 && result.every(Array.isArray));
             return result.flat();
           };

@@ -112,14 +112,14 @@ jobs:
           assert.equal(sha, process.env.GITHUB_SHA);
           assert.equal(process.env.GITHUB_REF, `refs/tags/${tag}`);
           const api = (path) => JSON.parse(execFileSync('gh', ['api', '--method', 'GET',
-            `repos/${repo}/${path}`], { encoding: 'utf8' }));
+            `repos/${repo}${path ? '/' + path : ''}`], { encoding: 'utf8' }));
           const repository = api('');
           assert.equal(repository.full_name, repo);
           assert.equal(String(repository.id), process.env.GITHUB_REPOSITORY_ID);
           assert.equal(api(`commits/${tag}`).sha, sha);
           if (initial === 'true') {
             const pages = (path) => JSON.parse(execFileSync('gh', ['api', '--method', 'GET',
-              '--paginate', '--slurp', `repos/${repo}/${path}`], { encoding: 'utf8' }));
+              '--paginate', '--slurp', `repos/${repo}${path ? '/' + path : ''}`], { encoding: 'utf8' }));
             const tags = pages('git/matching-refs/tags/?per_page=100');
             assert.ok(Array.isArray(tags) && tags.length > 0 && tags.every(Array.isArray));
             assert.deepEqual(tags.flat().map((ref) => ref.ref), [`refs/tags/${tag}`]);

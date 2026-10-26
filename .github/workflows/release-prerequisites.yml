@@ -50,6 +50,7 @@ jobs:
     permissions:
       contents: write # Only generate-notes POST; no checkout or downloaded input.
       actions: read
+      pull-requests: read # Independently audit every native PR entry.
     steps:
       - name: Exercise live native contracts without creating a tag, release or approval
         env:
@@ -66,7 +67,7 @@ jobs:
           import { appendFileSync, writeFileSync } from 'node:fs';
           const e = process.env;
           const api = (path) => JSON.parse(execFileSync('gh', ['api', '--method', 'GET',
-            `repos/${e.GH_REPO}/${path}`], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }));
+            `repos/${e.GH_REPO}${path ? '/' + path : ''}`], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }));
           const repository = api('');
           assert.equal(repository.full_name, e.GH_REPO);
           assert.equal(String(repository.id), e.GITHUB_REPOSITORY_ID);
