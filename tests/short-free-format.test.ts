@@ -129,6 +129,28 @@ describe('genuine normally flushed short free-format files', () => {
         }
       }
     }
+    // A boundary-aligned tag can move the second frame just inside the probe.
+    // A real following tail proves the stream continues, so ancillary TAG bytes
+    // more than 128 bytes before that known minimum cannot supply a false tail.
+    for (const secondEnd of [8_644, 8_646, 8_647, 8_648]) {
+      const secondStart = secondEnd - original.length;
+      const tag = metadataTag(3, {
+        padding: secondStart - original.length - metadataTag(3).length,
+      });
+      for (const distanceToProbeEnd of [130, 129, 128]) {
+        const markerOffset = probeEnd - distanceToProbeEnd - secondStart;
+        expect(markerOffset).toBeGreaterThanOrEqual(21);
+        const last = Buffer.from(original);
+        last.write('TAG', markerOffset, 'ascii');
+        const bytes = Buffer.concat([original, tag, last, metadataV1()]);
+        expect(original.length + tag.length + last.length).toBe(secondEnd);
+        expect(bytes.length).toBeGreaterThan(probeEnd + 1);
+        expect(probeEnd + 1 - secondStart - markerOffset).toBeGreaterThan(128);
+        for (const sizes of [[1], [7], [4_096], [bytes.length]]) {
+          expect(await count(bytes, sizes)).toBe(2);
+        }
+      }
+    }
     // An exactly full probe does not yet establish whether the iterator ends.
     // Do not discard plausible tails just because reader.has(probeEnd) succeeds.
     const exactEndTag = metadataTag(3, {
