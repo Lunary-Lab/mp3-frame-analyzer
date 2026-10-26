@@ -8,7 +8,7 @@
 | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | Squash-only merging, read-only workflow token, SHA-pinned selected actions   | Enforced                                                               |
 | `main`: pull request, `All checks` and PR-title checks, up-to-date branch    | Enforced by the `main` ruleset; no bypass                              |
-| `main`: resolved conversations, linear and signed history, no force push     | Enforced by the `main` ruleset; no bypass                              |
+| `main`: resolved conversations, linear history, no force push                | Enforced by the `main` ruleset; no bypass                              |
 | Release tags cannot move or be deleted                                       | Enforced by the `release-tags` ruleset and immutable releases          |
 | One approval from the release approver before publication                    | Enforced by the `release` environment; administrators cannot bypass it |
 | Build provenance, release attestations, secret scanning with push protection | On                                                                     |
@@ -131,11 +131,12 @@ The `main` ruleset in [`rulesets.tf`](../governance/rulesets.tf):
 
 - **No routine approving review.** A pull request is required but needs 0 approvals: this repository has one maintainer, who cannot approve their own pull request. Conversations must be resolved; stale approvals are dismissed.
 - **Checks.** `All checks` and `Conventional Commit PR title` must pass, both from the GitHub Actions app (ID 15368), against a branch that is up to date with `main`.
-- **History.** Force pushes and deletion are blocked, history must be linear, and every commit must have a verified signature. Squash is the only merge method.
+- **History.** Force pushes and deletion are blocked and history must be linear. Squash is the only merge method.
 - **No merge queue,** because one maintainer gains nothing from one.
 - **No bypass actors.**
+- GitHub's default "additional approval for unattributed Copilot pull requests" stays on; the provider cannot manage it, and it has no effect while 0 approvals are required.
 
-**Signed commits.** GitHub signs each squash merge, Release Please's branch commits, and Dependabot's commits. GitHub notes that unsigned commits on a pull request branch can block its squash merge, so contributors sign their commits (`gpg.format ssh` with a signing key registered on GitHub).
+**Signed commits are not required.** An automated contributor opens pull requests with commits it cannot sign, and GitHub notes that unsigned commits on a pull request branch can block its squash merge. Commits still reach `main` only as squash merges, which GitHub signs itself, so `main` stays verified in practice; nothing rejects an unsigned commit. To require signatures again once every contributor can sign, change the `require_signed_commits` default to `true` in a pull request.
 
 **The required-check contract** in [`checks.tf`](../governance/checks.tf) parses the workflows at plan time. GitHub counts a skipped check as passing, so planning fails if any required check could be missing or skipped on a pull request:
 
@@ -162,7 +163,7 @@ Only the `publish` job of [`publish-release.yml`](../.github/workflows/publish-r
 
 ## Signing and release authenticity
 
-- **Commits** on `main` are signed and verified; the ruleset rejects any that are not.
+- **Commits** reach `main` only as squash merges, which GitHub signs. Signatures on pull request branch commits are not required.
 - **Release tags** are created by Release Please on GitHub-signed release commits. Immutable releases lock a tag and its assets when the release is published, and the `release-tags` ruleset blocks moving or deleting `v*` tags before then.
 - **Release attestations.** For each published release, GitHub signs an attestation binding the tag, commit and asset digests.
 - **Build provenance.** The `provenance` job attests the tested artifacts with [`actions/attest`](https://github.com/actions/attest) (SLSA build provenance, recorded in the public Sigstore transparency log), binding each digest to this repository, `publish-release.yml` and the tag.

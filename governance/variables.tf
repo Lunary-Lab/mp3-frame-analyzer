@@ -10,9 +10,9 @@ variable "enable_rulesets" {
 }
 
 variable "require_signed_commits" {
-  description = "Require verified signatures on main. GitHub signs squash merges, but unsigned commits on a pull request branch can still block its squash merge, so every contributor signs their commits."
+  description = "Require verified signatures on main. Off because an automated contributor cannot sign its pull request commits, and GitHub can refuse to squash merge a branch containing unsigned commits. GitHub still signs every squash merge it creates."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "required_status_checks" {
