@@ -21,3 +21,8 @@ governance/.terraform/
 *.tfstate.*
 *.tfplan
 crash.log
+
+# Generated release-note review artifacts (not a second source changelog).
+.release-notes/
+.release-notes-input/
+.release-notes-native/
