@@ -61,51 +61,85 @@ appends to a previously composed body or writes `CHANGELOG.md`. Repeating the
 same inputs gives identical content; changed PR metadata produces new reviewable
 bytes and therefore requires a new approval. API failures and oversized results
 fail closed, rather than publishing a partial list.
-After a failed preparation, rerun **all jobs**, not only the failed job: every
-input and output must belong to one run attempt. Previously generated artifacts
-are never silently reused as approval for a later attempt.
+For a standalone notes preview, rerun **all jobs** after a failure so every
+input and output belongs to one attempt. For publication, start a **new dispatch**
+instead: publication rejects every attempt after the first. Previously generated
+artifacts or environment decisions are never reused to authorize a later attempt.
 
 ### Preparation and publication integration
 
 [`release-notes.yml`](../.github/workflows/release-notes.yml) is a reusable,
 non-publishing preparation workflow with `tag` and `sha` string inputs. Invoke it
 from exact-tag validation with the same source SHA and require its successful
-completion. The caller's permission ceiling must permit `contents: write` and
-`pull-requests: read`; only the fixed native API job gets the write token, because
+completion. The caller's permission ceiling must permit `contents: write`,
+`pull-requests: read`, and `actions: read`; only the fixed native API job gets the write token, because
 GitHub requires it for `POST /releases/generate-notes` even though that endpoint
 saves nothing. That job has no checkout and runs no project code. Planning,
-coverage checks, and composition execute with read-only permissions.
+coverage checks, and composition execute with read-only permissions. Composition
+uses `actions: read` to authenticate immutable artifact metadata before download.
 
-**Rollout dependency:** automatic invocation and attaching the prepared body
-belong to the approval-gated publication split. This foundation does not change
-or replace the current publication workflow described below. A manual preview
-alone is not an automatically integrated release process; keep the integration
-pending until the validation caller and single owner publication gate are wired
-and tested together. Existing releases are not backfilled or rewritten.
+[`publish-release.yml`](../.github/workflows/publish-release.yml) invokes preparation
+and full runtime verification together, then seals their exact successful outputs
+into one immutable `release-bundle-<tag>-1` artifact. The runtime interface returns
+`release_artifact_id`, `release_artifact_digest`, and `release_run_attempt`;
+notes return `artifact_id`, `artifact_digest`, and `body_sha256`. These interfaces
+and their caller must change atomically. No consumer discovers an artifact by
+name: metadata authenticates its immutable ID, digest, repository ID, producer
+run/attempt and source before download, and the pinned downloader fails on digest
+mismatch. The source manifest and all checksums are independently verified.
 
-The separate Actions artifact `release-notes-<tag>-<run-attempt>` contains exactly
-`body.md` and `manifest.json`; it is not added to the runtime's four-file asset
-inventory. The reusable outputs are `artifact_id`, `artifact_digest` (GitHub's
-SHA-256 artifact digest), and `body_sha256`. The manifest records both boundary
-SHAs/tags, PR and direct-commit identities, input/body hashes, and producer run,
-attempt, and workflow SHA. The completed producer run/attempt must be the same
-validation run used for the runtime assets.
+The notes producer artifact contains exactly `body.md` and `manifest.json`. Its
+manifest records both boundary SHAs/tags, PR and direct-commit identities,
+input/body hashes, and producer run, attempt and workflow SHA. The sealed bundle
+preserves those bytes and the runtime's existing four files, adding
+`release-identity.json` (both producer artifact IDs/digests, repository ID,
+source/tag and run/attempt) and `BUNDLE-SHA256SUMS`. The latter describes the
+structured Actions bundle, with `release/` and `notes/` paths; the original
+`SHA256SUMS` remains the runtime-only, flat-download checksum list.
 
-The later **single owner decision** must bind both artifact IDs/digests, the
-body hash, source SHA, and successful producer run/attempt. After approval,
-publication downloads by approved immutable ID, verifies those identities and
-hashes, and uses the already prepared text—never project code. It must recheck
-the draft and tag, reject an independently edited draft body, and accept only
-the original Release Please body or the identical prepared body on retry. A
-changed artifact, failed/expired preparation, or new run invalidates the old
-approval. No notes are published by this workflow, and no release or tag is
-created, deleted, recreated, or retagged.
+Provenance attests **all** sealed files: runtime archive, SBOM, both checksum
+lists, runtime metadata, both notes views and their manifest, and identity ledger.
+Only after successful validation, composition, sealing and attestation does the
+single `release` environment job request one owner decision. The summary exposes
+the exact source, run/attempt, input artifact IDs/digests, sealed bundle ID/digest,
+and complete proposed body before that decision. The final job checks that the
+configured reviewer and actual native approval are the explicitly reviewed owner
+`choskeli` (ID `98036866`), not merely an arbitrary configured reviewer. There is
+no administrator bypass and only `v*` tags may deploy.
 
-For a preview of a **future tag that already contains this workflow**, dispatch
-`release-notes.yml` at that exact tag with matching `tag` and `sha` inputs.
-Review the two-file Actions artifact and job summary; dispatch does not approve
-publication. Focused local tests run with
-`node --test scripts/release-notes.test.mjs` and are included in `npm run test:tooling`.
+After approval, that job downloads the **same sealed bundle** by authenticated
+ID, rechecks all bytes and identities, then rechecks owner/environment decision,
+tag and draft immediately before the single publication transition. It rejects
+edited draft text, unexpected assets, missing/duplicate/wrong approvals, stale
+source/run/attempt/repository/artifacts, and failed or skipped provenance.
+Published asset digests and body are read back. It never executes project code,
+rebuilds the runtime, retags, deletes releases or edits an existing published
+release. A fresh dispatch always requires a fresh genuine owner approval; agents
+must never approve it. Existing immutable v2.1.1 remains unchanged and does not
+retroactively acquire this workflow or a new engineering view.
+
+### Nonpublishing hosted prerequisite check
+
+[`release-prerequisites.yml`](../.github/workflows/release-prerequisites.yml) runs
+on relevant same-repository PRs, or explicit dispatch. It checks live environment,
+artifact, digest and approval-history response shapes, exercises native generation
+against an exact bounded commit range, verifies complete native PR coverage, and
+tests ID-based artifact transport. Its native job has no checkout or artifact
+download; the only POST is `releases/generate-notes`, which saves nothing. Its
+preview label is never created as a Git tag. No job uses the release environment
+or creates, edits, publishes or deletes a release. Fork PRs skip this write-token
+prerequisite; normal read-only tests still run.
+
+This checks real hosted API behavior, **not** a successful future publication or
+owner approval. Offline execution tests use fake `gh` responses and cover negative
+cases independently; they are not live validation. The prerequisite cannot prove
+that a future tag's content/approval is correct. A real publication still needs
+all exact-tag gates and the owner's single decision.
+
+For a notes-only preview of a future tag already containing these workflows,
+dispatch `release-notes.yml` at that exact tag with matching `tag` and `sha`.
+Focused tests run with `node --test scripts/release-notes*.test.mjs scripts/release-publish.test.mjs`
+and are included in `npm run test:tooling`.
 
 The behavior above was checked against
 [Release Please 17.6.0's commit boundaries](https://github.com/googleapis/release-please/blob/v17.6.0/src/manifest.ts),
@@ -125,8 +159,8 @@ rechecking boundary and composition behavior, not assuming it is unchanged.
 3. Review and squash merge the release PR. Release Please creates a **draft release** and, with `force-tag-creation`, creates its `vX.Y.Z` tag while it is still a draft.
 4. The workflow dispatches `publish-release.yml` **at that exact tag**, passing its full commit SHA. Preflight requires a matching draft, a matching tag commit already reachable from `main`, and `GITHUB_SHA` equal to the declared source commit. Dispatching from `main` is rejected.
 5. The reusable, read-only CI validates that commit. It checks Node 24 and 26, npm compatibility, formatting, lint, both TypeScript compilers, coverage, tooling, mutation testing, fuzzing, dependency audits, static analysis, secrets, and measured memory/HTTP behavior. The Node 24 release lane packages the existing compiled output and tests the unpacked artifact; the publisher never rebuilds it.
-6. Build-provenance attestation signs the tested asset checksums.
-7. The `publish` job waits in the `release` environment for one approval from the release approver ([Release approval](governance.md#release-approval)). After approval it downloads the same tested assets, verifies their checksums, rechecks the draft and tag, attaches the files, and only then publishes the draft. A validation, attestation or approval that does not succeed leaves it unpublished.
+6. Native notes preparation independently verifies the same release range. The candidate job seals the tested runtime and both notes views, with immutable input identities and checksums, into one artifact. Build provenance attests every sealed file.
+7. The `publish` job waits in the `release` environment for one approval from the release approver ([Release approval](governance.md#release-approval)). After approval it authenticates and downloads the same sealed artifact, verifies its complete checksum/identity ledger, rechecks the owner decision, draft and tag, attaches the files and combined notes, and only then publishes the draft. A validation, attestation or approval that does not succeed leaves it unpublished.
 
 The version verifier requires agreement between `package.json`, both lockfile root versions, the release manifest, and the supplied release tag. In CI, the recorded source commit must equal the checked-out Git HEAD. Tag-based invocation also keeps the standard attestation's workflow commit aligned with the actual build source.
 
@@ -139,20 +173,27 @@ The version verifier requires agreement between `package.json`, both lockfile ro
 | `mp3-frame-analyzer-X.Y.Z.manifest.json` | Version, tag, source commit, and packaging Node/npm versions                                                 |
 | `SHA256SUMS`                             | SHA-256 digests of the three files above                                                                     |
 
+Future releases using the integrated publisher additionally attach `release-notes.md`,
+`release-notes.manifest.json`, `release-identity.json`, and `BUNDLE-SHA256SUMS`.
+The first contains the same user-facing and engineering Markdown as the release
+body; the second audits its range and producer. Existing v2.1.1 has only the four
+historical runtime assets and is never rewritten.
+
 The runtime archive is deliberately assembled from compiled output; `npm pack` is not the release artifact. It does not contain `node_modules`, development sources, tests, or fixtures. Runtime installation uses `npm ci --omit=dev --ignore-scripts`; see [runtime instructions](runtime.md). Checksums detect byte changes but do not independently prove publisher identity or build provenance.
 
 ## Permission separation
 
-| Stage             | Elevated permissions and boundary                                                                     |
-| ----------------- | ----------------------------------------------------------------------------------------------------- |
-| Release Please    | `contents`, `issues`, and `pull-requests: write`; pinned automation, no checkout or project execution |
-| Dispatch          | `actions: write`; schedules validation/publication using validated metadata                           |
-| Publish preflight | `contents: write` to inspect otherwise-hidden drafts; metadata only, no checkout                      |
-| Validation        | `contents: read`; project code and dependencies run only in these read-only jobs                      |
-| Provenance        | `id-token: write` and `attestations: write`; downloads tested assets, no project checkout/build       |
-| Publication       | `contents: write` and `actions: read`; downloads and uploads tested assets, no rebuilding             |
+| Stage             | Elevated permissions and boundary                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------ |
+| Release Please    | `contents`, `issues`, and `pull-requests: write`; pinned automation, no checkout or project execution  |
+| Dispatch          | `actions: write`; schedules validation/publication using validated metadata                            |
+| Publish preflight | `contents: write` and `actions: read` to inspect drafts and native environment controls; metadata only |
+| Native notes      | `contents: write` for non-saving generate-notes only; no checkout or downloaded artifact execution     |
+| Validation        | `contents: read`; project code and dependencies run only in these read-only jobs                       |
+| Provenance        | `id-token: write` and `attestations: write`; downloads tested assets, no project checkout/build        |
+| Publication       | `contents: write` and `actions: read`; downloads and uploads tested assets, no rebuilding              |
 
-Workflow actions are pinned by commit. Ordinary PR title validation uses `pull_request_target` only to inspect metadata; it never executes PR code. The dispatched title check also verifies that it is checking the current release PR head.
+Workflow actions are pinned by commit. Optional CLI update notices and OpenTelemetry are disabled (`GH_NO_UPDATE_NOTIFIER`, `GH_NO_EXTENSION_UPDATE_NOTIFIER`, `DO_NOT_TRACK`, `OTEL_SDK_DISABLED`). Required GitHub API, artifact and attestation service traffic and service-side audit logs remain; these controls do not claim otherwise. Ordinary PR title validation uses `pull_request_target` only to inspect metadata; it never executes PR code. The dispatched title check also verifies that it is checking the current release PR head.
 
 ## Repository settings
 
@@ -218,7 +259,7 @@ Then follow [the runtime guide](runtime.md) to extract the archive, install prod
 ## Recover from a failed release
 
 - **Release PR validation failed:** fix the cause in an ordinary PR. Release Please regenerates the release PR, and redispatches its checks, only when its title or notes change. Otherwise use the release PR's **Update branch** button; that human-initiated push runs the ordinary PR checks. Publication revalidates the tagged commit either way.
-- **Publication failed after the draft and tag were created:** a retry runs the workflows and source from the tag, so changes merged to `main` cannot repair it. Retry the draft as shown below for transient failures, such as a runner or network error. If the tagged source or its workflows are defective, leave the draft unpublished or delete it, merge the fix, and let Release Please propose the next version. Never move or recreate a release tag.
+- **Publication failed after the draft and tag were created:** a retry runs the workflows and source from the tag, so changes merged to `main` cannot repair it. Retry the draft as shown below for transient failures, such as a runner or network error. If the tagged source or its workflows are defective, leave the draft unpublished, merge the fix, and let Release Please propose the next version. Never move or recreate a release tag.
 - **A published release is defective:** published releases are immutable. Merge a correction and release a new version.
 
 ## Retry an unpublished draft
@@ -235,4 +276,4 @@ gh workflow run publish-release.yml \
   -f "sha=$release_sha"
 ```
 
-Replace `vX.Y.Z` with the actual draft tag. The retried run waits for approval in the `release` environment again. A `--ref main` invocation fails preflight, as does a changed tag, non-`main` source commit, mismatched SHA, or already-published release. Retrying may replace assets only while the release remains a draft. Publication is serialized and checks existing stable versions so retrying an older draft cannot move the `latest` designation backwards. For a published defect, merge a correction and release a new version.
+Replace `vX.Y.Z` with the actual draft tag. Do not use **Re-run jobs**: attempts after the first are rejected. The newly dispatched run waits for a new approval in the `release` environment again. A `--ref main` invocation fails preflight, as does a changed tag, non-`main` source commit, mismatched SHA, or already-published release. Retrying may replace assets only while the release remains a draft. Publication is serialized and checks existing stable versions so retrying an older draft cannot move the `latest` designation backwards. For a published defect, merge a correction and release a new version.

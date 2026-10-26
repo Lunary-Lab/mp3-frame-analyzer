@@ -230,6 +230,28 @@ test('existing scans, production-only archive smoke and release dispatch remain 
   assert.match(release, /'ci\.yml'[^\n]+ '-f', 'full_mutation=false'/);
 });
 
+test('reusable release outputs bind the verified upload and its exact workflow attempt', () => {
+  for (const name of ['release_artifact_id', 'release_artifact_digest', 'release_run_attempt'])
+    assert.ok(ci.includes(`value: \${{ jobs.package.outputs.${name} }}`));
+  const packaging = job('package');
+  assert.match(
+    packaging,
+    /release_artifact_id: \$\{\{ steps\.release-assets\.outputs\.artifact-id \}\}/,
+  );
+  assert.match(
+    packaging,
+    /release_artifact_digest: \$\{\{ steps\.release-assets\.outputs\.artifact-digest \}\}/,
+  );
+  assert.match(packaging, /release_run_attempt: \$\{\{ github\.run_attempt \}\}/);
+  assert.match(packaging, /id: release-assets\n/);
+  assert.match(packaging, /name: release-assets-\$\{\{ github\.run_attempt \}\}/);
+  assert.ok(packaging.indexOf('npm run test:artifact') < packaging.indexOf('id: release-assets'));
+  assert.doesNotMatch(
+    packaging.slice(packaging.indexOf('id: release-assets')),
+    /npm run (build|package:release)/,
+  );
+});
+
 test('native scanner and setup commands retain pinned versions and explicit reporting controls', async () => {
   const setup = await readFile(
     new URL('../.github/actions/setup-project/action.yml', import.meta.url),
@@ -300,7 +322,12 @@ test('governance is mandatory and checks the same explicit source ref as the CI 
 test('Trivy full and exact tested-release scans remain required without source uploads', async () => {
   assert.match(job('trivy'), /trivy-gate\.mjs.* full/);
   assert.match(job('trivy-release'), /needs: package/);
-  assert.match(job('trivy-release'), /name: release-assets/);
+  assert.match(
+    job('trivy-release'),
+    /artifact-ids: \$\{\{ needs\.package\.outputs\.release_artifact_id \}\}/,
+  );
+  assert.match(job('trivy-release'), /digest-mismatch: error/);
+  assert.doesNotMatch(job('trivy-release'), /name: release-assets|github-token:|run-id:/);
   assert.match(job('trivy-release'), /trivy-gate\.mjs.* release/);
   for (const name of ['trivy', 'trivy-release']) {
     assert.match(job(name), /ref: \$\{\{ inputs\.ref \|\| github\.sha \}\}/);
@@ -313,4 +340,36 @@ test('Trivy full and exact tested-release scans remain required without source u
   assert.match(bootstrap, /trivy_0\.76\.1_Linux-64bit\.tar\.gz/);
   assert.match(bootstrap, /c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0/);
   assert.ok(bootstrap.indexOf('sha256sum --check --strict') < bootstrap.indexOf('tar -xzf'));
+});
+
+test('Trivy refuses empty, multiple or malformed producer IDs before artifact download', () => {
+  const consumer = job('trivy-release');
+  const guard = consumer.indexOf('Require the exact producer artifact identity before download');
+  assert.ok(guard > 0 && guard < consumer.indexOf('uses: actions/download-artifact@'));
+  const script = consumer.match(/node --input-type=module <<'NODE'\n([\s\S]+?)\n {10}NODE/)?.[1];
+  assert.ok(script);
+  const run = (changes = {}) =>
+    spawnSync(process.execPath, ['--input-type=module'], {
+      input: script,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        ARTIFACT_ID: '123',
+        ARTIFACT_DIGEST: 'a'.repeat(64),
+        ARTIFACT_ATTEMPT: '1',
+        GITHUB_RUN_ATTEMPT: '2',
+        ...changes,
+      },
+    }).status;
+  assert.equal(run(), 0);
+  for (const id of ['', '0', '01', '1,2', '*', '123\n', '9007199254740992'])
+    assert.notEqual(run({ ARTIFACT_ID: id }), 0, `Accepted artifact ID ${JSON.stringify(id)}`);
+  for (const changes of [
+    { ARTIFACT_DIGEST: '' },
+    { ARTIFACT_DIGEST: 'a'.repeat(63) },
+    { ARTIFACT_ATTEMPT: '' },
+    { ARTIFACT_ATTEMPT: '0' },
+    { ARTIFACT_ATTEMPT: '3' },
+  ])
+    assert.notEqual(run(changes), 0);
 });

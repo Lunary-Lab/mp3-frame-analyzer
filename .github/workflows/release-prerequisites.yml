@@ -1,0 +1,165 @@
+name: Release publication prerequisites
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/publish-release.yml'
+      - '.github/workflows/release-notes.yml'
+      - '.github/workflows/release-prerequisites.yml'
+      - 'scripts/release-notes*.mjs'
+      - 'scripts/release-publish*.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GH_NO_UPDATE_NOTIFIER: '1'
+  GH_NO_EXTENSION_UPDATE_NOTIFIER: '1'
+  DO_NOT_TRACK: '1'
+  OTEL_SDK_DISABLED: 'true'
+
+concurrency:
+  group: release-prerequisites-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      artifact_id: ${{ steps.probe.outputs.artifact-id }}
+      artifact_digest: ${{ steps.probe.outputs.artifact-digest }}
+    steps:
+      - name: Produce harmless identity-only transport fixture
+        run: |
+          node -e 'require("node:fs").writeFileSync("probe.json", JSON.stringify({repositoryId:process.env.GITHUB_REPOSITORY_ID,sha:process.env.GITHUB_SHA,run:process.env.GITHUB_RUN_ID,attempt:process.env.GITHUB_RUN_ATTEMPT}))'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: probe
+        with:
+          name: release-prerequisite-${{ github.run_attempt }}
+          path: probe.json
+          if-no-files-found: error
+          retention-days: 14
+
+  native:
+    needs: probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # Only generate-notes POST; no checkout or downloaded input.
+      actions: read
+      pull-requests: read # Independently audit every native PR entry.
+    steps:
+      - name: Exercise live native contracts without creating a tag, release or approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PROBE_ID: ${{ needs.probe.outputs.artifact_id }}
+          PROBE_DIGEST: ${{ needs.probe.outputs.artifact_digest }}
+          ARTIFACT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PREVIEW_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { appendFileSync, writeFileSync } from 'node:fs';
+          const e = process.env;
+          const api = (path) => JSON.parse(execFileSync('gh', ['api', '--method', 'GET',
+            `repos/${e.GH_REPO}${path ? '/' + path : ''}`], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }));
+          const repository = api('');
+          assert.equal(repository.full_name, e.GH_REPO);
+          assert.equal(String(repository.id), e.GITHUB_REPOSITORY_ID);
+          assert.equal(repository.private, false);
+          const environment = api('environments/release');
+          assert.equal(environment.can_admins_bypass, false);
+          assert.deepEqual(environment.deployment_branch_policy, {protected_branches:false, custom_branch_policies:true});
+          const rules = environment.protection_rules.filter((rule) => rule.type === 'required_reviewers');
+          assert.equal(rules.length, 1);
+          assert.equal(rules[0].prevent_self_review, false);
+          assert.deepEqual(rules[0].reviewers.map(({type,reviewer}) => ({type,id:reviewer.id})), [{type:'User',id:98036866}]);
+          const policies = api('environments/release/deployment-branch-policies?per_page=100');
+          assert.equal(policies.total_count, 1);
+          assert.deepEqual(policies.branch_policies.map(({name,type}) => ({name,type})), [{name:'v*',type:'tag'}]);
+          const artifact = api(`actions/artifacts/${e.PROBE_ID}`);
+          assert.equal(String(artifact.id), e.PROBE_ID);
+          assert.equal(artifact.name, `release-prerequisite-${e.GITHUB_RUN_ATTEMPT}`);
+          assert.equal(artifact.expired, false);
+          assert.equal(artifact.digest, `sha256:${e.PROBE_DIGEST}`);
+          assert.equal(String(artifact.workflow_run.id), e.GITHUB_RUN_ID);
+          assert.equal(String(artifact.workflow_run.repository_id), e.GITHUB_REPOSITORY_ID);
+          assert.equal(String(artifact.workflow_run.head_repository_id), e.GITHUB_REPOSITORY_ID);
+          assert.equal(artifact.workflow_run.head_sha, e.ARTIFACT_SOURCE_SHA);
+          const releases = api('releases?per_page=100');
+          const previous = releases.find((release) => !release.draft && !release.prerelease);
+          assert.ok(previous, 'A published boundary is required for this nonpublishing preview');
+          assert.equal(previous.immutable, true);
+          assert.ok(previous.assets.length > 0 && previous.assets.every((asset) => /^sha256:[a-f0-9]{64}$/.test(asset.digest)));
+          const previousSha = api(`commits/${previous.tag_name}`).sha;
+          const comparison = api(`compare/${previousSha}...${e.PREVIEW_SHA}?per_page=100`);
+          assert.equal(comparison.status, 'ahead');
+          assert.ok(comparison.total_commits <= 100, 'Preview range requires bounded pagination review');
+          assert.equal(comparison.commits.length, comparison.total_commits);
+          // This label is passed only to generate-notes. The endpoint saves nothing.
+          const previewTag = `release-notes-preview-${e.GITHUB_RUN_ID}`;
+          const result = JSON.parse(execFileSync('gh', ['api', '--method', 'POST',
+            `repos/${e.GH_REPO}/releases/generate-notes`, '--input', '-'], {
+              input: JSON.stringify({tag_name:previewTag, target_commitish:e.PREVIEW_SHA,
+                previous_tag_name:previous.tag_name, configuration_file_path:'.github/release.yml'}),
+              encoding:'utf8', maxBuffer:8 * 1024 * 1024,
+            }));
+          assert.equal(typeof result.name, 'string');
+          assert.equal(typeof result.body, 'string');
+          assert.ok(result.body.length > 0 && Buffer.byteLength(result.body) < 125_000);
+          const expected = new Set();
+          const commits = new Set(comparison.commits.map(({sha}) => sha));
+          for (const {sha} of comparison.commits) {
+            const prs = api(`commits/${sha}/pulls?per_page=100`);
+            assert.ok(Array.isArray(prs) && prs.length < 100);
+            for (const pr of prs) if (pr.merged_at && pr.base.repo.full_name === e.GH_REPO && commits.has(pr.merge_commit_sha)) expected.add(pr.number);
+          }
+          const suffix = ` in https://github.com/${e.GH_REPO}/pull/`;
+          const found = result.body.split(/^## New Contributors\s*$/m)[0].split('\n').filter((line) => /^[-*] /.test(line) && line.includes(suffix)).map((line) => {
+            const number = line.slice(line.lastIndexOf(suffix) + suffix.length).trim();
+            assert.match(number, /^[1-9]\d*$/);
+            return Number(number);
+          });
+          assert.equal(new Set(found).size, found.length);
+          assert.deepEqual(found.sort((a,b) => a-b), [...expected].sort((a,b) => a-b));
+          assert.equal(api(`commits/${previous.tag_name}`).sha, previousSha);
+          const after = api(`releases/${previous.id}`);
+          assert.equal(after.body, previous.body);
+          assert.deepEqual(after.assets.map(({id,digest}) => ({id,digest})), previous.assets.map(({id,digest}) => ({id,digest})));
+          const reviews = api(`actions/runs/${e.GITHUB_RUN_ID}/approvals`);
+          assert.deepEqual(reviews, [], 'This preview must not request or reuse owner approval');
+          writeFileSync('native-preview.json', JSON.stringify({repositoryId:e.GITHUB_REPOSITORY_ID,
+            source:e.PREVIEW_SHA,previousTag:previous.tag_name,previousSha,probe:artifact,result},null,2));
+          appendFileSync(e.GITHUB_STEP_SUMMARY, `Live API contracts passed: environment, artifact identity/digest, ${found.length} native PR entries, release asset digests, empty preview approval history. No tag, release, deployment or approval was created.\n`);
+          JS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-release-preview-${{ github.run_attempt }}
+          path: native-preview.json
+          if-no-files-found: error
+          retention-days: 14
+
+  transport:
+    needs: [probe, native]
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.probe.outputs.artifact_id }}
+          digest-mismatch: error
+          path: probe
+      - name: Verify the authenticated downloaded fixture without executing it
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          const e = process.env;
+          assert.deepEqual(JSON.parse(readFileSync('probe/probe.json','utf8')),
+            {repositoryId:e.GITHUB_REPOSITORY_ID,sha:e.GITHUB_SHA,run:e.GITHUB_RUN_ID,attempt:e.GITHUB_RUN_ATTEMPT});
+          JS

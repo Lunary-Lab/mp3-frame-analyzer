@@ -13,6 +13,16 @@ on:
   schedule:
     - cron: '23 5 * * 1'
   workflow_call:
+    outputs:
+      release_artifact_id:
+        description: Immutable ID of the runtime artifact verified by this invocation
+        value: ${{ jobs.package.outputs.release_artifact_id }}
+      release_artifact_digest:
+        description: SHA-256 archive digest reported by the artifact service
+        value: ${{ jobs.package.outputs.release_artifact_digest }}
+      release_run_attempt:
+        description: Workflow attempt that produced the tested runtime artifact
+        value: ${{ jobs.package.outputs.release_run_attempt }}
     inputs:
       ref:
         description: Exact commit to validate for a release
@@ -296,10 +306,26 @@ jobs:
         with:
           node-version: '24'
           package-manager-cache: false
+      - name: Require the exact producer artifact identity before download
+        env:
+          ARTIFACT_ID: ${{ needs.package.outputs.release_artifact_id }}
+          ARTIFACT_DIGEST: ${{ needs.package.outputs.release_artifact_digest }}
+          ARTIFACT_ATTEMPT: ${{ needs.package.outputs.release_run_attempt }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const { ARTIFACT_ID: id, ARTIFACT_DIGEST: digest, ARTIFACT_ATTEMPT: attempt } = process.env;
+          assert.match(id ?? '', /^[1-9][0-9]*$/, 'Missing single immutable artifact ID');
+          assert.match(digest ?? '', /^[a-f0-9]{64}$/, 'Missing artifact service digest');
+          assert.match(attempt ?? '', /^[1-9][0-9]*$/, 'Missing producer attempt');
+          assert.ok(Number.isSafeInteger(Number(id)) && Number.isSafeInteger(Number(attempt)));
+          assert.ok(Number(attempt) <= Number(process.env.GITHUB_RUN_ATTEMPT), 'Future producer attempt');
+          NODE
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release-assets
+          artifact-ids: ${{ needs.package.outputs.release_artifact_id }}
           path: release
+          digest-mismatch: error
       - uses: ./.github/actions/setup-trivy
       - name: Scan the exact tested artifact production lock without installing packages
         run: node scripts/trivy-gate.mjs "${RUNNER_TEMP}/trivy-tool/trivy" release
@@ -385,6 +411,10 @@ jobs:
   package:
     name: Build, artifact verification and real runtime smoke
     needs: [types, unit]
+    outputs:
+      release_artifact_id: ${{ steps.release-assets.outputs.artifact-id }}
+      release_artifact_digest: ${{ steps.release-assets.outputs.artifact-digest }}
+      release_run_attempt: ${{ github.run_attempt }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -404,9 +434,10 @@ jobs:
           SOURCE_COMMIT: ${{ inputs.ref || github.sha }}
           RELEASE_TAG: ${{ inputs.release_tag }}
       - name: Preserve the same tested artifact bytes
+        id: release-assets
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: release-assets
+          name: release-assets-${{ github.run_attempt }}
           path: release/
           if-no-files-found: error
           retention-days: 14

@@ -22,7 +22,7 @@ export function githubReader(repository, run = runFile) {
   return async (path, paginated = false) => {
     const args = ['api', '--method', 'GET'];
     if (paginated) args.push('--paginate', '--slurp');
-    args.push(`repos/${repository}/${path}`);
+    args.push(`repos/${repository}${path ? '/' + path : ''}`);
     const result = await run('gh', args);
     return JSON.parse(result.stdout);
   };
