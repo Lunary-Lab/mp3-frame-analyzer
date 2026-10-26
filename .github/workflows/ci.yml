@@ -368,8 +368,16 @@ jobs:
           persist-credentials: false
       - name: Install pinned Semgrep CE in an isolated environment
         run: |
-          python3 -m venv "${RUNNER_TEMP}/semgrep-venv"
-          "${RUNNER_TEMP}/semgrep-venv/bin/python" -m pip install 'semgrep==1.182.1'
+          python3 -I -c 'import platform, sys; sys.exit(0 if sys.implementation.name == "cpython" and sys.version_info[:2] == (3, 12) and sys.platform == "linux" and platform.machine() == "x86_64" else "Semgrep lock requires CPython 3.12 on Linux x86_64")'
+          python3 -I -m venv "${RUNNER_TEMP}/semgrep-venv"
+          python="${RUNNER_TEMP}/semgrep-venv/bin/python"
+          wheels="${RUNNER_TEMP}/semgrep-wheels"
+          lock=.github/security/semgrep-requirements.txt
+          export PIP_CONFIG_FILE=/dev/null
+          "$python" -I -m pip --isolated --disable-pip-version-check download --index-url https://pypi.org/simple --require-hashes --only-binary=:all: --no-cache-dir --dest "$wheels" --requirement "$lock"
+          "$python" -I -m pip --isolated --disable-pip-version-check install --no-index --find-links "$wheels" --require-hashes --only-binary=:all: --no-cache-dir --requirement "$lock"
+          "$python" -I -m pip --isolated --disable-pip-version-check --no-cache-dir check
+          "$python" -I scripts/test-semgrep-lock.py "$wheels"
       - name: Application architecture rules without optional reporting
         run: '"${RUNNER_TEMP}/semgrep-venv/bin/semgrep" scan --config .semgrep.yml --strict --error --metrics=off --disable-version-check --no-trace src'
 

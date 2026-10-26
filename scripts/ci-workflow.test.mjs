@@ -272,7 +272,32 @@ test('native scanner and setup commands retain pinned versions and explicit repo
     assert.match(job(name), /go telemetry off/);
     assert.match(job(name), /test "\$\(go env GOTELEMETRY\)" = off/);
   }
-  assert.match(job('semgrep'), /semgrep==1\.182\.1/);
+  const scannerLock = await readFile(
+    new URL('../.github/security/semgrep-requirements.txt', import.meta.url),
+    'utf8',
+  );
+  assert.match(scannerLock, /^semgrep==1\.182\.1 --hash=sha256:[a-f0-9]{64}$/m);
+  const scanner = job('semgrep');
+  assert.match(scanner, /Semgrep lock requires CPython 3\.12 on Linux x86_64/);
+  assert.match(scanner, /export PIP_CONFIG_FILE=\/dev\/null/);
+  assert.match(
+    scanner,
+    /-I -m pip --isolated --disable-pip-version-check download --index-url https:\/\/pypi\.org\/simple/,
+  );
+  assert.match(
+    scanner,
+    /download .* --require-hashes --only-binary=:all: --no-cache-dir --dest "\$wheels"/,
+  );
+  assert.match(
+    scanner,
+    /-I -m pip --isolated --disable-pip-version-check install --no-index --find-links "\$wheels"/,
+  );
+  assert.match(
+    scanner,
+    /install .* --require-hashes --only-binary=:all: --no-cache-dir --requirement "\$lock"/,
+  );
+  assert.match(scanner, /-I -m pip --isolated --disable-pip-version-check --no-cache-dir check/);
+  assert.match(scanner, /-I scripts\/test-semgrep-lock\.py "\$wheels"/);
   assert.match(job('semgrep'), /--strict --error --metrics=off --disable-version-check --no-trace/);
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
   assert.equal(pkg.scripts['audit:production'], 'npm audit --omit=dev --audit-level=moderate');
