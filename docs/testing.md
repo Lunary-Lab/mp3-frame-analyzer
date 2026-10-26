@@ -194,6 +194,20 @@ At that time, the focused two-decoder mutation score was **98.27%** (164 kills, 
 
 ## Full-parser mutation analysis
 
+The current wrapper bounds each validation child, including the complete native
+parser campaign, at 90 minutes; the enclosing parser-mutation CI job has a
+100-minute limit for setup, cleanup and evidence upload. On interruption or the
+child deadline, the wrapper kills the process group and fails closed. A failed
+or incomplete campaign never supplies reusable audited results.
+
+This finite budget follows PR #2's exact-head run
+[40261796553](https://github.com/Lunary-Lab/mp3-frame-analyzer/actions/runs/40261796553):
+the previous 60-minute child deadline stopped steady progress at 676 of 779
+mutants, with an estimated nine minutes remaining. Those progress counters are
+not a completed score. Scope, per-mutant timeout settings, proof requirements
+and the 100% adjusted gate are unchanged; the fresh run must complete and report
+both raw and adjusted outcomes. This budget is not a CI-duration guarantee.
+
 The mutation scope covers all files in `src/mp3/**/*.ts`, including the
 streaming reader, frame traversal and errors. The native Vitest runner uses
 per-test mutation coverage over the same parser test selection. Every invocation
