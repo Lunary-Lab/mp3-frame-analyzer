@@ -10,6 +10,11 @@ on:
         description: Force a fresh full mutation run (no result reuse)
         type: boolean
         default: true
+      mutation_workers:
+        description: Mutation workers (4 is a full-run candidate, never a reusable baseline)
+        type: choice
+        options: ['2', '4']
+        default: '2'
   schedule:
     - cron: '23 5 * * 1'
   workflow_call:
@@ -170,7 +175,7 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-project
-      - run: npm run test:mutation-cache:integration
+      - run: npm run test:mutation-cache:integration -- --workers
       - name: Retain mutation-cache-verification
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -202,6 +207,7 @@ jobs:
         run: node scripts/restore-mutation-baseline.mjs
       - name: Audit all parser mutants with explicit fresh/reused accounting
         env:
+          MUTATION_WORKERS: ${{ inputs.mutation_workers || '2' }}
           FORCE_FULL: ${{ github.event_name == 'schedule' || inputs.ref != '' || inputs.release_tag != '' || inputs.full_mutation == true }}
         run: |
           if [ "$FORCE_FULL" = true ]; then

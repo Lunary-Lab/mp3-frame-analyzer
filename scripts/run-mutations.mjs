@@ -15,6 +15,7 @@ import {
   executionSummary,
 } from './mutation-cache.mjs';
 import { planReuse } from './mutation-impact.mjs';
+import { mutationHardware, mutationWorkers } from './mutation-workers.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = join(root, 'reports/mutation');
@@ -117,7 +118,15 @@ try {
     log = createWriteStream(join(output, 'execution.log'));
   }
   const env = mutationEnvironment();
-  const inputs = await mutationInputs(root, env);
+  const config = JSON.parse(await readFile(join(root, 'stryker.config.json'), 'utf8'));
+  const workers = mutationWorkers(config, process.env.MUTATION_WORKERS);
+  const candidate = workers === 4;
+  if (log) {
+    const hardware = mutationHardware(workers);
+    await writeFile(join(output, 'hardware.json'), JSON.stringify(hardware, null, 2) + '\n');
+    console.log(`Mutation hardware: ${JSON.stringify(hardware)}`);
+  }
+  const inputs = await mutationInputs(root, env, workers);
   const inputsHash = fingerprint(inputs);
   if (args.includes('--cache-key')) {
     console.log(`mutation-v2-${inputsHash}`);
@@ -141,6 +150,7 @@ try {
           .catch(() => null)
       : null;
     const force =
+      candidate ||
       args.includes('--full') ||
       Boolean(env.NODE_OPTIONS) ||
       (process.env.GITHUB_ACTIONS && !provenance);
@@ -178,7 +188,12 @@ try {
       dirname(require.resolve('@stryker-mutator/core/package.json')),
       'bin/stryker.js',
     );
-    await run(stryker, ['run', ...(!cache.report ? ['--force'] : [])], env, log);
+    await run(
+      stryker,
+      ['run', '--concurrency', String(workers), ...(!cache.report ? ['--force'] : [])],
+      env,
+      log,
+    );
     const report = JSON.parse(await readFile(join(output, 'mutation.json'), 'utf8'));
     const summary = audit(report);
     for (const [file, record] of Object.entries(report.testFiles)) {
@@ -187,7 +202,7 @@ try {
     }
     const execution = executionSummary(report, prepared?.report, cache.report);
     // Do not bless a run whose inputs changed while it was executing.
-    const finalInputs = await mutationInputs(root, env);
+    const finalInputs = await mutationInputs(root, env, workers);
     await writeFile(join(output, 'inputs-before.json'), JSON.stringify(inputs, null, 2) + '\n');
     await writeFile(join(output, 'inputs-after.json'), JSON.stringify(finalInputs, null, 2) + '\n');
     if (fingerprint(finalInputs) !== inputsHash)
@@ -196,6 +211,8 @@ try {
       ...summary,
       execution: {
         ...execution,
+        strykerWorkers: workers,
+        workerCandidate: candidate,
         mode: cache.report ? 'incremental' : 'full',
         cacheReason: cache.reason,
         affectedTests: prepared?.affectedTests ?? [],
@@ -209,7 +226,8 @@ try {
     await writeFile(join(output, 'inputs.json'), JSON.stringify(inputs, null, 2) + '\n');
     // Promotion is last, after clean process exits, complete scope/equivalence
     // audit, freshness, and execution accounting. Failed/partial runs cannot win.
-    await promoteCache(root, report, inputs, summary, policy);
+    if (!candidate) await promoteCache(root, report, inputs, summary, policy);
+    else console.log('Four-worker candidate: full audit retained; cache promotion disabled.');
     console.log(
       `Mutants executed this invocation: ${execution.executed}; reused validated results: ${execution.reused}.`,
     );

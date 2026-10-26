@@ -200,6 +200,48 @@ parser campaign, at 90 minutes; the enclosing parser-mutation CI job has a
 child deadline, the wrapper kills the process group and fails closed. A failed
 or incomplete campaign never supplies reusable audited results.
 
+Local mutation runs retain the two-worker configuration (one on a one-CPU host).
+The manual CI dispatch offers `mutation_workers=4` as an **opt-in candidate**, not
+the new default. `MUTATION_WORKERS=1|2|4` selects an explicit local count; requests
+above Node's `os.availableParallelism()` estimate fail rather than silently
+oversubscribe. The exact numeric count passed to Stryker is bound into both
+execution-input fingerprints; each Vitest runner still uses `maxWorkers: 1`.
+Four-worker runs force the complete campaign and never promote a reusable cache.
+No scope, proof, threshold, per-mutant timeout or wall-clock limit changes.
+
+`reports/mutation/hardware.json` records allowlisted CPU/memory capacity and the
+selected count, without process arguments or environment values. Available
+parallelism is an OS estimate, not measured CPU utilization or a guarantee about
+container quotas. Memory capacity/free/constraint values are not worker-RSS
+measurements; an unknown memory constraint and uncollected worker peak RSS/CPU
+utilization are explicitly `null`. There is no empirical per-worker memory
+admission threshold yet. Failed/interrupted runs retain the initial diagnostic
+snapshot without receiving a passing audit or cache promotion.
+
+Public `ubuntu-24.04` has four vCPUs/16 GB in
+[GitHub's runner specification](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+[Stryker's documented default](https://stryker-mutator.io/docs/stryker-js/configuration/#concurrency-number--string)
+uses all cores on machines with at most four, but its
+[parallel workers share resources](https://stryker-mutator.io/docs/stryker-js/parallel-workers/).
+Neither fact establishes safe speedup for this parser. Before adopting four,
+compare a completed exact-head hosted full run against trusted two-worker source
+and report identities: every mutant identity/outcome, assertion-kill-to-timeout
+changes, equivalent survivors, unmutated tests, hardware and duration. Aggregate
+score alone is insufficient; small fixture controls are not full-workload proof.
+The native fixture command `npm run test:mutation-cache:integration -- --workers`
+opts into actual two/four-worker parity and requires four available CPUs; its
+public CI job explicitly selects this mode. The ordinary fixture command retains
+its one-worker default, ignoring caller `MUTATION_WORKERS` except explicit
+per-scenario overrides. Parity controls verify that the four-worker candidate
+leaves the previous trusted local baseline untouched. Four genuine mutants in
+two independent modules exercise worker selection and outcome parity; the
+creation of four runner processes does not prove simultaneous utilization or
+resource safety for the full parser workload.
+After review and authorized publication of a candidate branch, its hosted path is
+`gh workflow run ci.yml --ref <candidate-branch> -f full_mutation=true -f mutation_workers=4`.
+Verify the resulting run's exact head SHA before using its evidence. This does
+not enable four workers on pushes, PRs, schedules or release workflow calls.
+
 This finite budget follows PR #2's exact-head run
 [40261796553](https://github.com/Lunary-Lab/mp3-frame-analyzer/actions/runs/40261796553):
 the previous 60-minute child deadline stopped steady progress at 676 of 779

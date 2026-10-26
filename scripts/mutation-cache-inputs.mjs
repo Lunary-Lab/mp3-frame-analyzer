@@ -132,7 +132,7 @@ export function fingerprint(inputs) {
   return sha256(JSON.stringify(inputs));
 }
 
-export async function mutationInputs(root, env = mutationEnvironment()) {
+export async function mutationInputs(root, env = mutationEnvironment(), strykerWorkers = null) {
   // Actual installed bytes, not just declared versions: local dependency edits
   // cannot silently reuse a lockfile-matching result. Runtime caches are excluded.
   const dependencies = await fileInventory(join(root, 'node_modules'), { dependencies: true });
@@ -147,6 +147,7 @@ export async function mutationInputs(root, env = mutationEnvironment()) {
     environmentSha256: fingerprint(Object.entries(env).sort(([a], [b]) => a.localeCompare(b))),
     externalSampleSha256: sample ? sha256(await readFile(sample)) : null,
     runtime: {
+      strykerWorkers,
       node: process.version,
       versions: process.versions,
       nodeBinarySha256: sha256(await readFile(process.execPath)),

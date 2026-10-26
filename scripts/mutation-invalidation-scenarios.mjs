@@ -64,6 +64,74 @@ async function verifyChangedTests(context) {
   });
 }
 
+async function prepareWorkerFixture({ put, policy, source }) {
+  const scale = 'export function scale(value: number) { return value * 2; }\n';
+  await put('src/mp3/scale.ts', scale);
+  await put(
+    'tests/scale.test.ts',
+    "import { expect, it } from 'vitest'; import { scale } from '../src/mp3/scale.js'; it('scales', () => { expect(scale(3)).toBe(6); });\n",
+  );
+  await policy(
+    new Map([
+      ['src/mp3/add.ts', source],
+      ['src/mp3/scale.ts', scale],
+    ]),
+  );
+}
+
+export function workerOutcomes(report) {
+  return Object.entries(report.files)
+    .flatMap(([file, record]) =>
+      record.mutants.map(({ id, status, mutatorName, replacement, location }) => ({
+        file,
+        source: record.source,
+        id,
+        status,
+        mutatorName,
+        replacement,
+        location,
+      })),
+    )
+    .sort((a, b) => a.file.localeCompare(b.file) || a.id.localeCompare(b.id));
+}
+
+async function verifyWorkerSelection(context) {
+  const { restore, run, root } = context;
+  await restore();
+  await prepareWorkerFixture(context);
+  const two = await run('two-workers', {
+    env: { MUTATION_WORKERS: '2' },
+    reason: /Global mutation inputs changed[\s\S]*Creating 2 test runner process/,
+  });
+  assert.equal(two.execution.strykerWorkers, 2);
+  assert.equal(two.execution.reused, 0);
+  assert.equal(two.total, 4);
+  const manifest = await readFile(join(root, '.cache/mutation/validated/manifest.json'));
+  const report = await readFile(join(root, 'reports/mutation/mutation.json'), 'utf8');
+  const four = await run('four-worker-candidate', {
+    env: { MUTATION_WORKERS: '4' },
+    reason: /Creating 4 test runner process[\s\S]*cache promotion disabled/,
+  });
+  assert.equal(four.execution.strykerWorkers, 4);
+  assert.equal(four.execution.workerCandidate, true);
+  assert.equal(four.execution.reused, 0);
+  assert.equal(four.execution.executed, two.execution.executed);
+  assert.notEqual(four.execution.inputsHash, two.execution.inputsHash);
+  assert.deepEqual(
+    workerOutcomes(
+      JSON.parse(await readFile(join(root, 'reports/mutation/mutation.json'), 'utf8')),
+    ),
+    workerOutcomes(JSON.parse(report)),
+  );
+  assert.deepEqual(await readFile(join(root, '.cache/mutation/validated/manifest.json')), manifest);
+  const warm = await run('two-workers-still-warm', { env: { MUTATION_WORKERS: '2' } });
+  assert.equal(warm.execution.reused, two.total);
+  assert.equal(warm.execution.executed, 0);
+  await rm(join(root, 'src/mp3/scale.ts'));
+  await rm(join(root, 'tests/scale.test.ts'));
+  await restore();
+}
+
 async function verifySourceContext(context) {
   const { restore, source, put, policy, run, strongHelper } = context;
   await restore();
@@ -180,6 +248,7 @@ export async function runInvalidationScenarios(campaign) {
   const context = { ...campaign };
   context.restore = () => restoreBaseline(context);
   await verifyWarmBaseline(context);
+  if (campaign.workerParity) await verifyWorkerSelection(context);
   await verifyChangedTests(context);
   await verifySourceContext(context);
   await verifyGlobalInputs(context);

@@ -10,7 +10,9 @@ import { runInvalidationScenarios } from './mutation-invalidation-scenarios.mjs'
 import { runImpactScenarios } from './mutation-impact-scenarios.mjs';
 
 const project = fileURLToPath(new URL('../', import.meta.url));
-const evidence = resolve(process.argv[2] ?? 'reports/mutation-cache-validation');
+const evidence = resolve(
+  process.argv.slice(2).find((arg) => !arg.startsWith('--')) ?? 'reports/mutation-cache-validation',
+);
 await mkdir(evidence, { recursive: true });
 const root = await mkdtemp(join(tmpdir(), 'mutation-functional-'));
 const results = [];
@@ -54,7 +56,14 @@ async function run(name, { full = false, fails = false, reason, env = {} } = {})
     ['scripts/run-mutations.mjs', ...(full ? ['--full'] : [])],
     {
       cwd: root,
-      env: { ...process.env, GITHUB_ACTIONS: '', GITHUB_REF: '', GITHUB_EVENT_NAME: '', ...env },
+      env: {
+        ...process.env,
+        GITHUB_ACTIONS: '',
+        GITHUB_REF: '',
+        GITHUB_EVENT_NAME: '',
+        MUTATION_WORKERS: '1',
+        ...env,
+      },
       encoding: 'utf8',
       timeout: 120_000,
       maxBuffer: 10 * 1024 * 1024,
@@ -90,6 +99,7 @@ async function prepareProject() {
     'mutation-cache.mjs',
     'mutation-cache-inputs.mjs',
     'mutation-impact.mjs',
+    'mutation-workers.mjs',
   ])
     await cp(join(project, 'scripts', name), join(root, 'scripts', name));
   await symlink(join(project, 'node_modules'), join(root, 'node_modules'), 'dir');
@@ -110,7 +120,17 @@ async function prepareProject() {
 
 try {
   await prepareProject();
-  const campaign = { root, evidence, put, policy, run, source, strongTest, strongHelper };
+  const campaign = {
+    root,
+    evidence,
+    put,
+    policy,
+    run,
+    source,
+    strongTest,
+    strongHelper,
+    workerParity: process.argv.includes('--workers'),
+  };
   if (!process.argv.includes('--impact-only')) await runInvalidationScenarios(campaign);
   await runImpactScenarios(campaign);
   await writeFile(join(evidence, 'summary.json'), JSON.stringify(results, null, 2) + '\n');
