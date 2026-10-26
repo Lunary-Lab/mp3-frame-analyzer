@@ -34,6 +34,17 @@ bytes, including chunked transfer) and multipart **file bytes**, not multipart
 envelope overhead. Requests over the limit return `413 file-too-large` when the
 size violation is observed; an earlier malformed-file error can still win.
 
+Multipart requests also have an **aggregate body budget**: `MAX_MULTIPART_BYTES`,
+by default the configured file limit plus **64 KiB** (saturated at the maximum
+safe integer). It counts transfer-decoded HTTP body bytes, including multipart
+headers, preamble, epilogue and discarded bytes, not just the accepted file.
+It uses the same positive-decimal validation and can be lower than the file limit;
+then the envelope leaves less room for file bytes. Declared or observed excess
+closes the connection and returns `413 request-too-large` unless an earlier
+response was already chosen. That earlier status and body are preserved, but
+the background drain stops and the connection still closes. This is not
+a wire-byte cap: a delivered chunk and transport buffers can contain excess data.
+
 This is a deployment resource policy, not an MPEG format restriction. Raising it
 does not change request timeouts, parser behavior, or streaming memory bounds.
 For public deployment, configure reverse-proxy aggregate body, concurrency and
@@ -75,6 +86,7 @@ The response uses `Content-Type: application/json`. For multipart uploads, the `
 | Empty raw or multipart file                                       | 400         | `empty-file`                                                                                     |
 | Invalid HTTP body framing / length                                | 400         | `invalid-request` when the connection remains writable                                           |
 | MP3 file exceeds per-file limit                                   | 413         | `file-too-large`                                                                                 |
+| Multipart body exceeds its separate aggregate budget              | 413         | `request-too-large` unless an earlier response was chosen; connection closes in either case      |
 | Extra multipart file / form field / part                          | 413         | `too-many-files`, `unexpected-fields`, or `too-many-parts`, depending on the first limit reached |
 | Other framework size limit                                        | 413         | `request-too-large`                                                                              |
 | Unsupported MIME or MPEG format                                   | 415         | `unsupported-media-type` or `unsupported-format`                                                 |
@@ -85,13 +97,13 @@ The response uses `Content-Type: application/json`. For multipart uploads, the `
 
 All application-generated error bodies use JSON with `error` and `message` strings. Limits apply to both raw and multipart uploads. Error classification follows the **first observable failure**: a malformed MPEG header can be rejected before a later size-limit violation or incomplete multipart ending is observable. An explicit oversized raw `Content-Length` is rejected early. Thus a later 413 or multipart 400 does not replace an already reported 422.
 
-A rejected **raw** upload sends its JSON error with `Connection: close` rather than draining arbitrary additional bytes. Multipart uploads retain existing draining behavior for keep-alive reuse. Client disconnects, aborted/incomplete HTTP bodies, and native Node request-header timeouts may prevent any application JSON response; a client should not expect an HTTP response from a broken connection. 429 and 503 are intentionally not configured because this local assessment API has no rate limiter or load-shedding policy.
+A rejected **raw** upload sends its JSON error with `Connection: close` rather than draining arbitrary additional bytes. Multipart consumer errors may drain for keep-alive reuse, but only if the complete body stays within the aggregate multipart budget and transport timeouts. A multipart-provider failure with unread body bytes closes after its error response because its drain is no longer guaranteed. Client disconnects, aborted/incomplete HTTP bodies, and native Node request-header timeouts may prevent any application JSON response; a client should not expect an HTTP response from a broken connection. 429 and 503 are intentionally not configured because this local assessment API has no rate limiter or load-shedding policy.
 
 ## Frame-count convention
 
 The endpoint traverses complete MPEG-1 Layer III frames and, by default, excludes a structurally recognized initial Xing/Info/VBRI metadata frame. The included CBR and VBR fixtures each contain 33 physical frames and return **32** by default, matching FFprobe's decoder-facing count for those files. With `?includeVbrHeaderFrame=true`, both return **33**. The count comes from traversal; encoder-declared frame counts are never used as the result.
 
-The repository owner chose this default because the assessment's suggested tool, MediaInfo, and FFprobe both report **6089** for the supplied sample. The API now also returns **6089** by default, or **6090** when physical counting is explicitly requested. The evaluator has not confirmed its intended convention; matching that intention remains an inference. This structural policy does not decode audio and does not promise agreement with every decoder or metadata tool. The evidence, exact policies and compatibility implications are in [the frame-count contract](docs/frame-count-contract.md).
+The evaluator confirmed on **2026-10-26** that the assessment counts audio frames and expects **6089** for the supplied sample, with MediaInfo recommended as a sanity check. The existing API default returns **6089**; explicit physical counting returns **6090**. This structural policy does not decode audio and does not promise agreement with every decoder or metadata tool. The evidence, exact policies and compatibility implications are in [the frame-count contract](docs/frame-count-contract.md).
 
 ## Implementation
 
@@ -100,7 +112,7 @@ The repository owner chose this default because the assessment's suggested tool,
 - `src/mp3/id3.ts`: skips boundary-aligned ID3v2.2/2.3/2.4 tags and final ID3v1 by their encoded lengths, enforcing where each may appear.
 - `src/mp3/byte-reader.ts`: incremental lookahead and skipping over any `AsyncIterable<Uint8Array>`.
 - `src/mp3/count-frames.ts`: sequential frame traversal with no full-file buffering.
-- `src/upload.ts`: raw and multipart uploads behind one interface: media types, per-upload limits, empty uploads, and the unread remainder of a rejected upload.
+- `src/upload.ts`: raw and multipart uploads, file limits and consumer cleanup; `src/multipart-budget.ts` bounds the complete multipart body, including background drains.
 - `src/error-response.ts`: one pure mapping from any failure to a stable, sanitized JSON error response.
 - `src/app.ts`: Fastify route, query option, response schemas, and error-handler wiring.
 - `src/server.ts`: configurable server bootstrap and graceful signal handling.
@@ -223,8 +235,8 @@ The API returns `{"frameCount":6089}` by default and with
 `?includeVbrHeaderFrame=false`; `?includeVbrHeaderFrame=true` returns **6090**.
 These expectations apply to both raw and multipart uploads. The first MPEG
 frame carries the Xing header. FFprobe and MediaInfo also report **6089** for
-this file. The repository owner has chosen that default; the evaluator's
-intended convention remains unconfirmed. See [the frame-count contract](docs/frame-count-contract.md).
+this file. The evaluator's dated clarification confirms the audio-frame
+requirement and sample result 6089. See [the frame-count contract](docs/frame-count-contract.md).
 
 The parser modules have **100% coverage** across statements, branches, functions
 and lines using actual edge-case tests. The HTTP adapter retains defensive

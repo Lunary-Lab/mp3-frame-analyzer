@@ -91,7 +91,7 @@ function fromMultipartProtocol(error: unknown, form: UploadForm): ErrorResponse 
   if (form !== 'multipart' || !(error instanceof Error)) return undefined;
   // When the end of a cut-off form reaches Busboy in the same burst as the
   // upload, its reader can see Node's premature-close error instead of a
-  // Busboy message. The HTTP handler filters aborted or destroyed requests.
+  // Busboy message. The HTTP handler filters aborted requests or destroyed responses.
   const streamClosedEarly = propertyOf(error, 'code') === 'ERR_STREAM_PREMATURE_CLOSE';
   if (!streamClosedEarly && !multipartParseErrors.has(error.message)) return undefined;
   return errorResponse(400, 'invalid-upload', 'Invalid or incomplete multipart request');
@@ -129,8 +129,9 @@ function fromClientStatus(error: unknown, form: UploadForm): ErrorResponse | und
 }
 
 /**
- * A framework failure can leave a raw upload's remainder unread. Busboy keeps
- * reading a multipart form itself, so that connection stays usable.
+ * A framework failure can leave a raw upload's remainder unread. Multipart
+ * reuse is conditional on body completion; the upload guard independently
+ * closes that connection if the aggregate body budget is exceeded.
  */
 function afterFrameworkFailure(form: UploadForm): { closeConnection: boolean } {
   return { closeConnection: form === 'raw' };

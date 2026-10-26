@@ -3,7 +3,13 @@ import { countMp3Frames } from './mp3/count-frames.js';
 import { ClientError } from './client-error.js';
 import { errorResponseFor } from './error-response.js';
 import { loggerOptions } from './logging.js';
-import { MAX_UPLOAD_BYTES, registerUploads, uploadFormOf } from './upload.js';
+import { closeIdleConnectionsAfterDrain } from './shutdown.js';
+import {
+  defaultMaxMultipartBytes,
+  MAX_UPLOAD_BYTES,
+  registerUploads,
+  uploadFormOf,
+} from './upload.js';
 
 function includeVbrHeaderFrame(query: unknown): boolean {
   const value =
@@ -30,17 +36,24 @@ const errorSchema = {
   },
 } as const;
 
-/** One per-file upload limit for deployment configuration and focused boundary tests. */
-export async function buildApp({
-  maxUploadBytes = MAX_UPLOAD_BYTES,
-}: { maxUploadBytes?: number } = {}): Promise<FastifyInstance> {
+function createHttpApp(): FastifyInstance {
   const app = Fastify({
     logger: process.env['NODE_ENV'] === 'test' ? false : loggerOptions,
     requestIdHeader: false,
     requestTimeout: 30_000,
     connectionTimeout: 10_000,
   });
-  const uploads = await registerUploads(app, { maxUploadBytes });
+  closeIdleConnectionsAfterDrain(app);
+  return app;
+}
+
+/** Deployment-configurable file and aggregate multipart-body limits. */
+export async function buildApp({
+  maxUploadBytes = MAX_UPLOAD_BYTES,
+  maxMultipartBytes = defaultMaxMultipartBytes(maxUploadBytes),
+}: { maxUploadBytes?: number; maxMultipartBytes?: number } = {}): Promise<FastifyInstance> {
+  const app = createHttpApp();
+  const uploads = await registerUploads(app, { maxUploadBytes, maxMultipartBytes });
 
   app.post(
     '/file-upload',

@@ -28,13 +28,13 @@ This directory is the **AI-agent and reviewer source register for this TypeScrip
 
 1. **The assignment is narrower than generic `audio/mpeg`.** RFC 3003 can describe a stream with interspersed non-MPEG bytes; the endpoint intentionally accepts a stricter sequence: supported leading metadata, complete MPEG-1 Layer III frames and supported trailing metadata, without arbitrary junk resynchronization. That is an **application policy**, not a claim that RFC 3003 prohibits other layouts.
 2. **Metadata tags are independent of the MPEG audio coding standard.** Implement only byte-boundary handling needed for accurate counts. ID3 text encodings, embedded artwork, replay gain, extended headers, ID3 frame content and CRC fields do **not** need full interpretation.
-3. **Xing/Info/LAME and VBRI are de facto encoder headers, not additional MPEG layers.** They can inhabit MPEG frames. The owner selected HTTP exclusion of one recognized initial header for omitted/`false`; explicit `true` and direct parser calls with no option count physical frames. These are project policies, not ISO requirements. The evaluator's intended convention remains unconfirmed; see the [count contract](../frame-count-contract.md).
+3. **Xing/Info/LAME and VBRI are de facto encoder headers, not additional MPEG layers.** They can inhabit MPEG frames. The owner selected HTTP exclusion of one recognized initial header for omitted/`false`; explicit `true` and direct parser calls with no option count physical frames. These are project policies, not ISO requirements. The evaluator confirmed audio-frame counting and sample result 6089 on 2026-10-26; implementation details beyond that clarification remain distinct. See the [count contract](../frame-count-contract.md).
 4. **Free-format is not MPEG-2 or an invalid bitrate.** Index zero is a valid MPEG-1 Layer III encoding choice with no table-derived frame length. A decoder's size-search heuristic is evidence of interoperability, not the ISO text itself.
 5. **Full ISO Layer III bitstream conformance would require decoding-side checks** (side information, bit reservoir, Huffman, CRC, etc.). This assessment explicitly requests logical _frame counting_. Do not change the project into an audio decoder.
 
 ## Topic documents
 
-- [`assessment-scope.md`](assessment-scope.md): controlling checklist of employer requirements, optional extensions, the owner-selected count policy and evaluator uncertainty.
+- [`assessment-scope.md`](assessment-scope.md): controlling checklist of employer requirements, optional extensions, the owner-selected count policy and dated evaluator clarification.
 - [`mpeg-1-layer-iii.md`](mpeg-1-layer-iii.md): exact header fields, rates, length rules, free-format and test invariants.
 - [`tags-and-encoder-headers.md`](tags-and-encoder-headers.md): ID3 versions, Xing/Info/LAME, VBRI, tag-frame terminology.
 - [`http-api.md`](http-api.md): original endpoint contract vs documented extensions, MIME/form rules, errors and limits.

@@ -105,16 +105,18 @@ http.createServer((request, reply) => {
   });
 }
 
-test('packaged smoke checks the default limit without inheriting deployment overrides', async () => {
-  const previous = process.env.MAX_UPLOAD_BYTES;
-  process.env.MAX_UPLOAD_BYTES = 'invalid-inherited-setting';
-  try {
-    await temporaryRuntime(
-      'process.exit(process.env.MAX_UPLOAD_BYTES === undefined ? 0 : 9);',
-      async (runtime) => assert.deepEqual(await runtime.completion, { code: 0, signal: null }),
-    );
-  } finally {
-    if (previous === undefined) delete process.env.MAX_UPLOAD_BYTES;
-    else process.env.MAX_UPLOAD_BYTES = previous;
-  }
-});
+for (const name of ['MAX_UPLOAD_BYTES', 'MAX_MULTIPART_BYTES']) {
+  test(`packaged smoke ignores ${name} deployment overrides`, async () => {
+    const previous = process.env[name];
+    process.env[name] = 'invalid-inherited-setting';
+    try {
+      await temporaryRuntime(
+        `process.exit(process.env.${name} === undefined ? 0 : 9);`,
+        async (runtime) => assert.deepEqual(await runtime.completion, { code: 0, signal: null }),
+      );
+    } finally {
+      if (previous === undefined) delete process.env[name];
+      else process.env[name] = previous;
+    }
+  });
+}

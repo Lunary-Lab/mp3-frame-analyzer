@@ -1,6 +1,6 @@
 # Assessment-only requirements and expected behavior
 
-**Authority:** [Original technical assessment](../assessment-brief.md).
+**Authority:** [Original technical assessment and dated evaluator clarification](../assessment-brief.md).
 This page is the short, controlling checklist for assessment scope. The other
 files in this directory are reference material, not additional assignment
 requirements. [ISO/IEC 11172-3:1993](https://www.iso.org/standard/22412.html)
@@ -67,7 +67,7 @@ are **optional compatibility extensions**, not independently mandated
 assessment features. They must not take priority over a correct working
 solution within the five-day target.
 
-## Selected count policy and evaluator uncertainty
+## Selected count policy and confirmed sample expectation
 
 The assessment asks for "the number of frames" without specifying how to
 treat an initial MPEG frame carrying only an encoder's Xing/Info metadata.
@@ -84,12 +84,13 @@ direct `countMp3Frames()` calls retain their physical default. This is a
 breaking change to the previous HTTP contract, with real-file regressions
 for both upload modes and optional identity-checked sample tests.
 
-The chosen default aligns with the suggested tool's sample result, but
-The evaluator has not confirmed its intended convention.
-Agreement with that intention remains an inference, not a verified external
-acceptance result. Structural metadata exclusion does not decode audio or
-guarantee agreement with every media tool. See the
-[count-contract evidence and decision](../frame-count-contract.md).
+On **2026-10-26**, the evaluator confirmed audio-frame counting and **6089**
+for the supplied sample, recommending MediaInfo as a sanity check. This
+resolves the sample expectation and matches the existing HTTP default; it
+does not establish how to handle later encoder-like payloads or concatenated
+sequences. Structural metadata exclusion does not decode audio or guarantee
+agreement with every media tool. See the
+[count-contract clarification and evidence](../frame-count-contract.md).
 
 ## Evaluation criteria, not extra format requirements
 

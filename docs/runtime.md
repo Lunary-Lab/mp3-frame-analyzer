@@ -27,7 +27,19 @@ uses the default. Empty values, whitespace, signs, fractions, exponents, units,
 and unsafe integers fail startup before listening. There is no unlimited mode.
 The limit includes file bytes, not multipart envelope overhead, and applies
 also to raw requests without `Content-Length`. Increasing it does not increase
-request timeouts or add an aggregate HTTP-body or concurrency limit.
+request timeouts or add a concurrency limit.
+
+`MAX_MULTIPART_BYTES` separately caps the aggregate multipart body, including its
+envelope, preamble, epilogue and discarded bytes. It defaults to the configured
+file limit plus 65,536 bytes, capped at `9007199254740991`, and uses the same
+positive-decimal startup validation. A lower explicit value is allowed; it also
+reduces the space available for file bytes. Known or observed excess is
+`413 request-too-large` with connection closure. A response already chosen for an
+earlier error remains unchanged, but draining stops at this aggregate budget.
+The counter measures transfer-decoded HTTP body bytes, not HTTP framing, arbitrary
+Content-Encoding decompression or a strict network-byte cap. Transport read-ahead
+and the crossing chunk can exceed the configured value; ingress limits are still
+needed for public deployments.
 
 From another terminal, upload a MPEG-1 Layer III file:
 
@@ -42,7 +54,7 @@ This HTTP default is a breaking change from the published v1.1.0 behavior, which
 
 `release-metadata.json` identifies the release version, tag, source commit, and Node/npm versions used to package it. Its contents match the external `.manifest.json`. The `.cdx.json` file is a CycloneDX application SBOM generated from production dependencies in the lockfile. `SHA256SUMS` covers the archive, SBOM, and manifest.
 
-Send `SIGTERM` or `SIGINT` to stop the service. The server allows requests to drain within a bounded shutdown interval. Choose `HOST=0.0.0.0` only when the service must listen beyond loopback, and supply deployment-specific TLS, authentication, rate limits, and aggregate concurrency controls at the ingress.
+Send `SIGTERM` or `SIGINT` to stop the service. The server allows accepted requests to finish within a 10-second shutdown deadline. Connections that become idle after their request bodies and responses finish are closed, including ordinary keep-alive connections; still-active requests are not forcibly closed early. Body and response completion can occur in either order. If active work or a close hook cannot finish by the deadline, the process logs a sanitized failure and exits 1. Normal keep-alive reuse is unchanged outside shutdown. Choose `HOST=0.0.0.0` only when the service must listen beyond loopback, and supply deployment-specific TLS, authentication, rate limits, and aggregate concurrency controls at the ingress.
 
 The source README also contains contributor commands. Source, tests, development scripts, and fixtures are deliberately absent from this runtime archive; use the Git repository for development and verification.
 

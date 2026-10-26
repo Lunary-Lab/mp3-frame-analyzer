@@ -1,6 +1,9 @@
 import { buildApp } from './app.js';
 import { closeWithDeadline } from './shutdown.js';
-import { maxUploadBytesFromEnvironment } from './server-config.js';
+import {
+  maxUploadBytesFromEnvironment,
+  maxMultipartBytesFromEnvironment,
+} from './server-config.js';
 
 const portValue = process.env['PORT'] ?? '3000';
 const port = Number(portValue);
@@ -10,7 +13,11 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 
 const host = process.env['HOST'] ?? '127.0.0.1';
 const maxUploadBytes = maxUploadBytesFromEnvironment(process.env['MAX_UPLOAD_BYTES']);
-const app = await buildApp({ maxUploadBytes });
+const maxMultipartBytes = maxMultipartBytesFromEnvironment(
+  process.env['MAX_MULTIPART_BYTES'],
+  maxUploadBytes,
+);
+const app = await buildApp({ maxUploadBytes, maxMultipartBytes });
 
 let closing: Promise<void> | undefined;
 function shutdown(): Promise<void> {

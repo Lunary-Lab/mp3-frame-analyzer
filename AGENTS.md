@@ -6,7 +6,7 @@ Read this file before changing parser, API, fixtures, fuzzers, or counts. This f
 
 1. [Original candidate assessment](docs/assessment-brief.md) controls the mandatory deliverable: TypeScript, `POST /file-upload`, MPEG-1 Audio **Layer III** frame counting, JSON `{"frameCount": number}`, no NPM package that parses MPEG frames for the implementation, and a Git repository with run/test instructions.
 2. [Assessment-only requirements and evaluator risk](docs/specifications/assessment-scope.md) distinguishes what the task explicitly requires from format compatibility and engineering enhancements.
-3. [Frame-count contract](docs/frame-count-contract.md) records the **owner-selected HTTP policy (2026-10-24)**: omitted or `includeVbrHeaderFrame=false` excludes one recognized initial Xing/Info/VBRI encoder frame; `true` counts all physical MPEG frames. Direct `countMp3Frames()` calls retain their physical default. The supplied sample returns 6089 by HTTP default and 6090 with `true`. This breaking HTTP change is explicitly authorized by the owner; evaluator intent remains inferred from the MediaInfo suggestion, not confirmed by the evaluator. Further default changes require an explicit owner decision.
+3. [Frame-count contract](docs/frame-count-contract.md) records the **owner-selected HTTP policy (2026-10-24)**: omitted or `includeVbrHeaderFrame=false` excludes one recognized initial Xing/Info/VBRI encoder frame; `true` counts all physical MPEG frames. Direct `countMp3Frames()` calls retain their physical default. The supplied sample returns 6089 by HTTP default and 6090 with `true`. The evaluator confirmed audio-frame counting and the sample result 6089 on 2026-10-26; this matches the existing HTTP default. The clarification does not specify later encoder-like payload or concatenation policies. Further default changes require an explicit owner decision.
 4. [Authoritative specifications registry](docs/specifications/README.md) identifies ISO/IEC, ID3, IETF/IANA and original encoder sources, including what they **do not** require. Read the relevant topic:
    - [MPEG-1 Layer III syntax and free-format](docs/specifications/mpeg-1-layer-iii.md)
    - [ID3, Xing/Info/LAME and VBRI](docs/specifications/tags-and-encoder-headers.md)
@@ -35,7 +35,8 @@ Read this file before changing parser, API, fixtures, fuzzers, or counts. This f
 `src/mp3/count-frames.ts`: streaming boundaries and count semantics.
 `src/mp3/id3.ts`: boundary-aligned tags (leading/embedded/appended placement, footers, final ID3v1); `src/mp3/encoder-frame.ts`: encoder-frame recognition from a decoded header and complete frame.
 `src/mp3/byte-reader.ts`: chunk partition independence / bounded memory.
-`src/upload.ts`: raw and multipart upload policies (media types, limits, unread remainder).
+`src/upload.ts`: raw and multipart upload policies (media types, file limits, consumer cleanup).
+`src/multipart-budget.ts`: aggregate multipart-body budget, including discarded bytes and response-safe connection closure.
 `src/error-response.ts`: maps every failure the route raises to its JSON error response.
 `src/client-error.ts`: the one deliberate, client-facing failure type.
 `src/app.ts`: route, query option and Fastify wiring.

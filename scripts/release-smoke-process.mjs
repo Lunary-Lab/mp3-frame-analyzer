@@ -51,7 +51,9 @@ function monitor(child) {
 export async function launchRuntime(runtime) {
   const port = await availablePort();
   const env = { ...process.env, NODE_ENV: 'production', HOST: '127.0.0.1', PORT: String(port) };
-  delete env.MAX_UPLOAD_BYTES; // Verify the documented default, not the caller's deployment limit.
+  // Verify documented defaults, not the caller's deployment limits.
+  delete env.MAX_UPLOAD_BYTES;
+  delete env.MAX_MULTIPART_BYTES;
   const child = spawn(process.execPath, ['dist/server.js'], {
     cwd: runtime,
     env,
