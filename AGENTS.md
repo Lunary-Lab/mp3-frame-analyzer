@@ -35,7 +35,8 @@ Read this file before changing parser, API, fixtures, fuzzers, or counts. This f
 `src/mp3/count-frames.ts`: streaming boundaries and count semantics.
 `src/mp3/id3.ts`: boundary-aligned tags (leading/embedded/appended placement, footers, final ID3v1); `src/mp3/encoder-frame.ts`: encoder-frame recognition from a decoded header and complete frame.
 `src/mp3/byte-reader.ts`: chunk partition independence / bounded memory.
-`src/upload.ts`: raw and multipart upload policies (media types, limits, unread remainder).
+`src/upload.ts`: raw and multipart upload policies (media types, file limits, consumer cleanup).
+`src/multipart-budget.ts`: aggregate multipart-body budget, including discarded bytes and response-safe connection closure.
 `src/error-response.ts`: maps every failure the route raises to its JSON error response.
 `src/client-error.ts`: the one deliberate, client-facing failure type.
 `src/app.ts`: route, query option and Fastify wiring.

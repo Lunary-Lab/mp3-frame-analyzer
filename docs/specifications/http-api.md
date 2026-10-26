@@ -45,7 +45,7 @@ Success: JSON object `{"frameCount": number}`; `frameCount` is a nonnegative saf
 Current application-generated errors: `{"error": string, "message": string}`, JSON `Content-Type`. Distinguish at least:
 
 - 400: invalid upload structure or query value, missing `file`.
-- 413: upload exceeds configured file size or multipart resource limits.
+- 413: upload exceeds configured file size, aggregate multipart-body budget or multipart resource limits.
 - 415: unsupported media type or explicitly unsupported MPEG subtype.
 - 422: structurally invalid/truncated MPEG data.
 - 500: unexpected internal failure (sanitized client message).
@@ -56,7 +56,9 @@ These are **project mappings** compatible with RFC 9110 statuses, not exact erro
 
 - Per-file **50 MiB** default, configurable at server startup with `MAX_UPLOAD_BYTES` (positive safe integer in decimal bytes; invalid values fail before listening), enforced for **raw streams, chunked transfer without `Content-Length`, and multipart file parts**.
 - One multipart part, one file, zero extra text fields; Busboy limits 32 header pairs and approximately 8 KiB for multipart header buffering.
-- Buffering/streaming must be **bounded**, using backpressure. An outer reverse proxy must apply any required aggregate HTTP body, concurrency and rate limits for public deployment; multipart per-file size is not an aggregate HTTP-body guarantee.
+- `MAX_MULTIPART_BYTES` independently caps the full transfer-decoded multipart body (preamble, headers, file, discarded parts and epilogue). Default: the file cap plus 64 KiB, saturated at the maximum safe integer; the same positive-decimal validation applies. This is application policy, not a standard-mandated allowance. Explicit lower caps are permitted.
+- Declared or observed aggregate excess is `413 request-too-large` and closes the connection; a previously chosen response remains unchanged. Multipart reuse requires the entire body to finish inside this cap and transport timeouts. Raw early return/rejection closes without draining.
+- Streaming retains backpressure and does not buffer whole uploads. Node may deliver the crossing chunk to the parser and transport buffers may read ahead; this is not a strict wire-byte cap or arbitrary Content-Encoding decompression limit. Public ingress still needs transport-level body caps, concurrency and rate limits.
 - Early malformed files may receive an error before all upload bytes arrive. Ensure the rejected body drains/cancels in a bounded, connection-safe manner; do not retain unbounded background work.
 - Do not write uploads to disk, execute uploaded data, shell out to FFmpeg, fetch remote metadata, or log binary payloads; the task's production parser is a self-contained TypeScript byte parser.
 

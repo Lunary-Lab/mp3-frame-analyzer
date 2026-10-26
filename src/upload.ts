@@ -3,8 +3,14 @@ import type { Readable } from 'node:stream';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import multipart, { type MultipartFile } from '@fastify/multipart';
 import { ClientError } from './client-error.js';
+import { stopAfterResponse, withMultipartBudget } from './multipart-budget.js';
 
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+/** Project-policy allowance for multipart framing, not another file allowance. */
+export function defaultMaxMultipartBytes(maxUploadBytes: number): number {
+  return Math.min(Number.MAX_SAFE_INTEGER, maxUploadBytes + 64 * 1024);
+}
 
 /** Accepted for a raw upload's request and a multipart upload's form part alike. */
 const mp3MediaTypes = new Set(['audio/mpeg', 'audio/mp3', 'application/octet-stream']);
@@ -40,23 +46,32 @@ export interface Uploads {
    * Upload faults this module detects reject with a ClientError: before
    * `consumer` runs where possible, otherwise by failing its iteration of the
    * upload, which the consumer must let propagate. Multipart protocol and limit
-   * errors from the multipart plugin propagate as the plugin raised them. Reading past the size limit is such a fault
-   * (file-too-large); a multipart upload cut off at the limit is reported that
-   * way even if the consumer swallowed the failure. Any other consumer failure
-   * propagates unchanged. Before a rejection settles, the unread remainder is
-   * dealt with: a raw upload's connection closes after the response, and a
-   * multipart upload drains in the background so its connection stays usable.
+   * errors from the multipart plugin propagate as raised. An observed file
+   * truncation is file-too-large even if the consumer swallowed its failure;
+   * later multipart faults do not replace an earlier response.
+   * A started iterator is closed on return or rejection. Raw early returns and
+   * failures close the connection without draining. Multipart early success
+   * awaits the remainder; consumer rejection starts a background drain. Both remain
+   * subject to the aggregate body budget and transport timeouts. Reuse requires
+   * the body to finish within those bounds. Consumers must await their reads;
+   * this cannot cancel arbitrary detached work inside a custom consumer.
    */
   consume<T>(request: FastifyRequest, reply: FastifyReply, consumer: UploadConsumer<T>): Promise<T>;
 }
 
-/** Register both upload forms on `app` with one per-upload byte limit. */
+/** Register both upload forms with a shared file cap and a multipart body cap. */
 export async function registerUploads(
   app: FastifyInstance,
-  { maxUploadBytes }: { maxUploadBytes: number },
+  {
+    maxUploadBytes,
+    maxMultipartBytes = defaultMaxMultipartBytes(maxUploadBytes),
+  }: { maxUploadBytes: number; maxMultipartBytes?: number },
 ): Promise<Uploads> {
   if (!Number.isSafeInteger(maxUploadBytes) || maxUploadBytes < 1) {
     throw new RangeError('maxUploadBytes must be a positive safe integer');
+  }
+  if (!Number.isSafeInteger(maxMultipartBytes) || maxMultipartBytes < 1) {
+    throw new RangeError('maxMultipartBytes must be a positive safe integer');
   }
   // Fastify delegates the raw request body without buffering it in memory.
   // Its normal parseAs:'buffer' size protection does not apply to this path.
@@ -82,7 +97,9 @@ export async function registerUploads(
   return {
     consume: (request, reply, consumer) =>
       uploadFormOf(request) === 'multipart'
-        ? consumeMultipartUpload(request, consumer)
+        ? withMultipartBudget(request, reply, maxMultipartBytes, () =>
+            consumeMultipartUpload(request, reply, consumer),
+          )
         : consumeRawUpload(request, reply, maxUploadBytes, consumer),
   };
 }
@@ -104,7 +121,9 @@ async function consumeRawUpload<T>(
     const declaredSize = request.headers['content-length'];
     if (declaredSize !== undefined && Number(declaredSize) > maxUploadBytes) throw fileTooLarge();
     // The multipart limit does not apply to raw request streams; enforce it per chunk.
-    return await consumer(checkedUpload(body.iterator({ destroyOnReturn: false }), maxUploadBytes));
+    const { result, exhausted } = await consumeStream(request, body, maxUploadBytes, consumer);
+    if (!exhausted) reply.header('connection', 'close');
+    return result;
   } catch (error) {
     // Never drain the unread remainder of a raw upload: an attacker controls
     // its length. Ending this connection after the JSON response is safe for
@@ -116,10 +135,11 @@ async function consumeRawUpload<T>(
 
 async function consumeMultipartUpload<T>(
   request: FastifyRequest,
+  reply: FastifyReply,
   consumer: UploadConsumer<T>,
 ): Promise<T> {
   let consumed: { readonly result: T } | undefined;
-  for await (const part of request.parts()) {
+  for await (const part of multipartParts(request, reply)) {
     if (part.type !== 'file') {
       throw new ClientError(400, 'invalid-upload', 'Only one file field is accepted');
     }
@@ -133,7 +153,7 @@ async function consumeMultipartUpload<T>(
       await discardPart(part.file);
       throw new ClientError(415, 'unsupported-media-type', 'Expected an MP3 file');
     }
-    consumed = { result: await consumeMultipartStream(part.file, consumer) };
+    consumed = { result: await consumeMultipartStream(request, part.file, consumer) };
   }
   if (consumed === undefined) {
     throw new ClientError(400, 'missing-file', 'A multipart field named "file" is required');
@@ -141,7 +161,20 @@ async function consumeMultipartUpload<T>(
   return consumed.result;
 }
 
+/** Provider failures may unpipe before raw EOF; never leave that unread body reusable. */
+async function* multipartParts(request: FastifyRequest, reply: FastifyReply) {
+  try {
+    yield* request.parts();
+  } catch (error) {
+    // Consumer errors occur outside this iterator and retain their bounded
+    // background drain. A failed provider no longer guarantees that drain.
+    if (!request.raw.readableEnded) stopAfterResponse(request, reply);
+    throw error;
+  }
+}
+
 async function consumeMultipartStream<T>(
+  request: FastifyRequest,
   stream: MultipartFile['file'],
   consumer: UploadConsumer<T>,
 ): Promise<T> {
@@ -149,16 +182,17 @@ async function consumeMultipartStream<T>(
     // Destroying an unfinished Busboy stream stalls the request body, so a
     // consumer that stops early must leave it drainable. The multipart plugin
     // enforces the size limit itself.
-    const upload = checkedUpload(stream.iterator({ destroyOnReturn: false }), Infinity);
-    const result = await consumer(upload);
+    const { result } = await consumeStream(request, stream, Infinity, consumer);
+    // A successful early return is not permission to abandon the form: finish
+    // its remainder under the aggregate budget before accepting the result.
+    await discardPart(stream);
+    if (stream.bytesRead === 0) throw emptyUpload();
     if (!stream.truncated) return result;
   } catch (error) {
     // A stream truncated at the multipart limit is a transport error, not
     // whatever the consumer made of the bytes it received.
-    if (!stream.truncated) {
-      drainUnreadRemainder(stream);
-      throw error;
-    }
+    drainUnreadRemainder(stream);
+    if (!stream.truncated) throw error;
   }
   throw fileTooLarge();
 }
@@ -182,8 +216,9 @@ async function discardPart(stream: Readable): Promise<void> {
 
 /**
  * The consumer can reject an upload long before it ends. Keep reading the
- * rest in the background so the error responds immediately, Busboy completes,
- * and the connection can serve its next request or close during shutdown.
+ * rest in the background without delaying the response. The request-level
+ * aggregate budget remains active; reuse requires completion within that cap
+ * and the transport timeouts.
  */
 function drainUnreadRemainder(stream: Readable): void {
   // A malformed or interrupted remainder cannot change the response already sent.
@@ -196,11 +231,12 @@ function drainUnreadRemainder(stream: Readable): void {
  * than malformed.
  */
 async function* checkedUpload(
-  chunks: AsyncIterable<unknown>,
+  stream: Readable,
   limit: number,
+  state: { exhausted: boolean },
 ): AsyncGenerator<Uint8Array> {
   let received = 0;
-  for await (const chunk of chunks) {
+  for await (const chunk of stream.iterator({ destroyOnReturn: false })) {
     if (!(chunk instanceof Uint8Array)) {
       throw new ClientError(400, 'invalid-upload', 'Invalid raw byte chunk');
     }
@@ -209,4 +245,30 @@ async function* checkedUpload(
     yield chunk;
   }
   if (received === 0) throw emptyUpload();
+  state.exhausted = true;
+}
+
+/** Close a started consumer iterator even when its caller forgets to do so. */
+async function consumeStream<T>(
+  request: FastifyRequest,
+  stream: Readable,
+  limit: number,
+  consumer: UploadConsumer<T>,
+): Promise<{ result: T; exhausted: boolean }> {
+  const state = { exhausted: false };
+  const upload = checkedUpload(stream, limit, state);
+  let result: T;
+  try {
+    result = await consumer(upload);
+  } catch (error) {
+    try {
+      await upload.return(undefined);
+    } catch (cleanupError) {
+      // Preserve the primary failure, but do not hide an unexpected cleanup bug.
+      request.log.error({ err: cleanupError }, 'Upload iterator cleanup failed');
+    }
+    throw error;
+  }
+  await upload.return(undefined);
+  return { result, exhausted: state.exhausted };
 }
