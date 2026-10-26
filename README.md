@@ -6,7 +6,7 @@ Downloaded a release archive? Start with its **RUNTIME.md**, also available in t
 
 ## Quick start
 
-Requirements: **Node.js 24 LTS** (Node.js 26 is also tested) and **npm 11.9 or later within major 11**. Development and release CI use **npm 11.19.0**, recorded in `packageManager`; install it with `npm install --global npm@11.19.0` when matching CI exactly. Dependencies are locked in `package-lock.json`; use `npm ci` for reproducible installation.
+Requirements: **Node.js 24 LTS** (Node.js 26 is also tested) and **npm 11.9 or later within major 11**. Development and release CI use **npm 11.19.0**, recorded in `packageManager`; the [verified bootstrap](docs/security.md#npm-bootstrap-integrity) selects that exact bundle by SHA-512 without a global install. Dependencies are locked in `package-lock.json`; use `npm ci` for reproducible installation.
 
 ```bash
 npm ci

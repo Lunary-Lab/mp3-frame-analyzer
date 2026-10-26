@@ -18,7 +18,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm install --global npm@11.19.0 --ignore-scripts --no-audit --no-fund
+      - run: node scripts/bootstrap-npm.mjs 11.19.0
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Replay tracked fuzz cases
         run: npm run fuzz:regression
