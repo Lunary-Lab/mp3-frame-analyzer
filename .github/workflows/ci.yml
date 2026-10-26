@@ -282,6 +282,8 @@ jobs:
           python3 -m venv "${RUNNER_TEMP}/guarddog-venv"
           "${RUNNER_TEMP}/guarddog-venv/bin/python" -m pip --isolated --disable-pip-version-check install --no-cache-dir --require-hashes --only-binary=:all: --index-url https://pypi.org/simple -r .github/security/guarddog-requirements.txt
           "${RUNNER_TEMP}/guarddog-venv/bin/python" -m pip --isolated --disable-pip-version-check check
+      - name: Offline exact-lock and archive safety controls
+        run: python3 -I -B scripts/guarddog-inputs.test.py
       - name: Require actual kernel support and synthetic filesystem/network denials
         run: |
           mkdir -p "${RUNNER_TEMP}/guarddog-home"

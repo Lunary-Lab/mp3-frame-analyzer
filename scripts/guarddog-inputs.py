@@ -15,7 +15,9 @@ MAX_METADATA = 64 * 1024**2
 MAX_ARCHIVE = 128 * 1024**2
 METADATA_LOCK = threading.Lock()
 NAME = re.compile(r"^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$")
-VERSION = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
+CORE = r"(?:0|[1-9][0-9]*)"
+PRE = r"(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
+VERSION = re.compile(rf"^{CORE}\.{CORE}\.{CORE}(?:-{PRE}(?:\.{PRE})*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$")
 
 
 def require(condition, message):
