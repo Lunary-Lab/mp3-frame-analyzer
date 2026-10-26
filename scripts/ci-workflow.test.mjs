@@ -20,6 +20,8 @@ const required = [
   'mutation',
   'encoder',
   'npm-audit',
+  'trivy',
+  'trivy-release',
   'secrets',
   'semgrep',
   'fuzz',
@@ -264,6 +266,7 @@ test('modularization retains the existing external action pins and read-only tok
     .filter((name) => !name.startsWith('./'));
   assert.deepEqual([...new Set(actions)].sort(), [
     'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
+    'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333',
     'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e',
     'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1',
     'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9',
@@ -292,4 +295,22 @@ test('governance is mandatory and checks the same explicit source ref as the CI 
   assert.match(governance, /terraform validate/);
   assert.match(governance, /run: terraform test/);
   assert.doesNotMatch(governance, /terraform (apply|destroy)|GITHUB_TOKEN:/);
+});
+
+test('Trivy full and exact tested-release scans remain required without source uploads', async () => {
+  assert.match(job('trivy'), /trivy-gate\.mjs.* full/);
+  assert.match(job('trivy-release'), /needs: package/);
+  assert.match(job('trivy-release'), /name: release-assets/);
+  assert.match(job('trivy-release'), /trivy-gate\.mjs.* release/);
+  for (const name of ['trivy', 'trivy-release']) {
+    assert.match(job(name), /ref: \$\{\{ inputs\.ref \|\| github\.sha \}\}/);
+    assert.doesNotMatch(job(name), /continue-on-error|secrets\.|: write|upload-artifact|npm ci/);
+  }
+  const bootstrap = await readFile(
+    new URL('../.github/actions/setup-trivy/action.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(bootstrap, /trivy_0\.76\.1_Linux-64bit\.tar\.gz/);
+  assert.match(bootstrap, /c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0/);
+  assert.ok(bootstrap.indexOf('sha256sum --check --strict') < bootstrap.indexOf('tar -xzf'));
 });
