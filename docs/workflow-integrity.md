@@ -3,6 +3,16 @@
 The required CI lint job runs **zizmor 1.31.1** before its existing actionlint
 syntax check. The official Linux x86-64 release archive is verified against a
 committed SHA-256 before extraction. A version selector alone is not the pin.
+Bootstrap extraction runs with an empty environment and a fixed system-tool
+PATH, so `TAR_OPTIONS`/`GZIP` cannot inject extraction commands/options. Curl
+configuration is disabled and the job-local tool directory must be created
+exclusively, not reused. Native harmless-fixture tests cover these boundaries
+and substituted archive rejection through the real hash/extraction commands.
+Only the network download is stubbed and the expected archive hash is replaced
+with the fixture's digest in those tests; the reviewed production digest stays
+unchanged. The shell and runner-supplied system utilities remain the platform
+trust boundary.
+
 This changes source CI only; it does not apply Terraform or change GitHub settings.
 
 ## Enforced profile
