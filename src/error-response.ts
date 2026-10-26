@@ -103,7 +103,8 @@ function fromMultipartProtocol(error: unknown, form: UploadForm): ErrorResponse 
  */
 function fromClientStatus(error: unknown, form: UploadForm): ErrorResponse | undefined {
   const status = propertyOf(error, 'statusCode');
-  if (typeof status !== 'number' || status < 400 || status >= 500) return undefined;
+  if (typeof status !== 'number' || !Number.isInteger(status) || status < 400 || status >= 500)
+    return undefined;
   if (status === 413) {
     return errorResponse(
       413,
