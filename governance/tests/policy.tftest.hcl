@@ -199,9 +199,9 @@ run "main_ruleset_requires_checks_not_reviews" {
       github_repository_ruleset.main[0].rules[0].deletion,
       github_repository_ruleset.main[0].rules[0].non_fast_forward,
       github_repository_ruleset.main[0].rules[0].required_linear_history,
-      github_repository_ruleset.main[0].rules[0].required_signatures,
+      !github_repository_ruleset.main[0].rules[0].required_signatures,
     ])
-    error_message = "main must block deletion and force pushes and require linear, signed history."
+    error_message = "main must block deletion and force pushes and require linear history, without requiring signed commits."
   }
 
   assert {
@@ -223,16 +223,16 @@ run "main_ruleset_requires_checks_not_reviews" {
   }
 }
 
-run "signed_commits_can_be_relaxed" {
+run "signed_commits_can_be_required_again" {
   command = plan
 
   variables {
-    require_signed_commits = false
+    require_signed_commits = true
   }
 
   assert {
-    condition     = !github_repository_ruleset.main[0].rules[0].required_signatures
-    error_message = "require_signed_commits = false must drop only the signature rule."
+    condition     = github_repository_ruleset.main[0].rules[0].required_signatures
+    error_message = "require_signed_commits = true must add the signature rule."
   }
 }
 
