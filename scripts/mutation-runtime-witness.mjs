@@ -26,7 +26,7 @@ const reviewed = {
     '2affa79e6bc634461697a209a7a193707c38eeb15bbd9f99abfc7c334fb27aff',
   'scripts/mutation-policy.mjs': '6fa5c5fccb37e6857d41e77002be6e89e792e696c81b64cc1dfeb3cd5c3c5ed8',
   'scripts/mutation-reviewed-data-access.mjs':
-    'a5fe471d45f0dd123573a6ac7252bd3ed7bc521251b794254cce9f4ff788f258',
+    '9affbe356bdf1a3b957bd57e6b1055cbaafed38f8ff0dd450d76b2e5c33505d2',
   'scripts/run-mutations.mjs': 'e9cde4ef508118c5e086bd7b2f40048144514979c1d4b95ff31f34d59d916f8e',
 };
 

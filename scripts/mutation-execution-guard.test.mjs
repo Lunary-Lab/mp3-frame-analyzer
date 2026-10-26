@@ -39,7 +39,7 @@ test('recognizes canonical data-only configs and literal selected test roots', a
   );
   for (const path of selected) files.set(path, '');
   assert.deepEqual(executionIsolation(files), { supported: true, testFiles: selected.sort() });
-  assert.equal(selected.length, 18);
+  assert.equal(selected.length, 20);
 });
 
 test('unselected opaque tests do not become mutation execution roots', () => {

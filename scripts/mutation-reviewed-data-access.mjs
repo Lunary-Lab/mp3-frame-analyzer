@@ -5,7 +5,7 @@ import { sha256 } from './mutation-policy.mjs';
 // checks still run, including the children of each allowed element access.
 const reviewed = {
   'src/mp3/byte-reader.ts': {
-    sourceSha256: 'bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511',
+    sourceSha256: '24a6cd83a2196cdfb04ebc65e0a1663d1804c2a736a16f21e617f00ae9105475',
     sites: ['this.queued[this.headIndex]', 'this.queued[i]'],
   },
   'src/mp3/encoder-frame.ts': {
