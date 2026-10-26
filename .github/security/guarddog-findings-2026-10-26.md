@@ -2,9 +2,9 @@
 
 Status: draft review, not a clean malicious-dependency verdict. Owner: Lunary-Lab repository security maintainer. Analyst review date 2026-10-26; exact finding reviews expire 2026-11-25 and require fresh independent approval. Missing capabilities and genuine provenance regression are not false positives.
 
-Evidence run: [40259270959 / native job121367877914](https://github.com/Lunary-Lab/mp3-frame-analyzer/actions/runs/40259270959/job/121367877914), source f2a17b9db7396227026b21ec8abf1f9ecbb4962f. It completed510/511 archives, with119 findings; @types/node remained a wrapper failure, explicitly not clean. Subsequent runs must prove complete coverage. Lock SHA256 ac057932c86b0cdee40c2df0823054c0784311438431dbdd59c04f48cec168e6.
+Evidence run: [40259270959 / native job121367877914](https://github.com/Lunary-Lab/mp3-frame-analyzer/actions/runs/40259270959/job/121367877914), source f2a17b9db7396227026b21ec8abf1f9ecbb4962f. That intermediate run completed 510/511 archives. The complete [a733eb9 run40260759871 / job121372430862](https://github.com/Lunary-Lab/mp3-frame-analyzer/actions/runs/40260759871/job/121372430862) then completed all 511 archives / 548 lock paths without scan errors, with native controls and explicit seccomp filesystem/TCP/UDP denials proven. It reported 119 findings,49 exact reviews matched and70 still blocked. This is complete active-rule scanning, not acceptance of the missing capability profile. Lock SHA256 ac057932c86b0cdee40c2df0823054c0784311438431dbdd59c04f48cec168e6.
 
-Every reviewed source file below was read from an ignore-scripts npm installation and its SHA256 checked against the native hosted archive scan. No package test, hook or installer was executed for this investigation. Each config match includes exact name/version/SRI/all lock paths, rule/capability, path/line and evidence hash. Metadata evidence is a deterministic hash of exact differing field values (or exact binary path/kind/hash inventory); raw maintainer information and source snippets are not published. Registry payload hashes are recorded in the hosted diagnostic, but unrelated metadata churn does not silently broaden an exception.
+Every reviewed source file below was read from an ignore-scripts npm installation and its SHA256 checked against the native hosted archive scan. No package test, hook or installer was executed for this investigation. Each config match includes exact name/version/SRI/all lock paths, rule/capability, path/line and evidence hash. Metadata evidence is a deterministic hash of exact differing field values AND actual selected registry/manifest contexts (including optionalDependencies, preserving missing keys) (or exact binary path/kind/hash inventory); raw maintainer information and source snippets are not published. Registry payload hashes are recorded in the hosted diagnostic, but unrelated metadata churn does not silently broaden an exception.
 
 The review engine rejects expired, malformed, duplicate, broadened, unused or evidence-changed exceptions. A review does not assert that an entire dependency is safe. Expected-behavior entries acknowledge real capabilities; they are not labelled false positives.
 
@@ -49,7 +49,7 @@ The sole native manifest difference is scripts.test: registry mocha versus archi
 
 | Rule                | Exact archive location | Context SHA256                                                     |
 | ------------------- | ---------------------- | ------------------------------------------------------------------ |
-| `metadata_mismatch` | `$metadata`            | `f04c5af64bc3bd8428aadda4aecbba608ac04185d581d25e82e0c707e7db5e2e` |
+| `metadata_mismatch` | `$metadata`            | `ff7245bb20bda3f57c2314205992b21fc57af2429ea6b2b8915dc92d5c9b14ae` |
 
 Exact differing fields: `scripts.test`.
 
@@ -61,7 +61,7 @@ Both the registry manifest and SRI-bound archive have main:false, with matching 
 
 | Rule                | Exact archive location | Context SHA256                                                     |
 | ------------------- | ---------------------- | ------------------------------------------------------------------ |
-| `metadata_mismatch` | `$metadata`            | `3ae4b433b350603a714e639084b843e391618deaaf5c225f70c9b2034dc2739c` |
+| `metadata_mismatch` | `$metadata`            | `2dd58943d2d2f60b709fa8a6415d0cfd53ed515b682c453523efcc17eda25193` |
 
 Exact differing fields: `main.Expected type <class 'str'>`.
 
@@ -117,7 +117,7 @@ The only difference is registry scripts.install="node-gyp rebuild" versus no arc
 
 | Rule                | Exact archive location | Context SHA256                                                     |
 | ------------------- | ---------------------- | ------------------------------------------------------------------ |
-| `metadata_mismatch` | `$metadata`            | `79d8ce3c2f7e4f9bd9ed726b18a4eb2ab0dc6a54a491ae145f90c8c2dfcb61ed` |
+| `metadata_mismatch` | `$metadata`            | `61ac8115b99b7d06139b5f1605389b32a7ff38951499e5bcc2c1e55c7327f7b1` |
 
 Exact differing fields: `scripts.install`.
 
@@ -139,7 +139,7 @@ Both the registry manifest and SRI-bound archive have main:false, with matching 
 
 | Rule                | Exact archive location | Context SHA256                                                     |
 | ------------------- | ---------------------- | ------------------------------------------------------------------ |
-| `metadata_mismatch` | `$metadata`            | `3ae4b433b350603a714e639084b843e391618deaaf5c225f70c9b2034dc2739c` |
+| `metadata_mismatch` | `$metadata`            | `75991d8ff1ed0ef7f65a75f881007dfec2598e56b1c6e67ae99bdeece0b69c64` |
 
 Exact differing fields: `main.Expected type <class 'str'>`.
 
@@ -177,7 +177,7 @@ The sole native manifest difference is scripts.test: registry istanbul cover ./n
 
 | Rule                | Exact archive location | Context SHA256                                                     |
 | ------------------- | ---------------------- | ------------------------------------------------------------------ |
-| `metadata_mismatch` | `$metadata`            | `e33101b139e0b892ebeceff90b709fcabddf552099a42c665e2581a35f4faa48` |
+| `metadata_mismatch` | `$metadata`            | `3b8f1c0f0698eef91219427eb2f3db546470073562db36ff9d0bd09020738635` |
 
 Exact differing fields: `scripts.test`.
 
@@ -211,7 +211,7 @@ All twenty differing dependencies entries are exactly version7.0.2 platform pack
 
 | Rule                | Exact archive location | Context SHA256                                                     |
 | ------------------- | ---------------------- | ------------------------------------------------------------------ |
-| `metadata_mismatch` | `$metadata`            | `3ed0da4c3ef9b8134e6da5cf491f457f3f31143e1a03095000a410e82476ff1d` |
+| `metadata_mismatch` | `$metadata`            | `a5a205881d38ad63bc5bbe224fa0914bdaec633a70285a218b9b70fbcd15cce3` |
 
 Exact differing fields: `dependencies.@typescript/typescript-linux-loong64`, `dependencies.@typescript/typescript-linux-s390x`, `dependencies.@typescript/typescript-netbsd-x64`, `dependencies.@typescript/typescript-darwin-x64`, `dependencies.@typescript/typescript-win32-x64`, `dependencies.@typescript/typescript-linux-ppc64`, `dependencies.@typescript/typescript-linux-arm`, `dependencies.@typescript/typescript-aix-ppc64`, `dependencies.@typescript/typescript-linux-mips64el`, `dependencies.@typescript/typescript-netbsd-arm64`, `dependencies.@typescript/typescript-freebsd-x64`, `dependencies.@typescript/typescript-linux-x64`, `dependencies.@typescript/typescript-linux-arm64`, `dependencies.@typescript/typescript-openbsd-x64`, `dependencies.@typescript/typescript-openbsd-arm64`, `dependencies.@typescript/typescript-darwin-arm64`, `dependencies.@typescript/typescript-sunos-x64`, `dependencies.@typescript/typescript-win32-arm64`, `dependencies.@typescript/typescript-linux-riscv64`, `dependencies.@typescript/typescript-freebsd-arm64`.
 
@@ -339,3 +339,16 @@ lefthook2.2.2 lacks registry dist.attestations;2.2.1 has an [npm provenance endp
 - [npm script PATH and implicit node-gyp defaults](https://docs.npmjs.com/cli/v11/using-npm/scripts/).
 - [fsevents2.3.3 manifest](https://github.com/fsevents/fsevents/blob/v2.3.3/package.json) and [binding.gyp](https://github.com/fsevents/fsevents/blob/v2.3.3/binding.gyp).
 - Exact current registry metadata was fetched over HTTPS without credentials for only the six mismatch packages and Lefthook; no application bytes were sent. No newly fetched archive was parsed outside the supported hosted sandbox.
+
+## Additional Lefthook source-byte evidence
+
+Independent comparison found all six files in the SRI-installed lefthook2.2.2 wrapper byte-identical to the official annotated v2.2.2 tag peeled commit eb4e504b7c1d1ea6cb1fd29542431cb6d1a93a03 (tag object85141db4e1fda882e2e7eadb7706f3ae44b177d3). The hosted archive inventory also contains six files. Git blob IDs were computed as SHA1 of the exact Git blob header and bytes and matched the official tagged tree; SHA256 is recorded below. README/schema are copied from the repository root by its packaging helper. This is useful independent source-content binding, but neither cryptographic npm provenance nor a review of platform executable internals; no provenance waiver is automatically created.
+
+| Archive member           | Official tagged Git blob                   | SHA256                                                             |
+| ------------------------ | ------------------------------------------ | ------------------------------------------------------------------ |
+| `package/README.md`      | `0b645a5e76e523dc87f88f5329483183449882f5` | `37704471dbc1f876f4a31a2dfc5513375f51e36400faca331228c0d4ab29ba65` |
+| `package/bin/index.js`   | `2e64e83ef1d3dad623e010df03b799a64d993a95` | `728f0163b43f0c2b2e6e5f956872d200baeefedb2e3263f7a249bd8a50455d8c` |
+| `package/get-exe.js`     | `ddf8f23446c890df675eb5f92c8847ec38ff6950` | `41ae170f96865af0aebfa884d3060cf4008126fc4df0b80286ad947d5064b924` |
+| `package/package.json`   | `74e1de60c292f31308bc83303965199d8c31ffb2` | `ec18e6107a588b913d91144c35ccabd43c4b736d39b9a0a2c0a85cb1409e88ee` |
+| `package/postinstall.js` | `e23dda876f616a805f016bd37a201fdb0dd05629` | `770a47a4c27f3344f7e2eb6f008f335d232e214effe97dd714f66829ff10c306` |
+| `package/schema.json`    | `9a627c321fdec44fbc88ea1f59611a28d8d0d6ab` | `3f066bd4a58d1a8a00f0a9688f93f42a8e3b93ae74da0fdeb537ffb2ad67818d` |

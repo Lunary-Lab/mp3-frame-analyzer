@@ -62,6 +62,14 @@ class ExactLockTests(unittest.TestCase):
 
 
 class ArchiveTests(unittest.TestCase):
+    def test_metadata_context_binds_values_missing_keys_and_optional_dependencies(self):
+        fields = {"main", "dependencies", "optionalDependencies"}
+        baseline = worker.manifest_context_digest({"main": False}, fields)
+        for changed in [{"main": True}, {}, {"main": None},
+                        {"main": False, "optionalDependencies": {"a": "1.0.0"}}]:
+            self.assertNotEqual(baseline, worker.manifest_context_digest(changed, fields))
+        self.assertEqual(baseline, worker.manifest_context_digest({"main": False, "unrelated": "ignored"}, fields))
+
     def archive(self, members):
         stream = io.BytesIO()
         with tarfile.open(fileobj=stream, mode="w:gz") as tar:

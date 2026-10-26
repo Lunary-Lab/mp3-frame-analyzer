@@ -27,6 +27,12 @@ def require(condition, message):
         raise PolicyError(message)
 
 
+def manifest_context_digest(value, fields):
+    # Preserve missing keys and actual values; native type-error diagnostics alone
+    # would treat false and true as identical boolean type strings.
+    return hashlib.sha256(json.dumps({key: value[key] for key in fields if key in value}, sort_keys=True).encode()).hexdigest()
+
+
 def check_archive(archive, package):
     seen = set()
     roots = set()
@@ -85,9 +91,12 @@ def metadata_evidence(analyzer, result, metadata, package, directory, files):
         from guarddog.analyzer.metadata.npm.metadata_mismatch import _load_package_manifest, difference_at_key, MANIFEST_FIELDS_CHECKLIST
         manifest = _load_package_manifest(str(directory), package["name"])
         details = metadata["versions"][package["version"]]
+        context_fields = set(MANIFEST_FIELDS_CHECKLIST) | {"optionalDependencies"}
         # Hash exact differing values, but expose only affected field/key identities.
         evidence["metadata_mismatch"] = sorted([
             {"field": field, "key": key,
+             "registryContextSha256": manifest_context_digest(details, context_fields),
+             "archiveContextSha256": manifest_context_digest(manifest, context_fields),
              "registrySha256": hashlib.sha256(json.dumps(left, sort_keys=True).encode()).hexdigest(),
              "archiveSha256": hashlib.sha256(json.dumps(right, sort_keys=True).encode()).hexdigest()}
             for field, typ in MANIFEST_FIELDS_CHECKLIST.items()

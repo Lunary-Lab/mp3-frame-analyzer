@@ -93,7 +93,7 @@
       "explanation": "The matched long string is the JavaScript parser Unicode identifier-character table/regular expression, not an encoded executable payload. The exact lib/index.js file and matching line were inspected; the character classes are used for identifier parsing.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "source-babel-parser"
       },
       "matches": [
@@ -123,7 +123,7 @@
       "explanation": "The long repeated-character string is multipart body test fixture data in test/types-multipart.test.js. The matched test builds a Buffer and validates parsing; it does not decode or execute an obfuscated payload.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "source-fastify-busboy"
       },
       "matches": [
@@ -149,7 +149,7 @@
       "explanation": "The two matches are its documented native-build distribution downloader: lib/dist.js writes runtime import libraries and lib/downloader.js fetches text. The surrounding runtimePaths.js selects Node/Electron/NW headers and libraries, with optional user mirrors; these specific sites are not download-and-execute commands. This is expected build-tool capability, not a claim that arbitrary mirror execution is safe.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "source-cmake-js"
       },
       "matches": [
@@ -186,7 +186,7 @@
       "explanation": "The sole native manifest difference is scripts.test: registry mocha versus archive ./node_modules/.bin/mocha. npm adds dependency executables to script PATH, making this standard local executable normalization. Neither form is a lifecycle hook; no dependency or runtime entry-point differs.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "metadata-deep-extend"
       },
       "matches": [
@@ -199,7 +199,7 @@
           "capabilityRule": null,
           "path": "$metadata",
           "location": "",
-          "contextSha256": "f04c5af64bc3bd8428aadda4aecbba608ac04185d581d25e82e0c707e7db5e2e"
+          "contextSha256": "ff7245bb20bda3f57c2314205992b21fc57af2429ea6b2b8915dc92d5c9b14ae"
         }
       ]
     },
@@ -212,7 +212,7 @@
       "explanation": "Both the registry manifest and SRI-bound archive have main:false, with matching boolean type. Native metadata_mismatch assumes main must be a string and reports a difference even when both boolean values agree. The evidence records identical native type hashes; manual comparison confirmed equal values and no listed dependency/script difference.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "metadata-dunder-proto"
       },
       "matches": [
@@ -225,7 +225,7 @@
           "capabilityRule": null,
           "path": "$metadata",
           "location": "",
-          "contextSha256": "3ae4b433b350603a714e639084b843e391618deaaf5c225f70c9b2034dc2739c"
+          "contextSha256": "2dd58943d2d2f60b709fa8a6415d0cfd53ed515b682c453523efcc17eda25193"
         }
       ]
     },
@@ -238,7 +238,7 @@
       "explanation": "The package.json postinstall invokes the shipped install.js native binary selector/installer. A lifecycle hook really exists, so this is expected-behavior review rather than denial of the capability. Repository installs use --ignore-scripts, and GuardDog never installs or invokes the package.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "source-esbuild"
       },
       "matches": [
@@ -264,7 +264,7 @@
       "explanation": "The matched ../../../etc/passwd literals are URN preservation/normalization test inputs and expected output strings. They are passed to URI parsing/assertions, not filesystem reads. The nested locked package path and exact source hash were checked, rather than confusing it with another fast-uri version.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "source-fast-uri"
       },
       "matches": [
@@ -307,7 +307,7 @@
       "explanation": "The maintenance-only scripts/validate-ecosystem-links.js reads an optional GITHUB_TOKEN for HEAD requests to fixed https://api.github.com/repos/<validated-owner>/<validated-repo>. The other two matches delete that variable in its MockAgent tests. This is documented tooling authentication, not application-runtime credential exfiltration; repository CI does not invoke this dependency maintenance script.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "source-fastify"
       },
       "matches": [
@@ -355,7 +355,7 @@
       "explanation": "The IP-address URLs are literal router.find inputs compared with relative-path route lookups in test/full-url.test.js. These matching statements perform in-memory URL/routing assertions, not requests to that IP address; unrelated HTTP server tests in the file do not create the alleged exfiltration flow.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "source-find-my-way"
       },
       "matches": [
@@ -392,7 +392,7 @@
       "explanation": "The only difference is registry scripts.install=\"node-gyp rebuild\" versus no archive install key. The official v2.3.3 package manifest has no install/preinstall and its source root contains binding.gyp; npm documents this exact implicit install default. The archive ships the prebuilt Darwin module. This is a bounded packaging-normalization inference, not proof that arbitrary injected scripts are safe; lifecycle scripts remain disabled.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "metadata-fsevents"
       },
       "matches": [
@@ -405,7 +405,7 @@
           "capabilityRule": null,
           "path": "$metadata",
           "location": "",
-          "contextSha256": "79d8ce3c2f7e4f9bd9ed726b18a4eb2ab0dc6a54a491ae145f90c8c2dfcb61ed"
+          "contextSha256": "61ac8115b99b7d06139b5f1605389b32a7ff38951499e5bcc2c1e55c7327f7b1"
         }
       ]
     },
@@ -418,7 +418,7 @@
       "explanation": "The package.json hook calls the shipped postinstall.js, which skips ordinary CI and otherwise runs the selected lefthook binary with literal install to configure Git hooks. Lifecycle execution is disabled here. This review is ONLY the exact source hook finding: the separate real provenance_regression remains unreviewed and blocking.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "source-lefthook"
       },
       "matches": [
@@ -444,7 +444,7 @@
       "explanation": "Both the registry manifest and SRI-bound archive have main:false, with matching boolean type. Native metadata_mismatch assumes main must be a string and reports a difference even when both boolean values agree. The evidence records identical native type hashes; manual comparison confirmed equal values and no listed dependency/script difference.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "metadata-math-intrinsics"
       },
       "matches": [
@@ -457,7 +457,7 @@
           "capabilityRule": null,
           "path": "$metadata",
           "location": "",
-          "contextSha256": "3ae4b433b350603a714e639084b843e391618deaaf5c225f70c9b2034dc2739c"
+          "contextSha256": "75991d8ff1ed0ef7f65a75f881007dfec2598e56b1c6e67ae99bdeece0b69c64"
         }
       ]
     },
@@ -470,7 +470,7 @@
       "explanation": "All matched files are packaged tests: HTTP logger assertions use os.hostname as expected log data and make requests to their localhost test server; transport tests inspect NODE_OPTIONS/worker.env and use hostname/temp paths as fixtures. Inspection found no external system-information sink at these matched sites. This does not suppress any runtime source path or future test-file change.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "source-pino"
       },
       "matches": [
@@ -562,7 +562,7 @@
       "explanation": "The long index.mjs string/regular expression belongs to bundled JSON5 Unicode identifier character handling. It is parser data, not a decoded or dynamically executed payload. The exact file hash and location bind this review to the inspected table.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "source-prettier"
       },
       "matches": [
@@ -588,7 +588,7 @@
       "explanation": "The sole native manifest difference is scripts.test: registry istanbul cover ./node_modules/tape/bin/tape ./test/integration/*.js versus the same command with ./node_modules/.bin/istanbul. npm script PATH resolves the same local executable; no dependency or lifecycle entry-point differs.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "metadata-retry"
       },
       "matches": [
@@ -601,7 +601,7 @@
           "capabilityRule": null,
           "path": "$metadata",
           "location": "",
-          "contextSha256": "e33101b139e0b892ebeceff90b709fcabddf552099a42c665e2581a35f4faa48"
+          "contextSha256": "3b8f1c0f0698eef91219427eb2f3db546470073562db36ff9d0bd09020738635"
         }
       ]
     },
@@ -614,7 +614,7 @@
       "explanation": "The matched computed property finds a header whose key lowercases to set-cookie, then reads that header. It is case-insensitive HTTP header selection; no encoded string is decoded/evaluated and no obfuscated executable is constructed at the matched expression.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "source-set-cookie-parser"
       },
       "matches": [
@@ -640,7 +640,7 @@
       "explanation": "The three HTTP strings in package.json are author/contributor homepage URLs, not dependency selectors or executable downloads. The native text heuristic conflates these metadata URLs with HTTP dependencies; only these exact manifest locations and bytes are reviewed.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "source-tree-kill"
       },
       "matches": [
@@ -688,7 +688,7 @@
       "explanation": "All twenty differing dependencies entries are exactly version7.0.2 platform packages also present, identically, in optionalDependencies in BOTH registry and archive. The registry repeats optional dependencies under dependencies while the archive keeps them only optional. The complete exact-lock scan still includes all platform archives; no dependency is waived or substituted.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "metadata-typescript"
       },
       "matches": [
@@ -701,7 +701,7 @@
           "capabilityRule": null,
           "path": "$metadata",
           "location": "",
-          "contextSha256": "3ed0da4c3ef9b8134e6da5cf491f457f3f31143e1a03095000a410e82476ff1d"
+          "contextSha256": "a5a205881d38ad63bc5bbe224fa0914bdaec633a70285a218b9b70fbcd15cce3"
         }
       ]
     },
@@ -714,7 +714,7 @@
       "explanation": "The matched bundle sites implement documented tool behavior: .env identifiers/denylist and define transforms, Docker/WSL detection from /proc and os.release, editor-path conversion and homedir config search. The base64-exec/steganography matches correlate unrelated strings within the bundled file with a literal exec(\"net use\") for Windows mapped-drive canonicalization; no encoded/image bytes reach that command. Review is exact-file/line-bound, not a general environment-read or process-spawn exception.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "source-vite"
       },
       "matches": [
@@ -872,7 +872,7 @@
       "explanation": "The matched code tracks project .env/.env.local files, handles Vite process.env define keys, includes the filesystem denylist and removes selected define entries. These are expected test-runner configuration transformations/watch inputs, not evidence of credential extraction. Exact file/line/hash matches prevent covering other filesystem accesses.",
       "evidence": {
         "path": ".github/security/guarddog-findings-2026-10-26.md",
-        "sha256": "0481fabf2f316b68cc37066a9ecfeb62276691b3f3c4848070f7884966f4a78b",
+        "sha256": "1f3014a1b775b9d3e88cf099c970ae44ef0f912f62bbe0f1ae925f8b1f11ce85",
         "section": "source-vitest"
       },
       "matches": [
