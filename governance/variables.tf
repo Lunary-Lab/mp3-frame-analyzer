@@ -10,9 +10,9 @@ variable "enable_rulesets" {
 }
 
 variable "require_signed_commits" {
-  description = "Require verified signatures on main. GitHub signs squash merges, but unsigned commits on a pull request branch can still block its squash merge, so every contributor signs their commits."
+  description = "Require verified signatures on main. Off because an automated contributor cannot sign its pull request commits, and GitHub can refuse to squash merge a branch containing unsigned commits. GitHub still signs every squash merge it creates."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "required_status_checks" {
@@ -36,6 +36,12 @@ variable "aggregate_status_check" {
   description = "Required check that fails unless every validation job in its workflow succeeded."
   type        = string
   default     = "All checks"
+}
+
+variable "title_status_check" {
+  description = "Required check that validates PR metadata and must rerun when the title is edited."
+  type        = string
+  default     = "Conventional Commit PR title"
 }
 
 variable "workflow_directory" {

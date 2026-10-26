@@ -2,10 +2,9 @@
 # every pull request into main. Requiring a check that never reports blocks
 # every merge, and GitHub counts a skipped check as passing.
 locals {
-  always_conditions          = ["always()", "$${{ always() }}"]
   commit_changing_activities = ["opened", "synchronize", "reopened"]
   pull_request_events        = ["pull_request", "pull_request_target"]
-  pull_request_skip_filters  = ["paths", "paths-ignore", "branches", "branches-ignore"]
+  pull_request_skip_filters  = ["paths", "paths-ignore", "branches-ignore"]
 
   workflows = {
     for name in fileset(var.workflow_directory, "*.{yml,yaml}") :
@@ -26,41 +25,60 @@ locals {
     ]
   }
 
-  # Paths or branches filters can leave a pull request without the check, and
-  # a types list must include every activity that adds or changes commits.
+  # Paths and unsupported branch filters can omit the check. An exact main
+  # filter is safe because the ruleset only protects main. Do not
+  # attempt to interpret arbitrary branch patterns here.
   every_pull_request_workflows = [
     for name, filters in local.pull_request_filters : name
     if length(filters) > 0 && alltrue([
       for filter in filters :
       length(setintersection(keys(filter), local.pull_request_skip_filters)) == 0 &&
+      (!contains(keys(filter), "branches") || try(toset(filter.branches) == toset(["main"]), false)) &&
       length(setsubtract(local.commit_changing_activities, try(filter.types, local.commit_changing_activities))) == 0
     ])
   ]
 
-  every_pull_request_jobs = flatten([
-    for name in local.every_pull_request_workflows : [
-      for id, job in local.workflows[name].jobs : {
+  # Check-name collisions matter across workflows, including filtered and
+  # manually dispatched workflows, not only the eligible required-check jobs.
+  workflow_jobs = flatten([
+    for name, workflow in local.workflows : [
+      for id, job in workflow.jobs : {
+        workflow  = name
         name      = try(job.name, id)
         condition = try(job["if"], null)
-        needs     = toset(flatten([try(job.needs, [])]))
-        siblings  = setsubtract(keys(local.workflows[name].jobs), [id])
+        # Accept only a bare always() or that same expression inside Actions
+        # delimiters, with insignificant surrounding whitespace.
+        always = can(regex(
+          "^(always\\(\\)|\\$\\{\\{\\s*always\\(\\)\\s*\\}\\})$",
+          trimspace(coalesce(try(job["if"], null), "none"))
+        ))
+        needs    = toset(flatten([try(job.needs, [])]))
+        siblings = setsubtract(keys(workflow.jobs), [id])
         # Matrix and reusable-workflow jobs report under derived names.
         renamed = try(job.strategy.matrix, null) != null || try(job.uses, null) != null
       }
     ]
   ])
 
+  every_pull_request_jobs = [
+    for job in local.workflow_jobs : job
+    if contains(local.every_pull_request_workflows, job.workflow)
+  ]
+
   # A job without a condition still skips when a job it needs fails.
   always_reporting_checks = [
     for job in local.every_pull_request_jobs : job.name
     if !job.renamed && (
-      contains(local.always_conditions, coalesce(job.condition, "none")) ||
+      job.always ||
       (job.condition == null && length(job.needs) == 0)
-    )
+      ) && (job.name != var.title_status_check || alltrue([
+        for filter in local.pull_request_filters[job.workflow] :
+        contains(try(filter.types, local.commit_changing_activities), "edited")
+    ]))
   ]
 
   aggregate_jobs = [
-    for job in local.every_pull_request_jobs : job
+    for job in local.workflow_jobs : job
     if job.name == var.aggregate_status_check
   ]
 }
@@ -70,8 +88,12 @@ output "required_status_checks" {
   value       = var.required_status_checks
 
   precondition {
-    condition     = alltrue([for check in var.required_status_checks : contains(local.always_reporting_checks, check)])
-    error_message = "Every required check must be an unskippable job, reporting under its own name, in a workflow that runs for every pull request."
+    condition = alltrue([
+      for check in var.required_status_checks :
+      contains(local.always_reporting_checks, check) &&
+      length([for job in local.workflow_jobs : job.name if job.name == check]) == 1
+    ])
+    error_message = "Every required check must have one unique, unskippable job name across workflows and report on every pull request into main. The title check must also report on edited events."
   }
 }
 
@@ -89,7 +111,7 @@ output "aggregate_status_check" {
   precondition {
     condition = length(local.aggregate_jobs) == 1 && alltrue([
       for job in local.aggregate_jobs :
-      contains(local.always_conditions, coalesce(job.condition, "none")) && job.needs == job.siblings
+      contains(local.every_pull_request_workflows, job.workflow) && job.always && job.needs == job.siblings
     ])
     error_message = "Exactly one aggregate job must run always() and need every other job in its workflow."
   }
