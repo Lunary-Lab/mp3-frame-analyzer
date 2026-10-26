@@ -24,8 +24,7 @@ runs:
         NPM_CONFIG_UPDATE_NOTIFIER: 'false'
         NPM_VERSION: ${{ inputs.npm }}
       run: |
-        case "$NPM_VERSION" in 11.19.0|11.9.0) ;; *) exit 1 ;; esac
-        npm install --global "npm@$NPM_VERSION" --ignore-scripts --no-audit --no-fund
+        node scripts/bootstrap-npm.mjs "$NPM_VERSION"
     - name: Install exact locked dependencies without lifecycle scripts
       if: inputs.install == 'true'
       shell: bash

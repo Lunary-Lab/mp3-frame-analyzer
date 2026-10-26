@@ -59,6 +59,48 @@ and these safeguards do not establish HIPAA compliance. No uploaded audio is
 written to a temporary file by this application; host swap, core dumps and proxy
 buffering remain deployment concerns, and garbage collection is not secure erasure.
 
+## npm bootstrap integrity
+
+Before any project dependency install, CI verifies the npm CLI bundle against a
+committed SHA-512 SRI pin. `scripts/bootstrap-npm.mjs` accepts only the existing
+reviewed versions 11.19.0 and 11.9.0, downloads from the exact official registry
+URL with no redirects and bounded time/size, and rejects a missing or mismatched
+hash before extraction or execution. npm's bundled dependencies are inside that
+same verified archive. There is no global npm install, secondary dependency
+resolution, or lifecycle script execution during bootstrap. Project installation
+retains its existing explicit `--ignore-scripts` policy; this change does not
+silently alter local `npm ci` behavior or remove working native tools.
+
+On Linux/macOS with Node and GNU tar, match CI without modifying a global install:
+
+```bash
+verified_npm_bin="$(node scripts/bootstrap-npm.mjs 11.19.0)" &&
+  export PATH="$verified_npm_bin:$PATH" &&
+  npm --version
+```
+
+An optional second argument supplies a previously downloaded archive for offline
+bootstrap; the same committed SRI is mandatory. The command prints its temporary
+bin directory and adds it to `GITHUB_PATH` in Actions. For local use, retain the
+random temporary directory while using npm, then remove its `mp3-verified-npm-*`
+parent when finished.
+
+Actions instead requires an absolute `RUNNER_TEMP` and exclusively creates a
+bundle-version-and-digest directory beneath it. An existing directory, file or
+symlink is rejected, never reused or deleted. This avoids introducing a random
+PATH component into mutation-cache environment identity. A runner path/image
+change still correctly invalidates reuse; this is not a guarantee of a cache hit.
+The [runner's temporary-directory cleanup](https://docs.github.com/en/actions/reference/workflows-and-actions/variables)
+owns CI cleanup at job boundaries. Normal project imports/CLIs/plugins still use
+the project lockfile; no npm dependency was found unused in this review.
+
+The two pins were checked on 2026-10-26 against official npm registry metadata,
+valid registry ECDSA signatures, and the downloaded tarballs. A version update
+requires independently verifying the new bundle/signature and reviewing its pin;
+never replace a failed digest with the observed bytes merely to make CI pass.
+Hash identity does not establish package benignness, CVE safety, or an immutable
+hosted runner/Node/tar. See [npm registry signatures](https://docs.npmjs.com/about-registry-signatures/).
+
 ## Build dependencies and release credentials
 
 `@stryker-mutator/core@10.1.1` depends on `typed-rest-client@2.3.1`, which pins a vulnerable `qs@6.15.1`. The package override is scoped to **that parent's `qs` dependency**, selecting patched `6.16.1`; it does not force a major update of the parent client. Full mutation testing verifies the resulting toolchain. Remove the override when a compatible upstream Stryker dependency chain includes the fix ([stryker-js#6177](https://github.com/stryker-mutator/stryker-js/pull/6177)), then regenerate the lockfile and rerun mutation and audit checks. A tooling test fails when the locked parent stops pinning the vulnerable version, so the override cannot silently outlive its purpose.

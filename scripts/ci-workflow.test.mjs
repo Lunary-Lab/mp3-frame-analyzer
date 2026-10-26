@@ -258,7 +258,8 @@ test('native scanner and setup commands retain pinned versions and explicit repo
     'utf8',
   );
   assert.match(setup, /npm ci --ignore-scripts --no-audit --no-fund/);
-  assert.match(setup, /11\.19\.0\|11\.9\.0/);
+  assert.match(setup, /node scripts\/bootstrap-npm\.mjs "\$NPM_VERSION"/);
+  assert.doesNotMatch(setup, /npm install --global/);
   for (const setting of [
     "NPM_CONFIG_UPDATE_NOTIFIER: 'false'",
     "PIP_DISABLE_PIP_VERSION_CHECK: '1'",
