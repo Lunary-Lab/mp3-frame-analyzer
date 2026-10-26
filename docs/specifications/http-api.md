@@ -48,12 +48,14 @@ Current application-generated errors: `{"error": string, "message": string}`, JS
 - 413: upload exceeds configured file size, aggregate multipart-body budget or multipart resource limits.
 - 415: unsupported media type or explicitly unsupported MPEG subtype.
 - 422: structurally invalid/truncated MPEG data.
+- 503: upload admission exhausted (`server-busy`, `Retry-After: 1`, connection closes).
 - 500: unexpected internal failure (sanitized client message).
 
-These are **project mappings** compatible with RFC 9110 statuses, not exact error bodies mandated by the RFC. One pure function, `errorResponseFor` in [`src/error-response.ts`](../../src/error-response.ts), maps every failure the route raises to its status and body, and says whether the connection must close. The upload module also closes raw uploads it rejects, and a client that disconnected gets no response at all. An abandoned TCP connection or low-level timeout cannot always deliver a JSON reply.
+These are **project mappings** compatible with RFC 9110 statuses, not exact error bodies mandated by the RFC. Admission rejects directly before body parsing; for errors raised while handling accepted requests, one pure function, `errorResponseFor` in [`src/error-response.ts`](../../src/error-response.ts), maps every failure the route raises to its status and body, and says whether the connection must close. The upload module also closes raw uploads it rejects, and a client that disconnected gets no response at all. An abandoned TCP connection or low-level timeout cannot always deliver a JSON reply.
 
 ## Resource/security policy (project, not MPEG/HTTP normative limits)
 
+- `MAX_ACTIVE_UPLOADS` caps accepted upload lifetimes per server instance: default 8, configurable decimal integer 1–1024. No application queue; excess receives 503 before reading its body. Slots include upload-owned background work until settlement, plus response/transport completion. It is not a rate limiter, a fleet quota or a cap on idle connections.
 - Per-file **50 MiB** default, configurable at server startup with `MAX_UPLOAD_BYTES` (positive safe integer in decimal bytes; invalid values fail before listening), enforced for **raw streams, chunked transfer without `Content-Length`, and multipart file parts**.
 - One multipart part, one file, zero extra text fields; Busboy limits 32 header pairs and approximately 8 KiB for multipart header buffering.
 - `MAX_MULTIPART_BYTES` independently caps the full transfer-decoded multipart body (preamble, headers, file, discarded parts and epilogue). Default: the file cap plus 64 KiB, saturated at the maximum safe integer; the same positive-decimal validation applies. This is application policy, not a standard-mandated allowance. Explicit lower caps are permitted.

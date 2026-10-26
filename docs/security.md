@@ -90,3 +90,27 @@ An empty named file is HTTP 400 `empty-file`; a nonempty but malformed MPEG file
 Early rejection of **raw** uploads closes the HTTP/1.1 connection after responding rather than consuming an unbounded remainder. This prevents attackers from using an invalid first header to force a background drain. A raw request that was cancelled at the TCP layer may be impossible to answer; these are not silently converted into HTTP 500. Multipart early rejection permits pipelining and connection reuse only when the entire body finishes within the separate aggregate body budget and transport timeouts. The per-file limit alone does not bound discarded bytes.
 
 For network framing violations (e.g., a client advertises more bytes in `Content-Length` than it sends before disconnecting), native Node may close the connection without an application JSON error. Error precedence is **first observable failure**, not a guarantee that a subsequent size limit overrides early MPEG validation. A public service would still need reverse-proxy aggregate body limits, client-rate controls and ingress timeouts.
+
+## Upload admission
+
+`MAX_ACTIVE_UPLOADS` bounds accepted upload lifetimes per app/server instance
+(default 8; decimal 1–1024). An exhausted cap rejects immediately with sanitized
+503, `Retry-After: 1`, and connection closure after the response, without draining
+an unread rejected request or adding it to a queue. A slot is held through raw
+transport completion/closure, response completion/closure, and all upload-owned
+consumer/parts/drain settlement. Admission awaits the primary operation before
+calling `Uploads.waitForIdle(request)` for remaining multipart parsing/draining
+work. That helper is not an independent raw-consumer barrier and never replaces
+the primary HTTP result with a cleanup error. It cannot track arbitrary detached
+work spawned by a custom consumer. WeakMap state is
+request-scoped and cleared on settlement. A set of active transports is capped
+by the admission limit and cleared as slots release; there is no growing history.
+After transport teardown, `onClose` destroys any buffered unread request
+remainders and a barrier waits for all admitted work to
+settle; the deployed server still bounds total shutdown with `closeWithDeadline`.
+Embedded callers should likewise apply a shutdown deadline.
+
+The limit is not identity fairness, a request-rate limiter, a universal memory
+ceiling or a distributed quota. Slow clients can occupy all slots until the
+existing transport timeouts; rejected new requests receive no priority. Configure
+connection/rate limits at ingress, and tune concurrency using measured workloads.

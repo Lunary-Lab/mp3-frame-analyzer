@@ -51,6 +51,24 @@ For public deployment, configure reverse-proxy aggregate body, concurrency and
 rate limits separately. Embedded callers can continue to use
 `buildApp({ maxUploadBytes })`; `buildApp()` itself does not read the environment.
 
+### Per-instance upload admission
+
+`MAX_ACTIVE_UPLOADS` defaults to **8** and accepts only decimal integers from
+`1` through `1024`; there is no unlimited mode. Embedded callers use
+`buildApp({ maxActiveUploads })`. This is a conservative project default, not a
+promise that every deployment can sustain eight maximum-sized uploads or that
+1024 is a safe setting. Measure your workload before tuning the [runtime limits](docs/runtime.md).
+
+A slot stays occupied until its response and request transport finish **and**
+all upload-owned consumers, multipart iterators and background drains settle.
+Success, malformed input, abort, timeout and shutdown share this lifecycle.
+Overload sends `503` without reading/draining an attacker-controlled remainder,
+then closes that connection after the JSON response. `Retry-After: 1` is a retry
+hint, not a guarantee of capacity; clients should use bounded backoff with jitter.
+There is no priority or per-client fairness guarantee. The cap is per app/server
+instance (normally one process), not shared across replicas, and does not bound
+all idle TCP connections. Public ingress still needs its own connection/rate policy.
+
 Upload an MP3 as multipart/form-data:
 
 ```bash
@@ -93,11 +111,12 @@ The response uses `Content-Type: application/json`. For multipart uploads, the `
 | Invalid, malformed, or truncated MP3 content                      | 422         | `invalid-mp3` or `truncated-mp3`                                                                 |
 | Unknown route                                                     | 404         | `not-found`                                                                                      |
 | Wrong method on `/file-upload`                                    | 405         | `method-not-allowed` with `Allow: POST`                                                          |
+| Upload admission exhausted                                        | 503         | `server-busy`, `Retry-After: 1`, connection closes                                               |
 | Unexpected application failure                                    | 500         | `internal-error` (sanitized)                                                                     |
 
 All application-generated error bodies use JSON with `error` and `message` strings. Limits apply to both raw and multipart uploads. Error classification follows the **first observable failure**: a malformed MPEG header can be rejected before a later size-limit violation or incomplete multipart ending is observable. An explicit oversized raw `Content-Length` is rejected early. Thus a later 413 or multipart 400 does not replace an already reported 422.
 
-A rejected **raw** upload sends its JSON error with `Connection: close` rather than draining arbitrary additional bytes. Multipart consumer errors may drain for keep-alive reuse, but only if the complete body stays within the aggregate multipart budget and transport timeouts. A multipart-provider failure with unread body bytes closes after its error response because its drain is no longer guaranteed. Client disconnects, aborted/incomplete HTTP bodies, and native Node request-header timeouts may prevent any application JSON response; a client should not expect an HTTP response from a broken connection. 429 and 503 are intentionally not configured because this local assessment API has no rate limiter or load-shedding policy.
+A rejected **raw** upload sends its JSON error with `Connection: close` rather than draining arbitrary additional bytes. Multipart consumer errors may drain for keep-alive reuse, but only if the complete body stays within the aggregate multipart budget and transport timeouts. A multipart-provider failure with unread body bytes closes after its error response because its drain is no longer guaranteed. Client disconnects, aborted/incomplete HTTP bodies, and native Node request-header timeouts may prevent any application JSON response; a client should not expect an HTTP response from a broken connection. An exhausted per-instance admission cap returns sanitized `503 server-busy`, `Retry-After: 1` and `Connection: close` before reading the upload body. No request waits in an application queue. 429 is not configured: this is concurrency admission, not rate limiting.
 
 ## Frame-count convention
 

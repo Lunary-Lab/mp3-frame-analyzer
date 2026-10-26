@@ -3,6 +3,7 @@ import { closeWithDeadline } from './shutdown.js';
 import {
   maxUploadBytesFromEnvironment,
   maxMultipartBytesFromEnvironment,
+  maxActiveUploadsFromEnvironment,
 } from './server-config.js';
 
 const portValue = process.env['PORT'] ?? '3000';
@@ -17,7 +18,8 @@ const maxMultipartBytes = maxMultipartBytesFromEnvironment(
   process.env['MAX_MULTIPART_BYTES'],
   maxUploadBytes,
 );
-const app = await buildApp({ maxUploadBytes, maxMultipartBytes });
+const maxActiveUploads = maxActiveUploadsFromEnvironment(process.env['MAX_ACTIVE_UPLOADS']);
+const app = await buildApp({ maxUploadBytes, maxMultipartBytes, maxActiveUploads });
 
 let closing: Promise<void> | undefined;
 function shutdown(): Promise<void> {

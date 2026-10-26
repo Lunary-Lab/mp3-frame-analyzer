@@ -2,9 +2,15 @@ import { spawn } from 'node:child_process';
 import { connect, createServer } from 'node:net';
 import { request as httpRequest } from 'node:http';
 import { frame, mp3, multipartBody } from './helpers/mp3-fixtures.js';
+import { openUpload } from './helpers/upload-socket.js';
 import { expect, it } from 'vitest';
 
-function startServer(port: string, maxUploadBytes?: string, maxMultipartBytes?: string) {
+function startServer(
+  port: string,
+  maxUploadBytes?: string,
+  maxMultipartBytes?: string,
+  maxActiveUploads?: string,
+) {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     HOST: '127.0.0.1',
@@ -14,6 +20,8 @@ function startServer(port: string, maxUploadBytes?: string, maxMultipartBytes?: 
   // Test the absent default independently of the invoking shell's configuration.
   delete env['MAX_UPLOAD_BYTES'];
   delete env['MAX_MULTIPART_BYTES'];
+  delete env['MAX_ACTIVE_UPLOADS'];
+  if (maxActiveUploads !== undefined) env['MAX_ACTIVE_UPLOADS'] = maxActiveUploads;
   if (maxMultipartBytes !== undefined) env['MAX_MULTIPART_BYTES'] = maxMultipartBytes;
   if (maxUploadBytes !== undefined) env['MAX_UPLOAD_BYTES'] = maxUploadBytes;
   const child = spawn(process.execPath, ['--import', 'tsx', 'src/server.ts'], {
@@ -501,6 +509,53 @@ it.skipIf(process.platform === 'win32').each(['before', 'during'] as const)(
       expect(server.output()).not.toContain('Server shutdown failed');
     } finally {
       upload?.socket.destroy();
+      server.child.kill('SIGKILL');
+      await server.exited;
+    }
+  },
+);
+
+it.each(['', '0', '1025', 'invalid'])(
+  'rejects invalid MAX_ACTIVE_UPLOADS %j before listening',
+  async (value) => {
+    const server = startServer(await availablePort(), undefined, undefined, value);
+    await expect(server.started).rejects.toThrow('Server exited before readiness');
+    expect(await server.exited).toEqual({ code: 1, signal: null });
+    expect(server.errorOutput()).toContain(
+      'MAX_ACTIVE_UPLOADS must be an integer between 1 and 1024',
+    );
+    expect(server.output()).not.toContain('Server listening at');
+  },
+);
+
+it.skipIf(process.platform === 'win32')(
+  'applies the configured admission cap and drains an active upload on SIGTERM',
+  async () => {
+    const port = await availablePort();
+    const server = startServer(port, undefined, undefined, '1');
+    let hold: ReturnType<typeof openUpload> | undefined;
+    try {
+      await server.started;
+      const address = `http://127.0.0.1:${port}`;
+      hold = openUpload(address, 'audio/mpeg', 417);
+      hold.client.write(frame().subarray(0, 4));
+      await expect
+        .poll(async () => {
+          const result = await fetch(address + '/file-upload', {
+            method: 'POST',
+            headers: { 'content-type': 'audio/mpeg' },
+            body: new Uint8Array(frame()),
+          });
+          await result.arrayBuffer();
+          return result.status;
+        })
+        .toBe(503);
+      expect(server.child.kill('SIGTERM')).toBe(true);
+      hold.client.end(frame().subarray(4));
+      expect(await hold.response).toMatchObject({ status: 200, body: { frameCount: 1 } });
+      expect(await server.exited).toEqual({ code: 0, signal: null });
+    } finally {
+      hold?.client.destroy();
       server.child.kill('SIGKILL');
       await server.exited;
     }
