@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { countMp3Frames } from './mp3/count-frames.js';
 import { ClientError } from './client-error.js';
 import { errorResponseFor } from './error-response.js';
+import { loggerOptions } from './logging.js';
 import { MAX_UPLOAD_BYTES, registerUploads, uploadFormOf } from './upload.js';
 
 function includeVbrHeaderFrame(query: unknown): boolean {
@@ -34,7 +35,8 @@ export async function buildApp({
   maxUploadBytes = MAX_UPLOAD_BYTES,
 }: { maxUploadBytes?: number } = {}): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: process.env['NODE_ENV'] !== 'test',
+    logger: process.env['NODE_ENV'] === 'test' ? false : loggerOptions,
+    requestIdHeader: false,
     requestTimeout: 30_000,
     connectionTimeout: 10_000,
   });
