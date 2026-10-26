@@ -11,9 +11,22 @@ endpoint excludes one recognized initial Xing/Info/VBRI metadata frame by
 default. The supplied sample therefore returns `{"frameCount":6089}`;
 `?includeVbrHeaderFrame=true` requests its 6090 physical frames. This decision
 applies to raw and multipart uploads and is a breaking change to the previous
-HTTP default. It is the repository owner's choice, not an additional statement
-from the evaluator or confirmation of its intended answer.
-The original brief below remains unchanged.
+HTTP default. This was the repository owner's decision at that time; the later
+evaluator clarification is recorded separately below.
+
+## Clarification received 2026-10-26
+
+The evaluator confirmed that the requested result counts **audio frames only**,
+with **6089** expected for the supplied sample, and recommended **MediaInfo**
+as a sanity check as suggested in the original brief. The existing HTTP default
+already matches that result; explicit physical counting remains a separate
+diagnostic mode returning 6090 for this sample.
+
+This clarification does not specify later encoder-like payload or concatenation
+policies. It is not a full decoder-conformance requirement or a statement that
+every media tool must agree on every input. The [count contract](frame-count-contract.md)
+keeps those implementation boundaries and verification evidence distinct.
+The original assignment text below remains unchanged.
 
 ---
 

@@ -36,7 +36,7 @@ RFC 7578 `4.1` mandates multipart boundary syntax and `4.2` mandates `Content-Di
 - Other query values => client error.
 - Always determine physical frames by logical traversal, not the Xing header's declared count.
 
-**The owner explicitly selected this HTTP default on 2026-10-24.** It is a breaking change from the previous physical-frame default. Direct `countMp3Frames()` calls retain their physical default because the HTTP adapter passes its policy explicitly. The choice matches MediaInfo's and FFprobe's **6089** result for the supplied sample, but the evaluator's intended convention remains inferred and unconfirmed. This is structural metadata exclusion, not audio decoding. The decision and raw/multipart regressions are recorded in [frame-count-contract.md](../frame-count-contract.md).
+**The owner explicitly selected this HTTP default on 2026-10-24.** It is a breaking change from the previous physical-frame default. Direct `countMp3Frames()` calls retain their physical default because the HTTP adapter passes its policy explicitly. The evaluator confirmed audio-frame counting and **6089** for the sample on 2026-10-26, recommending MediaInfo as a sanity check; the existing default matches that clarification. This is structural metadata exclusion, not audio decoding. The decision and raw/multipart regressions are recorded in [frame-count-contract.md](../frame-count-contract.md).
 
 ## Success/error shape and classification
 

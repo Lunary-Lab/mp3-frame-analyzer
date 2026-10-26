@@ -1,11 +1,12 @@
 # Frame-count contract
 
-**Status: HTTP default selected by the repository owner (2026-10-24);
-evaluator intent unconfirmed.** The endpoint excludes one recognized initial
-Xing/Info/VBRI metadata frame by default. Clients can request all physical
-MPEG-1 Layer III frames with `?includeVbrHeaderFrame=true`. This is an explicit
-breaking change from the previous HTTP default, not a confirmed clarification
-from the evaluator.
+**Status: the evaluator confirmed audio-frame counting and sample result 6089
+on 2026-10-26.** This matches the HTTP default selected by the repository owner
+on 2026-10-24: exclude one recognized initial Xing/Info/VBRI metadata frame.
+Clients can separately request all physical MPEG-1 Layer III frames with
+`?includeVbrHeaderFrame=true`. The clarification changes no implementation or
+diagnostic default; the earlier HTTP-default change remains a historical
+breaking change.
 
 ## Selected contract
 
@@ -62,22 +63,30 @@ reproduces MediaInfo on every file. Excluding only a recognized leading
 Xing/Info/VBRI frame matches FFprobe on these fixtures and MediaInfo on the
 supplied sample.
 
-## Assessment
+## Assessment clarification (2026-10-26)
 
-The brief's suggested tool reports **6089** for the supplied sample, as does
-FFprobe. The owner has chosen **6089** as the endpoint's default result, with
-**6090** available through the explicit physical-count option. Agreement with
-both tools on the supplied file supports this choice. An evaluator following
-the brief's tip may expect 6089, but that remains an inference: the brief does
-not explicitly settle metadata-frame inclusion, and the evaluator has not
-confirmed the intended convention.
+The evaluator confirmed **audio frames only**, with **6089** expected for the
+supplied sample, and recommended **MediaInfo** as a sanity check in line with
+the original brief. This resolves the previously open counting-convention
+question and confirms the existing HTTP default for the sample. Explicit
+physical counting still returns **6090**; no diagnostic tests or parser defaults
+were changed to make the two modes appear identical.
 
-## Clarification question
+The clarification does not specify how to treat incidental later encoder-like
+payloads or concatenated sequences. Those details remain documented
+implementation policies, not additional claims about the evaluator's intent.
+Structural metadata exclusion is not audio decoding or a guarantee that every
+media tool agrees on every file.
 
-> We selected 6089 as the default result for the supplied sample by excluding
-> its initial Xing metadata frame, matching MediaInfo and FFprobe. An explicit
-> option returns all 6090 physical frames. Does that default match the
-> assessment's intended convention?
+### Current-main verification (2026-10-26)
+
+The actual packaged server from main `4652b334f2e81c1a566a5fdfca61910cababf626`
+was checked with the identity-verified external sample. All 12 combinations of
+raw/multipart, known-length/chunked, and omitted/false/true options passed:
+omitted and false returned 6089; true returned 6090. Production logging and
+clean shutdown were also checked. The private sample remains external to Git.
+This evidence confirms that main's sample behavior matches the clarification;
+it is not a claim of exhaustive decoder equivalence.
 
 ## Compatibility and verification
 
@@ -92,8 +101,7 @@ and VBR files with initial metadata and for a file without Xing. The optional
 6089, and explicit physical count 6090. Parser construction and fuzz oracles
 continue to distinguish their independently known physical and excluded counts.
 
-The change must use a breaking Conventional Commit PR title, for example
-`feat(api)!: exclude initial encoder metadata by default`. Release Please
-remains responsible for version and changelog updates; this source change does
-not manually edit those release files. Published v1.1.0 measurements retain
-their historical physical-frame contract.
+The earlier HTTP-default change was a breaking HTTP change. This
+clarification changes documentation only; Release Please remains responsible
+for version and changelog updates. Published v1.1.0 measurements retain their
+historical physical-frame contract.

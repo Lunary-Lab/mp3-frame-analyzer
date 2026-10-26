@@ -103,7 +103,7 @@ A rejected **raw** upload sends its JSON error with `Connection: close` rather t
 
 The endpoint traverses complete MPEG-1 Layer III frames and, by default, excludes a structurally recognized initial Xing/Info/VBRI metadata frame. The included CBR and VBR fixtures each contain 33 physical frames and return **32** by default, matching FFprobe's decoder-facing count for those files. With `?includeVbrHeaderFrame=true`, both return **33**. The count comes from traversal; encoder-declared frame counts are never used as the result.
 
-The repository owner chose this default because the assessment's suggested tool, MediaInfo, and FFprobe both report **6089** for the supplied sample. The API now also returns **6089** by default, or **6090** when physical counting is explicitly requested. The evaluator has not confirmed its intended convention; matching that intention remains an inference. This structural policy does not decode audio and does not promise agreement with every decoder or metadata tool. The evidence, exact policies and compatibility implications are in [the frame-count contract](docs/frame-count-contract.md).
+The evaluator confirmed on **2026-10-26** that the assessment counts audio frames and expects **6089** for the supplied sample, with MediaInfo recommended as a sanity check. The existing API default returns **6089**; explicit physical counting returns **6090**. This structural policy does not decode audio and does not promise agreement with every decoder or metadata tool. The evidence, exact policies and compatibility implications are in [the frame-count contract](docs/frame-count-contract.md).
 
 ## Implementation
 
@@ -235,8 +235,8 @@ The API returns `{"frameCount":6089}` by default and with
 `?includeVbrHeaderFrame=false`; `?includeVbrHeaderFrame=true` returns **6090**.
 These expectations apply to both raw and multipart uploads. The first MPEG
 frame carries the Xing header. FFprobe and MediaInfo also report **6089** for
-this file. The repository owner has chosen that default; the evaluator's
-intended convention remains unconfirmed. See [the frame-count contract](docs/frame-count-contract.md).
+this file. The evaluator's dated clarification confirms the audio-frame
+requirement and sample result 6089. See [the frame-count contract](docs/frame-count-contract.md).
 
 The parser modules have **100% coverage** across statements, branches, functions
 and lines using actual edge-case tests. The HTTP adapter retains defensive
