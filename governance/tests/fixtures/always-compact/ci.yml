@@ -1,0 +1,22 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'true'
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'true'
+  all-checks:
+    name: All checks
+    if: ${{always()}}
+    needs: [quality, security]
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'true'
