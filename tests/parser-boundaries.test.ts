@@ -229,16 +229,15 @@ it('reports the typed error name, code, byte offset and supplied message', () =>
   }
 });
 
-it('accepts eight leading metadata tags and rejects a ninth before parsing its body', async () => {
+it('continues validating each leading tag after the former eight-tag boundary', async () => {
   const tag = id3v2(Buffer.alloc(0));
-  const eight = Buffer.concat([...Array<Buffer>(8).fill(tag), frame()]);
-  await expect(countMp3Frames(chunks(eight, [3, 7]))).resolves.toBe(1);
   const nine = Buffer.concat([...Array<Buffer>(9).fill(tag), frame()]);
-  await expect(countMp3Frames(chunks(nine, [3, 7]))).rejects.toMatchObject({
-    name: 'Mp3ParseError',
-    kind: 'invalid-mp3',
-    offset: 80,
-    message: 'Too many ID3v2 tags',
+  await expect(countMp3Frames(chunks(nine, [3, 7]))).resolves.toBe(1);
+  const truncated = Buffer.concat([...Array<Buffer>(9).fill(tag), tag.subarray(0, 7)]);
+  await expect(countMp3Frames(chunks(truncated, [3, 7]))).rejects.toMatchObject({
+    kind: 'truncated-mp3',
+    offset: 90,
+    message: 'Incomplete ID3v2 tag header',
   });
 });
 

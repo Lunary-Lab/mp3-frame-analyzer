@@ -4,7 +4,7 @@ interface HeaderFields {
   readonly sampleRateIndex: number;
   readonly padding: 0 | 1;
   readonly hasCrc: boolean;
-  /** Single-channel mode, which places encoder metadata earlier in the frame. */
+  /** Single-channel mode, which places conventional Xing/Info metadata earlier in the frame. */
   readonly mono: boolean;
 }
 

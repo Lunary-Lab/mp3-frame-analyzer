@@ -71,11 +71,12 @@ artifacts or environment decisions are never reused to authorize a later attempt
 [`release-notes.yml`](../.github/workflows/release-notes.yml) is a reusable,
 non-publishing preparation workflow with `tag` and `sha` string inputs. Invoke it
 from exact-tag validation with the same source SHA and require its successful
-completion. The caller's permission ceiling must permit `contents: write` and
-`pull-requests: read`; only the fixed native API job gets the write token, because
+completion. The caller's permission ceiling must permit `contents: write`,
+`pull-requests: read`, and `actions: read`; only the fixed native API job gets the write token, because
 GitHub requires it for `POST /releases/generate-notes` even though that endpoint
 saves nothing. That job has no checkout and runs no project code. Planning,
-coverage checks, and composition execute with read-only permissions.
+coverage checks, and composition execute with read-only permissions. Composition
+uses `actions: read` to authenticate immutable artifact metadata before download.
 
 [`publish-release.yml`](../.github/workflows/publish-release.yml) invokes preparation
 and full runtime verification together, then seals their exact successful outputs

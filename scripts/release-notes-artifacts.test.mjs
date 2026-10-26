@@ -82,3 +82,18 @@ test('notes transport binds IDs, digests, repository, source, run and attempt be
   assert.equal(compose.match(/artifact-ids:/g).length, 2);
   assert.doesNotMatch(compose, /name: release-notes-(?:input|native)-/);
 });
+
+test('notes callers and documentation allow read-only artifact authentication', async () => {
+  const workflow = await readFile(
+    new URL('../.github/workflows/publish-release.yml', import.meta.url),
+    'utf8',
+  );
+  const notes = workflow.split('\n  notes:\n')[1].split('\n  candidate:\n')[0];
+  for (const permission of ['contents: write', 'pull-requests: read', 'actions: read'])
+    assert.ok(notes.includes(permission), `Missing caller permission ${permission}`);
+  const documentation = await readFile(new URL('../docs/releasing.md', import.meta.url), 'utf8');
+  const ceiling = documentation.match(/The caller's permission ceiling[\s\S]+?;/)?.[0];
+  assert.ok(ceiling);
+  for (const permission of ['contents: write', 'pull-requests: read', 'actions: read'])
+    assert.ok(ceiling.includes(`\`${permission}\``), `Missing documented permission ${permission}`);
+});

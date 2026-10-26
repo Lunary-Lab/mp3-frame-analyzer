@@ -45,14 +45,9 @@ describe('streaming MP3 frame counting', () => {
     });
   });
 
-  it('requires appended metadata to follow all audio and precede final ID3v1', async () => {
+  it('requires final ID3v1 to be last and rejects non-frame bytes after metadata', async () => {
     const tag = id3v2(Buffer.alloc(12), 4, true);
-    for (const tail of [
-      Buffer.concat([tag, frame()]),
-      Buffer.concat([tag, tag]),
-      Buffer.concat([tag, Buffer.from([1, 2])]),
-      Buffer.concat([id3v1(), tag]),
-    ]) {
+    for (const tail of [Buffer.concat([tag, Buffer.from([1, 2])]), Buffer.concat([id3v1(), tag])]) {
       await expect(count(mp3([frame()], undefined, tail), 3)).rejects.toMatchObject({
         kind: 'invalid-mp3',
         message: 'Unexpected bytes after trailing metadata',
@@ -271,18 +266,14 @@ describe('streaming MP3 frame counting', () => {
     }
   });
 
-  it('rejects unexpected bytes after ID3v1 and too many initial ID3v2 tags', async () => {
+  it('rejects unexpected bytes after ID3v1', async () => {
     await expect(
       count(mp3([frame()], undefined, Buffer.concat([id3v1(), frame()]))),
     ).rejects.toMatchObject({ kind: 'invalid-mp3' });
-    const tooManyTags = Buffer.concat(Array.from({ length: 9 }, () => id3v2(Buffer.alloc(0))));
-    await expect(count(mp3([frame()], tooManyTags))).rejects.toMatchObject({
-      kind: 'invalid-mp3',
-    });
   });
 
-  it('accepts exactly the documented limit of eight leading ID3v2 tags', async () => {
-    const tags = Buffer.concat(Array.from({ length: 8 }, () => id3v2(Buffer.alloc(12))));
+  it('accepts repeated leading ID3v2 tags without an arbitrary count limit', async () => {
+    const tags = Buffer.concat(Array.from({ length: 16 }, () => id3v2(Buffer.alloc(12))));
     expect(await count(mp3([frame()], tags), 3)).toBe(1);
   });
 

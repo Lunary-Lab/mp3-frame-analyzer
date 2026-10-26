@@ -1,8 +1,9 @@
 import { Mp3ParseError } from './errors.js';
 
 /**
- * Incremental byte cursor. Retains at most one input chunk plus bounded lookahead.
- * Never creates a buffer proportional to the complete file size.
+ * Incremental byte cursor. Parser callers request bounded lookahead; queued
+ * view lengths are bounded by that lookahead plus the largest input chunk.
+ * Views can retain larger upstream backing buffers.
  */
 export class AsyncByteReader {
   private readonly iterator: AsyncIterator<Uint8Array>;
@@ -22,7 +23,7 @@ export class AsyncByteReader {
     return this.absoluteOffset;
   }
 
-  /** Bytes already buffered during bounded free-format frame-size discovery. */
+  /** Bytes currently buffered, including any free-format lookahead. */
   get bufferedLength(): number {
     return this.available;
   }

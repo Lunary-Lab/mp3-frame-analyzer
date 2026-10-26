@@ -187,7 +187,7 @@ jobs:
       actions: read
     needs: [types, unit, tooling]
     runs-on: ubuntu-24.04
-    timeout-minutes: 65
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -275,6 +275,63 @@ jobs:
       - name: Audit the complete build and test dependency tree
         if: matrix.scope == 'full'
         run: npm run audit:dependencies
+
+  trivy:
+    name: Trivy dependency CVEs (full lock, HIGH/CRITICAL)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: ./.github/actions/setup-trivy
+      - run: node scripts/trivy-gate.mjs "${RUNNER_TEMP}/trivy-tool/trivy" full
+
+  trivy-release:
+    name: Trivy dependency CVEs (tested release, HIGH/CRITICAL)
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Require the exact producer artifact identity before download
+        env:
+          ARTIFACT_ID: ${{ needs.package.outputs.release_artifact_id }}
+          ARTIFACT_DIGEST: ${{ needs.package.outputs.release_artifact_digest }}
+          ARTIFACT_ATTEMPT: ${{ needs.package.outputs.release_run_attempt }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const { ARTIFACT_ID: id, ARTIFACT_DIGEST: digest, ARTIFACT_ATTEMPT: attempt } = process.env;
+          assert.match(id ?? '', /^[1-9][0-9]*$/, 'Missing single immutable artifact ID');
+          assert.match(digest ?? '', /^[a-f0-9]{64}$/, 'Missing artifact service digest');
+          assert.match(attempt ?? '', /^[1-9][0-9]*$/, 'Missing producer attempt');
+          assert.ok(Number.isSafeInteger(Number(id)) && Number.isSafeInteger(Number(attempt)));
+          assert.ok(Number(attempt) <= Number(process.env.GITHUB_RUN_ATTEMPT), 'Future producer attempt');
+          NODE
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.package.outputs.release_artifact_id }}
+          path: release
+          digest-mismatch: error
+      - uses: ./.github/actions/setup-trivy
+      - name: Scan the exact tested artifact production lock without installing packages
+        run: node scripts/trivy-gate.mjs "${RUNNER_TEMP}/trivy-tool/trivy" release
+        env:
+          SOURCE_COMMIT: ${{ inputs.ref || github.sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
 
   secrets:
     name: Secrets (complete Git history)
@@ -400,6 +457,8 @@ jobs:
         mutation,
         encoder,
         npm-audit,
+        trivy,
+        trivy-release,
         secrets,
         semgrep,
         fuzz,
@@ -417,7 +476,7 @@ jobs:
           import assert from 'node:assert/strict';
           const expected = [
             'format', 'lint', 'types', 'unit', 'compatibility', 'tooling', 'mutation-cache',
-            'mutation', 'encoder', 'npm-audit', 'secrets', 'semgrep', 'fuzz', 'package', 'governance',
+            'mutation', 'encoder', 'npm-audit', 'trivy', 'trivy-release', 'secrets', 'semgrep', 'fuzz', 'package', 'governance',
           ];
           const jobs = JSON.parse(process.env.RESULTS);
           assert.ok(jobs && typeof jobs === 'object' && !Array.isArray(jobs), 'Missing job evidence');

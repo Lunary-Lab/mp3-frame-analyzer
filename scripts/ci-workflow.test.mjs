@@ -20,6 +20,8 @@ const required = [
   'mutation',
   'encoder',
   'npm-audit',
+  'trivy',
+  'trivy-release',
   'secrets',
   'semgrep',
   'fuzz',
@@ -286,6 +288,7 @@ test('modularization retains the existing external action pins and read-only tok
     .filter((name) => !name.startsWith('./'));
   assert.deepEqual([...new Set(actions)].sort(), [
     'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
+    'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333',
     'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e',
     'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1',
     'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9',
@@ -314,4 +317,59 @@ test('governance is mandatory and checks the same explicit source ref as the CI 
   assert.match(governance, /terraform validate/);
   assert.match(governance, /run: terraform test/);
   assert.doesNotMatch(governance, /terraform (apply|destroy)|GITHUB_TOKEN:/);
+});
+
+test('Trivy full and exact tested-release scans remain required without source uploads', async () => {
+  assert.match(job('trivy'), /trivy-gate\.mjs.* full/);
+  assert.match(job('trivy-release'), /needs: package/);
+  assert.match(
+    job('trivy-release'),
+    /artifact-ids: \$\{\{ needs\.package\.outputs\.release_artifact_id \}\}/,
+  );
+  assert.match(job('trivy-release'), /digest-mismatch: error/);
+  assert.doesNotMatch(job('trivy-release'), /name: release-assets|github-token:|run-id:/);
+  assert.match(job('trivy-release'), /trivy-gate\.mjs.* release/);
+  for (const name of ['trivy', 'trivy-release']) {
+    assert.match(job(name), /ref: \$\{\{ inputs\.ref \|\| github\.sha \}\}/);
+    assert.doesNotMatch(job(name), /continue-on-error|secrets\.|: write|upload-artifact|npm ci/);
+  }
+  const bootstrap = await readFile(
+    new URL('../.github/actions/setup-trivy/action.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(bootstrap, /trivy_0\.76\.1_Linux-64bit\.tar\.gz/);
+  assert.match(bootstrap, /c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0/);
+  assert.ok(bootstrap.indexOf('sha256sum --check --strict') < bootstrap.indexOf('tar -xzf'));
+});
+
+test('Trivy refuses empty, multiple or malformed producer IDs before artifact download', () => {
+  const consumer = job('trivy-release');
+  const guard = consumer.indexOf('Require the exact producer artifact identity before download');
+  assert.ok(guard > 0 && guard < consumer.indexOf('uses: actions/download-artifact@'));
+  const script = consumer.match(/node --input-type=module <<'NODE'\n([\s\S]+?)\n {10}NODE/)?.[1];
+  assert.ok(script);
+  const run = (changes = {}) =>
+    spawnSync(process.execPath, ['--input-type=module'], {
+      input: script,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        ARTIFACT_ID: '123',
+        ARTIFACT_DIGEST: 'a'.repeat(64),
+        ARTIFACT_ATTEMPT: '1',
+        GITHUB_RUN_ATTEMPT: '2',
+        ...changes,
+      },
+    }).status;
+  assert.equal(run(), 0);
+  for (const id of ['', '0', '01', '1,2', '*', '123\n', '9007199254740992'])
+    assert.notEqual(run({ ARTIFACT_ID: id }), 0, `Accepted artifact ID ${JSON.stringify(id)}`);
+  for (const changes of [
+    { ARTIFACT_DIGEST: '' },
+    { ARTIFACT_DIGEST: 'a'.repeat(63) },
+    { ARTIFACT_ATTEMPT: '' },
+    { ARTIFACT_ATTEMPT: '0' },
+    { ARTIFACT_ATTEMPT: '3' },
+  ])
+    assert.notEqual(run(changes), 0);
 });

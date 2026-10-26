@@ -2,22 +2,22 @@
   "schemaVersion": 1,
   "strykerVersion": "10.1.1",
   "target": 100,
-  "contextSha256": "dfd4a0dcf507800a9994986cbd0cb228c3cf5d3a8e4a963fe5d469e72ce81cdb",
+  "contextSha256": "cc527975cd642a9a3293d09866a4cf6be948ac634f21da3b2d4aeec2cd7ecf4c",
   "equivalents": [
     {
       "id": "EQ-COPY-OR",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "LogicalOperator",
       "original": "i < this.queued.length && written < length",
       "replacement": "i < this.queued.length || written < length",
       "location": {
         "start": {
-          "line": 83,
+          "line": 84,
           "column": 34
         },
         "end": {
-          "line": 83,
+          "line": 84,
           "column": 76
         }
       },
@@ -27,17 +27,17 @@
     {
       "id": "EQ-COPY-QUEUE-GUARD",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "ConditionalExpression",
       "original": "i < this.queued.length",
       "replacement": "true",
       "location": {
         "start": {
-          "line": 83,
+          "line": 84,
           "column": 34
         },
         "end": {
-          "line": 83,
+          "line": 84,
           "column": 56
         }
       },
@@ -47,17 +47,17 @@
     {
       "id": "EQ-COPY-QUEUE-BOUND",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "EqualityOperator",
       "original": "i < this.queued.length",
       "replacement": "i <= this.queued.length",
       "location": {
         "start": {
-          "line": 83,
+          "line": 84,
           "column": 34
         },
         "end": {
-          "line": 83,
+          "line": 84,
           "column": 56
         }
       },
@@ -67,17 +67,17 @@
     {
       "id": "EQ-COPY-WRITTEN-GUARD",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "ConditionalExpression",
       "original": "written < length",
       "replacement": "true",
       "location": {
         "start": {
-          "line": 83,
+          "line": 84,
           "column": 60
         },
         "end": {
-          "line": 83,
+          "line": 84,
           "column": 76
         }
       },
@@ -87,17 +87,17 @@
     {
       "id": "EQ-COPY-WRITTEN-BOUND",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "EqualityOperator",
       "original": "written < length",
       "replacement": "written <= length",
       "location": {
         "start": {
-          "line": 83,
+          "line": 84,
           "column": 60
         },
         "end": {
-          "line": 83,
+          "line": 84,
           "column": 76
         }
       },
@@ -107,18 +107,18 @@
     {
       "id": "EQ-CLEANUP-INITIAL-FLAG",
       "file": "src/mp3/count-frames.ts",
-      "sourceSha256": "d3e361d30e0c1836ee31dfcd94d21ae64e01597820321c3bfa227088b95560c0",
+      "sourceSha256": "055a441db1d911bdf148704de6c28bb113ac3397eb93554cdf9f5bee6848e529",
       "mutatorName": "BooleanLiteral",
       "original": "false",
       "replacement": "true",
       "location": {
-        "end": {
-          "column": 21,
-          "line": 27
-        },
         "start": {
-          "column": 16,
-          "line": 27
+          "line": 28,
+          "column": 16
+        },
+        "end": {
+          "line": 28,
+          "column": 21
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned bytes/count, typed errors, iterator lifecycle and bounded resource ownership; it does not promise identical instruction counts for bounded empty copies. Exact promise-resolution or internal microtask scheduling is not an API guarantee.",
@@ -127,18 +127,18 @@
     {
       "id": "EQ-CLEANUP-CONDITION",
       "file": "src/mp3/count-frames.ts",
-      "sourceSha256": "d3e361d30e0c1836ee31dfcd94d21ae64e01597820321c3bfa227088b95560c0",
+      "sourceSha256": "055a441db1d911bdf148704de6c28bb113ac3397eb93554cdf9f5bee6848e529",
       "mutatorName": "ConditionalExpression",
       "original": "failed",
       "replacement": "true",
       "location": {
-        "end": {
-          "column": 15,
-          "line": 34
-        },
         "start": {
-          "column": 9,
-          "line": 34
+          "line": 35,
+          "column": 9
+        },
+        "end": {
+          "line": 35,
+          "column": 15
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned bytes/count, typed errors, iterator lifecycle and bounded resource ownership; it does not promise identical instruction counts for bounded empty copies. Exact promise-resolution or internal microtask scheduling is not an API guarantee.",
@@ -147,138 +147,78 @@
     {
       "id": "EQ-CLEANUP-SUCCESS",
       "file": "src/mp3/count-frames.ts",
-      "sourceSha256": "d3e361d30e0c1836ee31dfcd94d21ae64e01597820321c3bfa227088b95560c0",
+      "sourceSha256": "055a441db1d911bdf148704de6c28bb113ac3397eb93554cdf9f5bee6848e529",
       "mutatorName": "BlockStatement",
       "original": "{\n      await reader.close();\n    }",
       "replacement": "{}",
       "location": {
-        "end": {
-          "column": 6,
-          "line": 44
-        },
         "start": {
-          "column": 12,
-          "line": 42
+          "line": 43,
+          "column": 12
+        },
+        "end": {
+          "line": 45,
+          "column": 6
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned bytes/count, typed errors, iterator lifecycle and bounded resource ownership; it does not promise identical instruction counts for bounded empty copies. Exact promise-resolution or internal microtask scheduling is not an API guarantee.",
-      "proof": "A successful count returns only after has() observes EOF and proves the remaining byte count is zero, either after the last frame or after skipTrailingMetadata, which rejects any byte left after trailing metadata. skipExactly has consumed and removed every queued chunk. The success-only close call is therefore already a no-op on all externally owned resources. The internal reader is not exposed to callers."
+      "proof": "A successful count returns only after has() observes EOF and proves no bytes remain, either after the last frame or when skipFrameBoundaryMetadata returns true. That helper returns true only after EOF, including after final ID3v1; embedded tags return false and traversal continues. skipExactly has consumed and released all queued chunks. The success-only close call is already a no-op on externally owned resources. Short acquisition may read EOF early, but success still consumes all bytes before returning. No reader escapes to callers."
     },
     {
       "id": "EQ-FREE-TIED-INITIAL",
       "file": "src/mp3/free-format.ts",
-      "sourceSha256": "0b90c38b871bf296b5996e3dd474c778bda1a68815b52925214cd6adf0082fc8",
+      "sourceSha256": "c848d4e2633b7b48a55f576305602aed40f8307140b37ab3ccf23915d653bf10",
       "mutatorName": "BooleanLiteral",
       "original": "false",
       "replacement": "true",
       "location": {
-        "end": {
-          "column": 19,
-          "line": 41
-        },
         "start": {
-          "column": 14,
-          "line": 41
+          "line": 115,
+          "column": 14
+        },
+        "end": {
+          "line": 115,
+          "column": 19
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and messages, iterator lifecycle and bounded resource ownership.",
-      "proof": "tied is read only after the loop, together with bestMatches < 3. Candidates reach the comparison only with at least three matches, and bestMatches starts at 0, so the first such candidate always takes the matches > bestMatches branch, which assigns tied = false. If no candidate qualifies, bestMatches < 3 throws regardless of tied."
-    },
-    {
-      "id": "EQ-FREE-PRECHECK",
-      "file": "src/mp3/free-format.ts",
-      "sourceSha256": "0b90c38b871bf296b5996e3dd474c778bda1a68815b52925214cd6adf0082fc8",
-      "mutatorName": "ConditionalExpression",
-      "original": "paddingAt(window, second, sampleRateIndex) === undefined",
-      "replacement": "false",
-      "location": {
-        "end": {
-          "column": 63,
-          "line": 71
-        },
-        "start": {
-          "column": 7,
-          "line": 71
-        }
-      },
-      "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and messages, iterator lifecycle and bounded resource ownership.",
-      "proof": "base = second - first.padding, so the first chain step computes next = base + first.padding = second and repeats the same paddingAt(window, second, sampleRateIndex) test. A second without a compatible free-format header therefore yields matches = 1, which the matches < 3 filter discards, unless the range filter already skipped it. The pre-check only avoids that work."
-    },
-    {
-      "id": "EQ-FREE-MIN-MATCH-FILTER",
-      "file": "src/mp3/free-format.ts",
-      "sourceSha256": "0b90c38b871bf296b5996e3dd474c778bda1a68815b52925214cd6adf0082fc8",
-      "mutatorName": "ConditionalExpression",
-      "original": "matches < 3",
-      "replacement": "false",
-      "location": {
-        "end": {
-          "column": 18,
-          "line": 86
-        },
-        "start": {
-          "column": 7,
-          "line": 86
-        }
-      },
-      "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and messages, iterator lifecycle and bounded resource ownership.",
-      "proof": "A one- or two-match candidate can affect only bestBase, bestMatches and tied. Any later candidate with three or more matches strictly exceeds it, replacing bestBase and resetting tied = false. After a qualifying best it neither exceeds nor equals it. If no candidate reaches three, the final bestMatches < 3 test throws. The returned base and the thrown error are unchanged."
-    },
-    {
-      "id": "EQ-FREE-DISTINCT-BASE",
-      "file": "src/mp3/free-format.ts",
-      "sourceSha256": "0b90c38b871bf296b5996e3dd474c778bda1a68815b52925214cd6adf0082fc8",
-      "mutatorName": "ConditionalExpression",
-      "original": "base !== bestBase",
-      "replacement": "true",
-      "location": {
-        "end": {
-          "column": 60,
-          "line": 50
-        },
-        "start": {
-          "column": 43,
-          "line": 50
-        }
-      },
-      "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and messages, iterator lifecycle and bounded resource ownership.",
-      "proof": "Each iteration uses a distinct second and the fixed first.padding, so base = second - first.padding differs from every earlier candidate, and the range filter keeps it above the initial bestBase of 0. The comparison is always true wherever it is evaluated."
+      "proof": "tied is read only after the bounded candidate loop. The first qualifying candidate has at least one MPEG header and therefore strictly exceeds initial bestMatches = 0; that branch resets tied = false. Subsequent comparisons do not depend on the initial value. If no candidate qualifies, bestMatches === 0 throws regardless of tied. Metadata evidence only breaks ties after a candidate has already been accepted and does not alter this initialization argument."
     },
     {
       "id": "EQ-ID3V2-FOOTER-VERSION",
       "file": "src/mp3/id3.ts",
-      "sourceSha256": "4cbddd9022701e5b59f1a2379cb3f9802a364fe15622d53f45498b64c8513b70",
+      "sourceSha256": "f13877e703b53e693eac737adf407af71eee039155000b7bef728ec8a96fbfa1",
       "mutatorName": "ConditionalExpression",
       "original": "version === 4",
       "replacement": "true",
       "location": {
-        "end": {
-          "column": 55,
-          "line": 110
-        },
         "start": {
-          "column": 42,
-          "line": 110
+          "line": 161,
+          "column": 42
+        },
+        "end": {
+          "line": 161,
+          "column": 55
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and messages, iterator lifecycle and bounded resource ownership.",
-      "proof": "readTagHeader throws for versions outside 2..4 and for flags outside the defined set: 0xc0 for ID3v2.2 and 0xe0 for ID3v2.3, both excluding the 0x10 footer flag. Only ID3v2.4 can reach hasFooter with flags & 0x10 set, so dropping the version test cannot change hasFooter, the bytes skipped or the footer check."
+      "proof": "Both streaming and bounded-probe paths call decodeTagHeader before using hasFooter. It rejects versions outside 2..4 and flags outside 0xc0 for v2.2 or 0xe0 for v2.3; those masks exclude footer bit0x10. Only v2.4 can therefore reach hasFooter with that bit set. Replacing this final version test with true changes neither the header result, streaming skip/footer checks nor probe boundary evidence. Probe catches invalid headers instead of accepting them; it does not bypass validation. The short-inference prefix probe validates every available header byte with the same decoder. An incomplete valid prefix returns undefined before constructing hasFooter; any returned TagHeader therefore has ten validated bytes. Missing version/flag completion witnesses cannot bypass the final complete-header guard or produce a footer for v2.2/v2.3."
     },
     {
       "id": "EQ-VBR-TEXT-GUARD",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "ConditionalExpression",
       "original": "offset + text.length <= frame.length",
       "replacement": "true",
       "location": {
-        "end": {
-          "column": 39,
-          "line": 5
-        },
         "start": {
-          "column": 3,
-          "line": 5
+          "line": 5,
+          "column": 3
+        },
+        "end": {
+          "line": 5,
+          "column": 39
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs. Out-of-range typed-array reads return undefined; isEncoderFrame receives a decoded MPEG-1 Layer III header and a view of exactly that frame's span from count-frames, or a test-constructed complete frame. The observable contract is the boolean result.",
@@ -287,18 +227,18 @@
     {
       "id": "EQ-VBR-TEXT-BOUND",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "EqualityOperator",
       "original": "offset + text.length <= frame.length",
       "replacement": "offset + text.length < frame.length",
       "location": {
-        "end": {
-          "column": 39,
-          "line": 5
-        },
         "start": {
-          "column": 3,
-          "line": 5
+          "line": 5,
+          "column": 3
+        },
+        "end": {
+          "line": 5,
+          "column": 39
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs. Out-of-range typed-array reads return undefined; isEncoderFrame receives a decoded MPEG-1 Layer III header and a view of exactly that frame's span from count-frames, or a test-constructed complete frame. The observable contract is the boolean result.",
@@ -307,18 +247,18 @@
     {
       "id": "EQ-VBR-TEXT-SUBTRACT",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "ArithmeticOperator",
       "original": "offset + text.length",
       "replacement": "offset - text.length",
       "location": {
-        "end": {
-          "column": 23,
-          "line": 5
-        },
         "start": {
-          "column": 3,
-          "line": 5
+          "line": 5,
+          "column": 3
+        },
+        "end": {
+          "line": 5,
+          "column": 23
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs. Out-of-range typed-array reads return undefined; isEncoderFrame receives a decoded MPEG-1 Layer III header and a view of exactly that frame's span from count-frames, or a test-constructed complete frame. The observable contract is the boolean result.",
@@ -327,18 +267,18 @@
     {
       "id": "EQ-VBR-U32-SUBTRACT-B",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "ArithmeticOperator",
       "original": "a * 0x1000000 + (b << 16)",
       "replacement": "a * 0x1000000 - (b << 16)",
       "location": {
-        "end": {
-          "column": 36,
-          "line": 13
-        },
         "start": {
-          "column": 11,
-          "line": 13
+          "line": 13,
+          "column": 11
+        },
+        "end": {
+          "line": 13,
+          "column": 36
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs. Out-of-range typed-array reads return undefined; isEncoderFrame receives a decoded MPEG-1 Layer III header and a view of exactly that frame's span from count-frames, or a test-constructed complete frame. The observable contract is the boolean result.",
@@ -347,18 +287,18 @@
     {
       "id": "EQ-VBR-U32-SUBTRACT-C",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "ArithmeticOperator",
       "original": "a * 0x1000000 + (b << 16) + (c << 8)",
       "replacement": "a * 0x1000000 + (b << 16) - (c << 8)",
       "location": {
-        "end": {
-          "column": 47,
-          "line": 13
-        },
         "start": {
-          "column": 11,
-          "line": 13
+          "line": 13,
+          "column": 11
+        },
+        "end": {
+          "line": 13,
+          "column": 47
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs. Out-of-range typed-array reads return undefined; isEncoderFrame receives a decoded MPEG-1 Layer III header and a view of exactly that frame's span from count-frames, or a test-constructed complete frame. The observable contract is the boolean result.",
@@ -367,18 +307,18 @@
     {
       "id": "EQ-XING-FLAGS-GUARD",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "ConditionalExpression",
       "original": "position + 8 > frame.length",
       "replacement": "false",
       "location": {
-        "end": {
-          "column": 34,
-          "line": 18
-        },
         "start": {
-          "column": 7,
-          "line": 18
+          "line": 18,
+          "column": 7
+        },
+        "end": {
+          "line": 18,
+          "column": 34
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs. Out-of-range typed-array reads return undefined; isEncoderFrame receives a decoded MPEG-1 Layer III header and a view of exactly that frame's span from count-frames, or a test-constructed complete frame. The observable contract is the boolean result.",
@@ -387,18 +327,18 @@
     {
       "id": "EQ-XING-FLAGS-SUBTRACT",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "ArithmeticOperator",
       "original": "position + 8",
       "replacement": "position - 8",
       "location": {
-        "end": {
-          "column": 19,
-          "line": 18
-        },
         "start": {
-          "column": 7,
-          "line": 18
+          "line": 18,
+          "column": 7
+        },
+        "end": {
+          "line": 18,
+          "column": 19
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs. Out-of-range typed-array reads return undefined; isEncoderFrame receives a decoded MPEG-1 Layer III header and a view of exactly that frame's span from count-frames, or a test-constructed complete frame. The observable contract is the boolean result.",
@@ -407,18 +347,18 @@
     {
       "id": "EQ-VBRI-LENGTH-GUARD",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "ConditionalExpression",
       "original": "position + 26 > frame.length",
       "replacement": "false",
       "location": {
-        "end": {
-          "column": 71,
-          "line": 33
-        },
         "start": {
-          "column": 43,
-          "line": 33
+          "line": 33,
+          "column": 43
+        },
+        "end": {
+          "line": 33,
+          "column": 71
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs. Out-of-range typed-array reads return undefined; isEncoderFrame receives a decoded MPEG-1 Layer III header and a view of exactly that frame's span from count-frames, or a test-constructed complete frame. The observable contract is the boolean result.",
@@ -427,18 +367,18 @@
     {
       "id": "EQ-VBRI-LENGTH-BOUND",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "EqualityOperator",
       "original": "position + 26 > frame.length",
       "replacement": "position + 26 >= frame.length",
       "location": {
-        "end": {
-          "column": 71,
-          "line": 33
-        },
         "start": {
-          "column": 43,
-          "line": 33
+          "line": 33,
+          "column": 43
+        },
+        "end": {
+          "line": 33,
+          "column": 71
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs. Out-of-range typed-array reads return undefined; isEncoderFrame receives a decoded MPEG-1 Layer III header and a view of exactly that frame's span from count-frames, or a test-constructed complete frame. The observable contract is the boolean result.",
@@ -447,18 +387,18 @@
     {
       "id": "EQ-VBRI-LENGTH-SUBTRACT",
       "file": "src/mp3/encoder-frame.ts",
-      "sourceSha256": "f210969f512d71a6bd71ae32506bca3fd5b6425ba5b879edaac7103cbb45d270",
+      "sourceSha256": "c2ca9dba0d79d33ae816711eb2bfa344eae082cb45dc821498edb063a1f5e1e8",
       "mutatorName": "ArithmeticOperator",
       "original": "position + 26",
       "replacement": "position - 26",
       "location": {
-        "end": {
-          "column": 56,
-          "line": 33
-        },
         "start": {
-          "column": 43,
-          "line": 33
+          "line": 33,
+          "column": 43
+        },
+        "end": {
+          "line": 33,
+          "column": 56
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs. Out-of-range typed-array reads return undefined; isEncoderFrame receives a decoded MPEG-1 Layer III header and a view of exactly that frame's span from count-frames, or a test-constructed complete frame. The observable contract is the boolean result.",
@@ -467,18 +407,18 @@
     {
       "id": "EQ-QUEUE-EMPTY-FAST-PATH",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "ConditionalExpression",
       "original": "this.headIndex === this.queued.length",
       "replacement": "false",
       "location": {
-        "end": {
-          "column": 50,
-          "line": 114
-        },
         "start": {
-          "column": 13,
-          "line": 114
+          "line": 115,
+          "column": 13
+        },
+        "end": {
+          "line": 115,
+          "column": 50
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no private-state reflection, prototype monkey-patching or concurrent mutation. The observable contract includes returned bytes and counts, typed errors, iterator lifecycle and bounded live queue storage. It does not promise an exact compaction frequency, identical instruction counts, or a particular throughput measurement.",
@@ -487,18 +427,18 @@
     {
       "id": "EQ-QUEUE-EAGER-COMPACTION",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "ConditionalExpression",
       "original": "this.headIndex >= 1_024",
       "replacement": "true",
       "location": {
-        "end": {
-          "column": 43,
-          "line": 117
-        },
         "start": {
-          "column": 20,
-          "line": 117
+          "line": 118,
+          "column": 20
+        },
+        "end": {
+          "line": 118,
+          "column": 43
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no private-state reflection, prototype monkey-patching or concurrent mutation. The observable contract includes returned bytes and counts, typed errors, iterator lifecycle and bounded live queue storage. It does not promise an exact compaction frequency, identical instruction counts, or a particular throughput measurement.",
@@ -507,18 +447,18 @@
     {
       "id": "EQ-QUEUE-COMPACTION-BOUNDARY",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "EqualityOperator",
       "original": "this.headIndex >= 1_024",
       "replacement": "this.headIndex > 1_024",
       "location": {
-        "end": {
-          "column": 43,
-          "line": 117
-        },
         "start": {
-          "column": 20,
-          "line": 117
+          "line": 118,
+          "column": 20
+        },
+        "end": {
+          "line": 118,
+          "column": 43
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no private-state reflection, prototype monkey-patching or concurrent mutation. The observable contract includes returned bytes and counts, typed errors, iterator lifecycle and bounded live queue storage. It does not promise an exact compaction frequency, identical instruction counts, or a particular throughput measurement.",
@@ -527,22 +467,82 @@
     {
       "id": "EQ-QUEUE-EAGER-INVERTED-BOUND",
       "file": "src/mp3/byte-reader.ts",
-      "sourceSha256": "8e4bff0631a38e9421b39c129525d3b7ab61c8a3f47423a2d17f08f6a5327fab",
+      "sourceSha256": "bb74f57593547411c3d4bacf4d6bec9e79cb4f11facdbe53c74e8608decd5511",
       "mutatorName": "EqualityOperator",
       "original": "this.headIndex >= 1_024",
       "replacement": "this.headIndex < 1_024",
       "location": {
-        "end": {
-          "column": 43,
-          "line": 117
-        },
         "start": {
-          "column": 20,
-          "line": 117
+          "line": 118,
+          "column": 20
+        },
+        "end": {
+          "line": 118,
+          "column": 43
         }
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no private-state reflection, prototype monkey-patching or concurrent mutation. The observable contract includes returned bytes and counts, typed errors, iterator lifecycle and bounded live queue storage. It does not promise an exact compaction frequency, identical instruction counts, or a particular throughput measurement.",
       "proof": "headIndex starts at zero. With the mutated <1024 comparison, the first completed chunk increments it to one. If the queue empties, the unchanged empty branch resets it to zero; otherwise one is below 1024, so compaction removes the cleared prefix and resets it to zero. Induction gives the same reset on every later completed chunk. Thus this exact mutant performs eager nonempty compaction, equivalent to EQ-QUEUE-EAGER-COMPACTION for bytes, offsets, errors, lifecycle and bounded storage. It cannot reach the apparent no-compaction state at headIndex>=1024 under a single-mutant execution."
+    },
+    {
+      "id": "EQ-FREE-OUTSIDE-PROBE-GUARD",
+      "file": "src/mp3/free-format.ts",
+      "mutatorName": "ConditionalExpression",
+      "original": "end > window.length",
+      "replacement": "false",
+      "proof": "When end exceeds the fixed probe length, the original breaks after appending the current frame descriptor. Without that early guard, probeMetadata(window, end) inspects only empty subarrays and returns the same offset, zero tags and canEnd=true; neither ID3 signature can match. Adding zero tags does not change metadataMatches or anchored. The offset is strictly beyond, not equal to, the probe end, so the EOF branch is not taken. headerAt then returns undefined at its offset+4>length guard and the loop terminates. The returned base, frame descriptors, matches, anchored and metadataMatches are identical. Candidate positions and spans are bounded finite nonnegative integers. No reader method, iterator operation or payload decoder is invoked on the extra path. It allocates only a fixed number of temporary empty views within the already bounded candidate loop; retained input, lookahead, cursor movement and resource ownership do not change.",
+      "sourceSha256": "c848d4e2633b7b48a55f576305602aed40f8307140b37ab3ccf23915d653bf10",
+      "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and offsets/messages, iterator lifecycle, bounded lookahead and resource ownership. Exact internal instruction counts or promise/microtask scheduling are not API guarantees.",
+      "location": {
+        "start": {
+          "line": 47,
+          "column": 9
+        },
+        "end": {
+          "line": 47,
+          "column": 28
+        }
+      }
+    },
+    {
+      "id": "EQ-ID3-EOF-FAST-PATH",
+      "file": "src/mp3/id3.ts",
+      "mutatorName": "BooleanLiteral",
+      "original": "true",
+      "replacement": "false",
+      "proof": "This return is reached only after atEnd is true or a complete final ID3v1 has been skipped, and after reader.has(1) has returned false. The reader is therefore at zero available bytes with its iterator-done state cached. countFrames calls this helper only after at least one MPEG frame. Returning false instead of true makes countFrames continue once: its has(4) returns false from cached EOF, validateFrameSequenceEnd observes frames>0 and its has(1) also returns false, then traversal returns the identical frames-minus-excludedEncoderFrame value. Neither has call invokes the iterator, consumes bytes or allocates a larger buffer; the offset and typed error behavior are unchanged. The same finally block closes the reader once; cached completion prevents an additional iterator.return call. The only difference is bounded control flow and internal promise scheduling after EOF, which is not part of the public contract.",
+      "sourceSha256": "f13877e703b53e693eac737adf407af71eee039155000b7bef728ec8a96fbfa1",
+      "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and offsets/messages, iterator lifecycle, bounded lookahead and resource ownership. Exact internal instruction counts or promise/microtask scheduling are not API guarantees.",
+      "location": {
+        "start": {
+          "line": 93,
+          "column": 12
+        },
+        "end": {
+          "line": 93,
+          "column": 16
+        }
+      }
+    },
+    {
+      "id": "EQ-ID3-PREFIX-COMPLETENESS",
+      "file": "src/mp3/id3.ts",
+      "sourceSha256": "f13877e703b53e693eac737adf407af71eee039155000b7bef728ec8a96fbfa1",
+      "mutatorName": "ConditionalExpression",
+      "original": "bytes.length < ID3V2_HEADER_BYTES",
+      "replacement": "false",
+      "location": {
+        "start": {
+          "line": 157,
+          "column": 7
+        },
+        "end": {
+          "line": 157,
+          "column": 40
+        }
+      },
+      "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned bytes/count, typed errors, iterator lifecycle and bounded resource ownership; it does not promise identical instruction counts for bounded empty copies. Exact promise-resolution or internal microtask scheduling is not an API guarantee.",
+      "proof": "The private decoder has two strict callers, readTagHeader and probeTagEnvelope, which prove a complete ten-byte header before calling. Its only incomplete-input caller is hasPossibleMetadataPrefix, which observes metadata plausibility, not the returned header or size. For a still-plausible prefix shorter than ten bytes, every available size byte has already passed the synchsafe check. Missing size bytes coerce to zero in the bounded bitwise size expression, so bodyLength remains nonnegative. A computed footer begins at least ten bytes from the prefix start, beyond all available bytes; its supplied footer view is empty and matchesFooterPrefix returns true. Without a footer the other branch likewise returns true. The original undefined result also returns true immediately. Invalid prefixes still throw at the same earlier validation and become false in the same caller. No reader method, iterator operation, cursor, propagated error, returned count or resource ownership changes. Only a fixed local header object and bounded arithmetic are added; neither retained-input size nor asymptotic memory/work bounds change."
     }
   ]
 }

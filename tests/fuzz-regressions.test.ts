@@ -53,3 +53,12 @@ it('replays a valid free-format stream below the old 96-byte-per-frame fuzz boun
     await expect(countMp3Frames(chunks(bytes, [size]))).resolves.toBe(3);
   }
 });
+
+it.each([
+  ['free-format-prefix-only.bin', 63],
+  ['free-format-prefix-crc.bin', 69],
+] as const)('replays original silent prefix-sized frames from %s', async (filename, length) => {
+  const bytes = await readFile(new URL(`../fuzz/regressions/raw/${filename}`, import.meta.url));
+  expect(bytes.length).toBe(length);
+  for (const size of [1, 7, 4096]) expect(await countMp3Frames(chunks(bytes, [size]))).toBe(3);
+});

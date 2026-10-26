@@ -176,8 +176,8 @@ describe('free-format candidate characterization', () => {
     await reader.close();
   });
 
-  it.each([8647, 9000])(
-    'stops discovery at the bounded probe within a %i-byte input chunk',
+  it.each([8648, 9000])(
+    'stops discovery after the bounded probe and EOF witness within a %i-byte input chunk',
     async (size) => {
       const bytes = headerWindow(size, [0, 2881, 5762, 8643]);
       for (const offset of [0, 2881, 5762, 8643]) bytes[offset + 2] = 2;
@@ -192,4 +192,23 @@ describe('free-format candidate characterization', () => {
       expect(events).toEqual(['next:0', 'return']);
     },
   );
+
+  it('requests EOF once when the input exactly fills the searched window', async () => {
+    const bytes = headerWindow(8647, [0, 2881, 5762, 8643]);
+    for (const offset of [0, 2881, 5762, 8643]) bytes[offset + 2] = 2;
+    const { input, events } = trackedInput([bytes]);
+    const reader = new AsyncByteReader(input);
+    await expect(infer(reader)).resolves.toBe(2880);
+    expect(reader.offset).toBe(0);
+    expect(reader.bufferedLength).toBe(8647);
+    expect(reader.peek(8647)).toEqual(bytes);
+    expect(events).toEqual(['next:0', 'next:1']);
+    await reader.close();
+    expect(events).toEqual(['next:0', 'next:1']);
+
+    const failure = new Error('EOF witness read failed');
+    const failed = trackedInput([bytes], failure);
+    await expect(countMp3Frames(failed.input)).rejects.toBe(failure);
+    expect(failed.events).toEqual(['next:0', 'next:1', 'return']);
+  });
 });
