@@ -311,7 +311,7 @@ test(
 );
 
 test(
-  'encoder identity preserves executable symlink bytes and stdout plus stderr',
+  'encoder identity fingerprints a symlink target and stdout plus stderr',
   { skip: process.platform === 'win32' },
   async () => {
     const f = await encoderFixture(null);

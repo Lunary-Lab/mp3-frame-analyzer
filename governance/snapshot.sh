@@ -38,7 +38,6 @@ read_endpoint() { # label endpoint [jq filter]
   read_endpoint actions_permissions "$r/actions/permissions" 'del(.selected_actions_url)'
   read_endpoint actions_selected "$r/actions/permissions/selected-actions"
   read_endpoint actions_workflow_token "$r/actions/permissions/workflow"
-  read_endpoint actions_access_level "$r/actions/permissions/access"
   read_endpoint actions_fork_pr_approval "$r/actions/permissions/fork-pr-contributor-approval"
   read_endpoint actions_retention "$r/actions/permissions/artifact-and-log-retention"
   read_endpoint actions_oidc_subject "$r/actions/oidc/customization/sub" '{use_default}'
@@ -57,7 +56,5 @@ read_endpoint() { # label endpoint [jq filter]
   read_endpoint webhooks "$r/hooks" '[.[] | {name, events, active}]'
   read_endpoint deploy_keys "$r/keys" '[.[] | {title, read_only}]'
   read_endpoint autolinks "$r/autolinks" 'length'
-  read_endpoint releases "$r/releases?per_page=100" '[.[] | {tag_name, draft, prerelease, immutable}]'
-  read_endpoint tags "$r/git/matching-refs/tags/" '[.[] | {ref, type: .object.type, sha: .object.sha}]'
 } | jq -s --arg repository "$owner/$repo" --arg captured_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   '{repository: $repository, captured_at: $captured_at, settings: add}'

@@ -26,167 +26,164 @@ on:
 permissions:
   contents: read
 
+env:
+  NPM_CONFIG_UPDATE_NOTIFIER: 'false'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  SEMGREP_SEND_METRICS: 'off'
+  SEMGREP_ENABLE_VERSION_CHECK: '0'
+  SEMGREP_SUPPRESS_ERRORS: 'false'
+  OTEL_SDK_DISABLED: 'true'
+
+# Scheduled/full-manual runs use unique groups: cancel=false alone still replaces pending runs.
+# Release validation is isolated; the separate publisher retains its publication lock.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ inputs.ref || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ (inputs.ref != '' || inputs.release_tag != '') && format('release-{0}-{1}', inputs.release_tag, inputs.ref) || github.event_name == 'schedule' && format('scheduled-{0}', github.run_id) || github.event_name == 'workflow_dispatch' && inputs.full_mutation == true && format('full-{0}', github.run_id) || format('validation-{0}', github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && format('fork-pr-{0}', github.event.pull_request.number) || github.head_ref != '' && format('refs/heads/{0}', github.head_ref) || github.ref) }}
+  cancel-in-progress: ${{ inputs.ref == '' && inputs.release_tag == '' && github.event_name != 'schedule' && !(github.event_name == 'workflow_dispatch' && inputs.full_mutation == true) }}
 
 jobs:
-  quality:
-    name: Quality (Node ${{ matrix.node }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        node: ['24', '26']
+  governance:
+    name: Repository governance
+    uses: ./.github/workflows/governance.yml
+    with:
+      ref: ${{ inputs.ref || github.sha }}
+
+  format:
+    name: Formatting
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: ./.github/actions/setup-project
+      - run: npm run format:check
+
+  lint:
+    name: Lint and workflow policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: ${{ matrix.node }}
-          cache: npm
-      - name: Use the documented package manager
-        run: npm install --global npm@11.19.0 --ignore-scripts --no-audit --no-fund
-      - name: Install locked dependencies
-        run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Verify real free-format MP3 fixtures with independent LAME encoder
-        if: matrix.node == '24'
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - run: npm run lint
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+      - name: Lint native workflow syntax without compatibility bypasses
         run: |
-          if ! command -v lame >/dev/null 2>&1; then
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq --no-install-recommends lame
-          fi
-          lame --version
-          node scripts/encoder-fixtures.mjs
-      - run: npm run check
-      - name: Exercise real mutation-cache invalidation and survivor detection
-        if: matrix.node == '24'
-        run: npm run test:mutation-cache:integration
-      - name: Upload mutation-cache verification evidence
-        if: always() && matrix.node == '24'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+          go telemetry off
+          test "$(go env GOTELEMETRY)" = off
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          "$(go env GOPATH)/bin/actionlint" -color
+
+  types:
+    name: TypeScript (current and legacy)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          name: mutation-cache-verification
-          path: reports/mutation-cache-validation/
-          if-no-files-found: ignore
-          retention-days: 14
-      - name: Verify release version agreement
-        run: npm run verify:version
-        env:
-          SOURCE_COMMIT: ${{ inputs.ref || github.sha }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-      - name: Deterministic mutation smoke and fuzz-tooling tests
-        run: node scripts/fuzz-parser.mjs && npm run test:fuzz-tooling
-        if: matrix.node == '24'
-      - name: Replay the fuzz regression corpus
-        run: node scripts/run-jazzer.mjs --regression
-        if: matrix.node == '24'
-      - name: Bounded coverage-guided fuzzing
-        run: node scripts/run-jazzer.mjs
-        if: matrix.node == '24'
-      - name: Verify bounded memory growth
-        if: matrix.node == '24'
-        shell: bash
-        run: |
-          mkdir -p reports/performance
-          node --expose-gc scripts/memory-benchmark.mjs | tee reports/performance/memory.json
-      - name: Measure valid HTTP uploads and responsiveness
-        if: matrix.node == '24'
-        shell: bash
-        run: |
-          mkdir -p reports/performance
-          node scripts/http-performance.mjs | tee reports/performance/http.json
-      - name: Audit production dependencies
-        if: matrix.node == '24'
-        run: npm run audit:production
-      - name: Audit the complete build and test dependency tree
-        if: matrix.node == '24'
-        run: npm run audit:dependencies
-      - name: Package the existing compiled application
-        if: matrix.node == '24'
-        run: npm run package:release
-        env:
-          SOURCE_COMMIT: ${{ inputs.ref || github.sha }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-      - name: Install and test the unpacked runtime artifact
-        if: matrix.node == '24'
-        run: npm run test:artifact
-        env:
-          SOURCE_COMMIT: ${{ inputs.ref || github.sha }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-      - name: Preserve the tested bytes for release publication
-        if: matrix.node == '24'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - run: npm run typecheck && npm run typecheck:legacy
+
+  unit:
+    name: Runtime unit and coverage (Node 24)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          name: release-assets
-          path: release/
-          if-no-files-found: error
-          retention-days: 14
-      - name: Upload performance measurements
-        if: always() && matrix.node == '24'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: performance-measurements
-          path: reports/performance/
-          if-no-files-found: ignore
-          retention-days: 14
-      - name: Upload coverage report
-        if: always() && matrix.node == '24'
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - run: npm run test:coverage
+      - name: Retain coverage-report
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-report
           path: coverage/
-          if-no-files-found: ignore
-          retention-days: 14
-      - name: Upload fuzz crashes when tests fail
-        if: failure() && matrix.node == '24'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: fuzz-crashes
-          path: fuzz/crashes/
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 14
 
-  npm-compatibility:
-    name: Clean install (npm 11.9)
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
+  compatibility:
+    name: Node ${{ matrix.node }} and npm ${{ matrix.npm }} compatibility
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node: '26'
+            npm: '11.19.0'
+          - node: '24'
+            npm: '11.9.0'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: ./.github/actions/setup-project
         with:
-          node-version: '24'
-          package-manager-cache: false
-      - run: npm install --global npm@11.9.0 --ignore-scripts --no-audit --no-fund
-      - run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: npm run build
-      - run: npm test
+          node: ${{ matrix.node }}
+          npm: ${{ matrix.npm }}
+      - run: npm run check
+        if: matrix.node == '26'
+      - run: npm run build && npm test
+        if: matrix.npm == '11.9.0'
+
+  tooling:
+    name: Tooling and policy regressions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - run: npm run test:mutation-policy && npm run test:tooling
+
+  mutation-cache:
+    name: Mutation cache regression (complete campaign)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - run: npm run test:mutation-cache:integration
+      - name: Retain mutation-cache-verification
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-cache-verification
+          path: reports/mutation-cache-validation/
+          if-no-files-found: error
+          retention-days: 14
 
   mutation:
     name: Full parser mutation gate (100% adjusted)
     permissions:
       contents: read
       actions: read
-    needs: quality
-    runs-on: ubuntu-latest
+    needs: [types, unit, tooling]
+    runs-on: ubuntu-24.04
     timeout-minutes: 65
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm install --global npm@11.19.0 --ignore-scripts --no-audit --no-fund
-      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./.github/actions/setup-project
       - name: Restore only an authenticated successful exact-base main artifact
         if: github.event_name != 'schedule' && inputs.ref == '' && inputs.release_tag == '' && inputs.full_mutation != true
         env:
@@ -226,47 +223,190 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-  security:
-    name: Secret scanning and focused SAST
-    runs-on: ubuntu-latest
+  encoder:
+    name: Genuine encoder provenance (LAME 3.100)
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.sha }}
-          fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install required independent encoder
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends lame
+      - name: Regenerate, decode and verify every fixed encoder fixture
+        run: node scripts/encoder-fixtures.mjs
+
+  npm-audit:
+    name: npm dependency CVEs (${{ matrix.scope }}, moderate+)
+    strategy:
+      fail-fast: false
+      matrix:
+        scope: [production, full]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+        with:
+          install: 'false'
+      - name: Audit production dependencies
+        if: matrix.scope == 'production'
+        run: npm run audit:production
+      - name: Audit the complete build and test dependency tree
+        if: matrix.scope == 'full'
+        run: npm run audit:dependencies
+
+  secrets:
+    name: Secrets (complete Git history)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.3'
-      - name: Install and run actionlint
+      - name: Install pinned Betterleaks without optional Go telemetry
         run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          "$(go env GOPATH)/bin/actionlint" -color
-      - name: Install pinned Betterleaks
-        run: go install github.com/betterleaks/betterleaks@v1.9.0
+          go telemetry off
+          test "$(go env GOTELEMETRY)" = off
+          go install github.com/betterleaks/betterleaks@v1.9.0
       - name: Scan entire Git history for secrets
         run: '"$(go env GOPATH)/bin/betterleaks" git . --no-banner'
+
+  semgrep:
+    name: Semgrep focused SAST
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
       - name: Install pinned Semgrep CE in an isolated environment
         run: |
           python3 -m venv "${RUNNER_TEMP}/semgrep-venv"
           "${RUNNER_TEMP}/semgrep-venv/bin/python" -m pip install 'semgrep==1.182.1'
-      - name: Application architecture security rules
-        run: '"${RUNNER_TEMP}/semgrep-venv/bin/semgrep" scan --config .semgrep.yml --error --metrics=off src'
+      - name: Application architecture rules without optional reporting
+        run: '"${RUNNER_TEMP}/semgrep-venv/bin/semgrep" scan --config .semgrep.yml --strict --error --metrics=off --disable-version-check --no-trace src'
+
+  fuzz:
+    name: Fuzz regression and bounded resources
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - run: npm run build
+      - run: node scripts/fuzz-parser.mjs && npm run test:fuzz-tooling
+      - run: node scripts/run-jazzer.mjs --regression
+      - run: node scripts/run-jazzer.mjs
+      - name: Verify bounded memory and valid HTTP load
+        shell: bash
+        run: |
+          mkdir -p reports/performance
+          node --expose-gc scripts/memory-benchmark.mjs | tee reports/performance/memory.json
+          node scripts/http-performance.mjs | tee reports/performance/http.json
+      - name: Retain performance-measurements
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: performance-measurements
+          path: reports/performance/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload fuzz crashes when tests fail
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-crashes
+          path: fuzz/crashes/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  package:
+    name: Build, artifact verification and real runtime smoke
+    needs: [types, unit]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - run: npm run build
+      - run: npm run verify:version && npm run package:release
+        env:
+          SOURCE_COMMIT: ${{ inputs.ref || github.sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+      - name: Install and test the unpacked production-only runtime
+        run: npm run test:artifact
+        env:
+          SOURCE_COMMIT: ${{ inputs.ref || github.sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+      - name: Preserve the same tested artifact bytes
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-assets
+          path: release/
+          if-no-files-found: error
+          retention-days: 14
 
   all-checks:
     name: All checks
     if: always()
-    needs: [quality, npm-compatibility, mutation, security]
-    runs-on: ubuntu-latest
+    needs:
+      [
+        format,
+        lint,
+        types,
+        unit,
+        compatibility,
+        tooling,
+        mutation-cache,
+        mutation,
+        encoder,
+        npm-audit,
+        secrets,
+        semgrep,
+        fuzz,
+        package,
+        governance,
+      ]
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
-      - name: Require every validation job to succeed
+      - name: Require every declared job; no skipped or missing evidence is accepted
         env:
           RESULTS: ${{ toJSON(needs) }}
         run: |
           node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          const expected = [
+            'format', 'lint', 'types', 'unit', 'compatibility', 'tooling', 'mutation-cache',
+            'mutation', 'encoder', 'npm-audit', 'secrets', 'semgrep', 'fuzz', 'package', 'governance',
+          ];
           const jobs = JSON.parse(process.env.RESULTS);
-          const failed = Object.entries(jobs).filter(([, job]) => job.result !== 'success');
-          if (failed.length) throw new Error(`Required jobs did not pass: ${failed.map(([name]) => name).join(', ')}`);
+          assert.ok(jobs && typeof jobs === 'object' && !Array.isArray(jobs), 'Missing job evidence');
+          assert.deepEqual(Object.keys(jobs).sort(), expected.sort(), 'Incomplete or unexpected job inventory');
+          const failed = expected.filter((name) => jobs[name]?.result !== 'success');
+          assert.deepEqual(failed, [], `Required jobs did not pass: ${failed.join(', ')}`);
           JS
