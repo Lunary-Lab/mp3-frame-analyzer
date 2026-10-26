@@ -375,8 +375,10 @@ jobs:
           "$python" -I -m pip --isolated --disable-pip-version-check install --no-index --find-links "$wheels" --require-hashes --only-binary=:all: --no-cache-dir --requirement "$lock"
           "$python" -I -m pip --isolated --disable-pip-version-check --no-cache-dir check
           "$python" -I scripts/test-semgrep-lock.py "$wheels"
+      - name: Test every configured architecture pattern with native fixtures
+        run: '"${RUNNER_TEMP}/semgrep-venv/bin/semgrep" --test --strict --config .semgrep.yml --scan-unknown-extensions --metrics=off --disable-version-check --no-trace tests/semgrep/runtime-execution.ts.fixture'
       - name: Application architecture rules without optional reporting
-        run: '"${RUNNER_TEMP}/semgrep-venv/bin/semgrep" scan --config .semgrep.yml --strict --error --metrics=off --disable-version-check --no-trace src'
+        run: '"${RUNNER_TEMP}/semgrep-venv/bin/semgrep" scan --config .semgrep.yml --strict --error --metrics=off --disable-version-check --no-trace --disable-nosem src'
 
   fuzz:
     name: Fuzz regression and bounded resources

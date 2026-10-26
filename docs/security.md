@@ -26,6 +26,26 @@ An oversized multipart `Content-Length` rejects before reading with sanitized `4
 
 Lefthook checks staged secret content when explicitly installed by the developer. A missing Betterleaks binary fails the hook; GitHub Actions runs the history scan independently so bypassing local hooks does not bypass CI.
 
+The Semgrep runtime boundary rejects loading or re-exporting `child_process`
+(with or without `node:`), rather than guessing execution from a function's local
+name. This covers renamed imports, namespace/default imports, synchronous APIs,
+direct CommonJS/dynamic imports with plain or template literals and simple
+constant module names, and direct or imported Node built-in loader functions.
+Named/aliased/default/namespace `process` imports and bracket/optional
+`module.require` forms have positive regressions. The module is not
+needed by the runtime; intentional encoder processes stay in `scripts/`, outside
+this application-only rule. Harmless `RegExp.exec` and unrelated methods are not
+process execution. `eval` and `Function` calls are also forbidden.
+
+The mandatory Semgrep job first runs native positive/negative rule tests against
+`tests/semgrep/runtime-execution.ts.fixture`; these examples are parsed, never
+executed, and use no real secrets or audio. The same checked-in rules then scan
+`src/`. The production scan disables `nosemgrep` suppression; both commands disable
+optional reporting, and native tests use strict configuration validation. New
+false positives require a reviewed rule refinement with a negative fixture, not
+an inline ignore. Static rules cannot prove the absence of every reflective or
+obfuscated JavaScript execution mechanism.
+
 The static checks complement behavioral tests; they do not establish comprehensive vulnerability coverage. The security lint rule `detect-object-injection` is disabled because this binary parser deliberately indexes validated byte arrays and fixed tables; the rule cannot establish whether an index is safely bounded. The remaining recommended security rules stay enabled. A public deployment still needs host/container hardening, deployment-specific threat modeling, sustained load testing, and incident monitoring.
 
 When a consumer rejects multipart input early, its error can respond before the remainder arrives. Remaining file bytes drain in the background only while the aggregate body budget and transport timeouts permit. Successful early consumers instead await draining and form validation before acceptance, including file-size and empty-file checks. Every started consumer iterator is closed on early return/rejection; normal EOF completes it without redundant cleanup. Cleanup rejection after success fails the operation; secondary cleanup rejection is logged without replacing an earlier error. Raw early success and failure both close after the response rather than drain. This API cannot stop arbitrary detached tasks inside a custom consumer.

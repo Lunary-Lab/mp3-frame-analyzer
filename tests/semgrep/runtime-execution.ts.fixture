@@ -1,0 +1,103 @@
+// Never executed. Synthetic examples for the runtime architecture boundary.
+// ruleid: mp3-api-no-shell-command-execution
+import { exec as run } from 'node:child_process';
+run('synthetic');
+// ruleid: mp3-api-no-shell-command-execution
+import * as child from 'child_process';
+child.exec('synthetic');
+// ruleid: mp3-api-no-shell-command-execution
+import childDefault from 'node:child_process';
+childDefault.spawnSync('synthetic');
+// ruleid: mp3-api-no-shell-command-execution
+import { spawnSync } from 'child_process';
+spawnSync('synthetic');
+// ruleid: mp3-api-no-shell-command-execution
+import 'node:child_process';
+// ruleid: mp3-api-no-shell-command-execution
+const { execFileSync: execute } = require('node:child_process');
+execute('synthetic');
+// ruleid: mp3-api-no-shell-command-execution
+const processModule = await import('child_process');
+processModule.execFile('synthetic');
+// ok: mp3-api-no-shell-command-execution
+import { Readable } from 'node:stream';
+// ok: mp3-api-no-shell-command-execution
+const pattern = /synthetic/.exec('synthetic');
+// ok: mp3-api-no-shell-command-execution
+const text = "import {exec} from 'node:child_process'";
+// ruleid: mp3-api-no-dynamic-code-execution
+eval('synthetic');
+// ruleid: mp3-api-no-dynamic-code-execution
+new Function('return 1');
+// ok: mp3-api-no-dynamic-code-execution
+JSON.parse('{"synthetic":true}');
+// ruleid: mp3-api-no-shell-command-execution
+const syncRunner = module.require('child_process').execSync;
+syncRunner('synthetic');
+// ruleid: mp3-api-no-shell-command-execution
+const builtIn = process.getBuiltinModule('node:child_process');
+builtIn.execFileSync('synthetic');
+// ruleid: mp3-api-no-shell-command-execution
+import legacy = require('child_process');
+legacy.fork('synthetic');
+// ruleid: mp3-api-no-shell-command-execution
+export * from 'node:child_process';
+// ruleid: mp3-api-no-shell-command-execution
+export { execFile as exportedRunner } from 'child_process';
+// ok: mp3-api-no-shell-command-execution
+const local = { exec: () => 'synthetic' };
+local.exec();
+// ok: mp3-api-no-shell-command-execution
+const stream = await import('node:stream');
+// ok: mp3-api-no-shell-command-execution
+const label = 'node:child_process';
+// ruleid: mp3-api-no-dynamic-code-execution
+Function('return 1');
+// ruleid: mp3-api-no-shell-command-execution
+import { execFile } from 'node:child_process';
+execFile('synthetic');
+
+// ruleid: mp3-api-no-shell-command-execution
+const templateRequired = require(`child_process`);
+// ruleid: mp3-api-no-shell-command-execution
+const templateImported = import(`node:child_process`);
+const constantModule = 'child_process';
+// ruleid: mp3-api-no-shell-command-execution
+const constantRequired = require(constantModule);
+const constantNodeModule = 'node:child_process';
+// ruleid: mp3-api-no-shell-command-execution
+const constantImported = import(constantNodeModule);
+const safeModule = 'node:stream';
+// ok: mp3-api-no-shell-command-execution
+const safeRequired = require(safeModule);
+// ok: mp3-api-no-shell-command-execution
+const similarModule = require('child_process_helpers');
+
+import { getBuiltinModule } from 'node:process';
+// ruleid: mp3-api-no-shell-command-execution
+getBuiltinModule('child_process');
+import { getBuiltinModule as loadBuiltin } from 'process';
+// ruleid: mp3-api-no-shell-command-execution
+loadBuiltin('node:child_process');
+import processDefault from 'node:process';
+// ruleid: mp3-api-no-shell-command-execution
+processDefault.getBuiltinModule('child_process');
+import * as processNamespace from 'process';
+// ruleid: mp3-api-no-shell-command-execution
+processNamespace.getBuiltinModule('node:child_process');
+// ruleid: mp3-api-no-shell-command-execution
+module['require']('child_process');
+// ruleid: mp3-api-no-shell-command-execution
+module?.require('node:child_process');
+// ok: mp3-api-no-shell-command-execution
+loadBuiltin('node:stream');
+import { getBuiltinModule as unrelatedLoader } from 'synthetic-library';
+// ok: mp3-api-no-shell-command-execution
+unrelatedLoader('child_process');
+
+// Explicit synchronous execution regression; native fixture is never executed.
+// ruleid: mp3-api-no-shell-command-execution
+import { execSync } from "node:child_process";
+execSync("synthetic");
+// ok: mp3-api-no-shell-command-execution
+const syncLabel = "execSync(\"synthetic\")";

@@ -299,6 +299,9 @@ test('native scanner and setup commands retain pinned versions and explicit repo
   assert.match(scanner, /-I -m pip --isolated --disable-pip-version-check --no-cache-dir check/);
   assert.match(scanner, /-I scripts\/test-semgrep-lock\.py "\$wheels"/);
   assert.match(job('semgrep'), /--strict --error --metrics=off --disable-version-check --no-trace/);
+  assert.match(job('semgrep'), /--test --strict --config \.semgrep\.yml --scan-unknown-extensions/);
+  assert.match(job('semgrep'), /tests\/semgrep\/runtime-execution\.ts\.fixture/);
+  assert.match(job('semgrep'), /--disable-nosem src/);
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
   assert.equal(pkg.scripts['audit:production'], 'npm audit --omit=dev --audit-level=moderate');
   assert.equal(pkg.scripts['audit:dependencies'], 'npm audit --audit-level=moderate');

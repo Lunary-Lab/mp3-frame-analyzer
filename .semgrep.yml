@@ -5,12 +5,48 @@ rules:
     severity: ERROR
     pattern-either:
       - pattern: eval(...)
+      - pattern: Function(...)
       - pattern: new Function(...)
   - id: mp3-api-no-shell-command-execution
-    message: Uploaded audio must not reach a shell command.
+    message: Runtime source must not import process-execution capabilities; keep encoder tools in scripts/.
     languages: [typescript]
     severity: ERROR
-    pattern-either:
-      - pattern: execSync(...)
-      - pattern: exec(...)
-      - pattern: spawn(...)
+    patterns:
+      - pattern-either:
+          - pattern: import $...IMPORTS from $MODULE
+          - pattern: import $MODULE
+          - pattern: export * from $MODULE
+          - pattern: export { ... } from $MODULE
+          - pattern: require($MODULE)
+          - pattern: module.require($MODULE)
+          - pattern: module?.require($MODULE)
+          - pattern: module['require']($MODULE)
+          - pattern: import($MODULE)
+          - pattern: process.getBuiltinModule($MODULE)
+          - patterns:
+              - pattern-inside: |
+                  import { getBuiltinModule } from $PROCESS;
+                  ...
+              - pattern: getBuiltinModule($MODULE)
+              - metavariable-comparison:
+                  comparison: $PROCESS in ["process", "node:process"]
+          - patterns:
+              - pattern-inside: |
+                  import { getBuiltinModule as $LOAD } from $PROCESS;
+                  ...
+              - pattern: $LOAD($MODULE)
+              - metavariable-comparison:
+                  comparison: $PROCESS in ["process", "node:process"]
+          - patterns:
+              - pattern-either:
+                  - pattern-inside: |
+                      import $PROCESS_OBJECT from $PROCESS;
+                      ...
+                  - pattern-inside: |
+                      import * as $PROCESS_OBJECT from $PROCESS;
+                      ...
+              - pattern: $PROCESS_OBJECT.getBuiltinModule($MODULE)
+              - metavariable-comparison:
+                  comparison: $PROCESS in ["process", "node:process"]
+      - metavariable-comparison:
+          comparison: $MODULE in ["child_process", "node:child_process"]
