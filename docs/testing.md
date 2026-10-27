@@ -14,6 +14,22 @@ production gates fail at 11 complexity, 301 file lines, 61 function lines, and
 5. **Regression**: three real FFmpeg/libmp3lame fixtures: CBR and VBR with Xing/Info metadata (33 physical frames each), plus CBR without Xing metadata (51 physical frames).
 6. **Security**: oversized upload, malformed multipart, forged filename, invalid frame/header and metadata corruption.
 
+## Documented source quick start
+
+From a fresh source checkout without `node_modules/` or `dist/`, run
+`node scripts/quickstart-smoke.mjs` with the documented Node/npm versions,
+POSIX Bash and curl available, and loopback port 3000 free. The script reads
+the README's fenced commands and executes `npm ci`, `npm run build`, `npm start`
+and both curl uploads unchanged. Each upload must return HTTP 200,
+`application/json` and exactly `{"frameCount":32}` using the existing generated
+CBR fixture. It checks the default configuration, ignoring inherited deployment
+overrides. Installation/build, startup and requests have deadlines; isolated
+command process groups are cleaned up on success or failure.
+
+The existing CI packaging job runs this check before packaging the resulting
+build. The separate production-only artifact smoke still covers its full
+scenario matrix; this source smoke only checks the copy-and-paste entry path.
+
 ## Mirrored parser-test discovery
 
 Parser suites live under `tests/mp3/**/*.test.ts`, mirroring `src/mp3/`.
