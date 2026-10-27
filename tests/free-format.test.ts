@@ -158,13 +158,16 @@ describe('free-format MPEG-1 Layer III', () => {
     input[5 * 800 + 2] = input[5 * 800 + 2]! | 0x90;
     await expect(count(input)).rejects.toMatchObject({ kind: 'invalid-mp3' });
   });
-  it('rejects changes of free-format sample rate after successful frame inference', async () => {
+  it('reports ambiguous one-frame rate changes after successful frame inference', async () => {
     const blocks = Array.from({ length: 7 }, () => freeFrame(730));
+    // The changed-rate alternative must have possible side information;
+    // the generic 0x11 filler transmits a reserved switched block type zero.
+    for (const block of blocks) block.fill(0, 4, 21);
     blocks[5]![2] = 4; // Beyond the initial three-header acquisition chain.
     await expect(count(mp3(blocks), 1)).rejects.toMatchObject({
-      kind: 'invalid-mp3',
+      kind: 'unsupported-format',
       offset: 5 * 730,
-      message: 'Free-format sample rate changed',
+      message: 'Ambiguous free-format MPEG frame layout',
     });
   });
 
@@ -179,7 +182,7 @@ describe('free-format MPEG-1 Layer III', () => {
     bytes.set(lastHeader, 300);
     await expect(count(bytes, 4096)).rejects.toMatchObject({
       kind: 'unsupported-format',
-      message: 'Cannot infer a unique free-format MPEG frame size from consecutive headers',
+      message: 'Ambiguous free-format MPEG frame layout',
     });
   });
 
@@ -192,7 +195,7 @@ describe('free-format MPEG-1 Layer III', () => {
     }
     await expect(count(buffer)).rejects.toMatchObject({
       kind: 'unsupported-format',
-      message: 'Cannot infer a unique free-format MPEG frame size from consecutive headers',
+      message: 'Ambiguous free-format MPEG frame layout',
     });
   });
 

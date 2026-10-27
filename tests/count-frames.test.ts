@@ -19,6 +19,28 @@ describe('streaming MP3 frame counting', () => {
     expect(await count(bytes)).toBe(3);
   });
 
+  it.each(['indexed', 'free-format'] as const)(
+    'counts %s frames across non-length header-bit transitions',
+    async (mode) => {
+      // Twelve joint-stereo headers cover all mode-extension/emphasis pairs
+      // (excluding reserved emphasis 2), cycling all eight private/copyright/
+      // original combinations. These fields cannot change the known spans.
+      const fields = [0, 1, 2, 3].flatMap((extension) =>
+        [0, 1, 3].map((emphasis) => ({ extension, emphasis })),
+      );
+      const frames = fields.map(({ extension, emphasis }, index) => {
+        const padding = index % 2 === 0 ? 0 : 1;
+        const bytes = frame({ padding }); // Independently sized 417/418-byte frames.
+        bytes[2] = (mode === 'indexed' ? 0x90 : 0) | (padding << 1) | ((index >> 2) & 1);
+        bytes[3] = 0x40 | (extension << 4) | ((index & 3) << 2) | emphasis;
+        return bytes;
+      });
+      for (const sizes of [[1], [3, 17, 2, 101], [4096]]) {
+        await expect(countMp3Frames(chunks(mp3(frames), sizes))).resolves.toBe(12);
+      }
+    },
+  );
+
   it('skips ID3v2, recognizes trailing ID3v1, and counts every physical MPEG frame', async () => {
     const bytes = mp3([frame(), frame()], id3v2(Buffer.alloc(202), 4, true), id3v1());
     expect(await count(bytes, 1)).toBe(2);
@@ -51,6 +73,31 @@ describe('streaming MP3 frame counting', () => {
       await expect(count(mp3([frame()], undefined, tail), 3)).rejects.toMatchObject({
         kind: 'invalid-mp3',
         message: 'Unexpected bytes after trailing metadata',
+      });
+    }
+  });
+
+  it.each([false, true])('rejects a complete APEv2 tail (with ID3v1: %s)', async (withV1) => {
+    // Original title record, with matching APEv2 header/footer, not copied audio.
+    // Layout: https://mutagen-specs.readthedocs.io/en/latest/apev2/apev2.html
+    // APE is intentionally unsupported; a well-formed tag is still an error.
+    const item = Buffer.alloc(15);
+    item.writeUInt32LE(1, 0);
+    item.write('Title\0A', 8, 'ascii');
+    const footer = Buffer.alloc(32);
+    footer.write('APETAGEX', 0, 'ascii');
+    footer.writeUInt32LE(2000, 8);
+    footer.writeUInt32LE(item.length + footer.length, 12);
+    footer.writeUInt32LE(1, 16);
+    footer.writeUInt32LE(0x80000000, 20); // Header present; this is the footer.
+    const header = Buffer.from(footer);
+    header.writeUInt32LE(0xa0000000, 20); // Header present; this is the header.
+    const audio = mp3([frame(), frame({ padding: 1 })]);
+    const bytes = Buffer.concat([audio, header, item, footer, ...(withV1 ? [id3v1()] : [])]);
+    for (const size of [1, 7, 4096]) {
+      await expect(count(bytes, size)).rejects.toMatchObject({
+        kind: 'invalid-mp3',
+        offset: audio.length,
       });
     }
   });

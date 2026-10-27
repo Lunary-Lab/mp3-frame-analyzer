@@ -29,7 +29,7 @@ export async function countMp3Frames(
   const reader = new AsyncByteReader(input, options.signal);
   let failed = false;
   try {
-    return await countFrames(reader, options.includeVbrHeaderFrame !== false);
+    return await countFrames(reader, options.includeVbrHeaderFrame !== false, options.signal);
   } catch (error) {
     failed = true;
     throw error;
@@ -51,10 +51,11 @@ export async function countMp3Frames(
 async function countFrames(
   reader: AsyncByteReader,
   includeVbrHeaderFrame: boolean,
+  signal?: AbortSignal,
 ): Promise<number> {
   await skipLeadingTags(reader);
 
-  const spans = new FrameSpans(reader);
+  const spans = new FrameSpans(reader, signal);
   let frames = 0;
   let excludedEncoderFrame = 0;
   for (;;) {

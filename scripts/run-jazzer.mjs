@@ -9,7 +9,7 @@ const regressionOnly = process.argv.includes('--regression');
 const extended = process.argv.includes('--extended');
 const seconds = regressionOnly ? 0 : extended ? 120 : 8;
 const timeoutMs = 2_000;
-const targetNames = ['raw', 'structured'];
+const targetNames = ['raw', 'structured', 'sequences'];
 const jazzer = join(
   root,
   'node_modules',

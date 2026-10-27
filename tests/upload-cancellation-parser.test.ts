@@ -42,9 +42,30 @@ afterEach(async () => {
   count.mockClear();
 });
 
-it.each(['raw', 'multipart'])(
-  'stops the actual buffered %s parser when its peer disconnects at a traversal yield',
-  async (form) => {
+function denseAncillary(): Buffer {
+  const bytes = Buffer.alloc(2700);
+  for (let start = 0; start < bytes.length; start += 900) {
+    bytes.set([255, 251, 4, 192], start);
+    for (let offset = 21; offset + 4 <= 900; offset += 3) {
+      bytes.set([255, 251, 0, 192], start + offset);
+    }
+  }
+  return bytes;
+}
+
+it.each(
+  ['raw', 'multipart'].flatMap((form) => [
+    {
+      form,
+      work: 'traversal',
+      fixture: () => Buffer.concat(Array.from({ length: 1024 }, () => frame())),
+      frameCount: 1024,
+    },
+    { form, work: 'inference', fixture: denseAncillary, frameCount: 3 },
+  ]),
+)(
+  'stops the actual buffered $form parser when its peer disconnects at a $work yield',
+  async ({ form, fixture, frameCount }) => {
     const app = await buildApp({ maxActiveUploads: 1 });
     apps.push(app);
     const address = await app.listen({ host: '127.0.0.1', port: 0 });
@@ -53,7 +74,7 @@ it.each(['raw', 'multipart'])(
     scheduling.entered = entered.resolve;
     scheduling.resume = resume.promise;
     release = resume.resolve;
-    const bytes = Buffer.concat(Array.from({ length: 1024 }, () => frame()));
+    const bytes = fixture();
     const body = multipartBody(bytes);
     const payload = form === 'raw' ? bytes : body.payload;
     const sender = openUpload(
@@ -97,6 +118,6 @@ it.each(['raw', 'multipart'])(
       payload: bytes,
     });
     expect(intact.statusCode).toBe(200);
-    expect(intact.json()).toEqual({ frameCount: 1024 });
+    expect(intact.json()).toEqual({ frameCount });
   },
 );

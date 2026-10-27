@@ -561,3 +561,167 @@ it.skipIf(process.platform === 'win32')(
     }
   },
 );
+
+it.skipIf(process.platform === 'win32')(
+  'serves tiny requests alongside bounded header-dense uploads without a latency SLA',
+  async () => {
+    // Same original control as sequence-scheduling: three 900-byte, 48 kHz,
+    // 300-kbps free frames. The repeated 44.1 kHz markers are ancillary decoys;
+    // their impossible side fields are independently checked in that suite.
+    // Do not obtain either expected count from the production parser.
+    const dense = Buffer.alloc(2_700);
+    for (let start = 0; start < dense.length; start += 900) {
+      dense.set([255, 251, 4, 192], start);
+      for (let offset = 21; offset + 4 <= 900; offset += 3) {
+        dense.set([255, 251, 0, 192], start + offset);
+      }
+    }
+    const tiny = frame();
+    const port = await availablePort();
+    const server = startServer(port, '4096', undefined, '3');
+    const active = new Set<ReturnType<typeof openUpload>>();
+    let load: Promise<void[]> | undefined;
+    let completedDense = 0;
+    const denseRequests = 64;
+    try {
+      await server.started;
+      const address = `http://127.0.0.1:${port}`;
+      const send = async (bytes: Buffer, expectedFrames: number) => {
+        const started = performance.now();
+        const upload = openUpload(address, 'audio/mpeg', bytes.length);
+        active.add(upload);
+        try {
+          // Complete every body immediately: overlap is not manufactured by
+          // withholding EOF, holding a parser turn, or mocking its scheduler.
+          upload.client.end(bytes);
+          expect(await upload.response).toMatchObject({
+            status: 200,
+            body: { frameCount: expectedFrames },
+          });
+          return performance.now() - started;
+        } finally {
+          active.delete(upload);
+          upload.client.destroy();
+        }
+      };
+      // Two sequential workers bound in-flight dense requests and total input;
+      // the third admission slot belongs to one sequential tiny probe worker.
+      load = Promise.all(
+        Array.from({ length: 2 }, async () => {
+          for (let index = 0; index < denseRequests / 2; index++) {
+            await send(dense, 3);
+            completedDense++;
+          }
+        }),
+      );
+      void load.catch(() => {}); // Preserve failures if a probe rejects first.
+      const tinyMs: number[] = [];
+      let overlappingResponses = 0;
+      for (let index = 0; index < 8; index++) {
+        tinyMs.push(await send(tiny, 1));
+        if (completedDense < denseRequests) overlappingResponses++;
+      }
+      // An unfinished batch proves concurrent request traffic, not that a tiny
+      // response interrupted one active parse. Blocking per-request parsing can
+      // also pass this smoke; deterministic parser-yield tests are separate.
+      expect(overlappingResponses).toBeGreaterThan(0);
+      await load;
+      expect(completedDense).toBe(denseRequests);
+      await send(tiny, 1); // All admission slots remain recoverable afterward.
+      console.info(
+        JSON.stringify({
+          kind: 'bounded-header-dense-http',
+          denseRequests,
+          denseBytesEach: dense.length,
+          maxConcurrentRequests: 3,
+          tinyBytesEach: tiny.length,
+          tinyMs,
+          overlappingResponses,
+          note: 'Two-second socket inactivity watchdog; timings are local samples, not an SLA.',
+        }),
+      );
+      expect(server.child.kill('SIGTERM')).toBe(true);
+      expect(await server.exited).toEqual({ code: 0, signal: null });
+    } finally {
+      for (const upload of active) upload.client.destroy();
+      server.child.kill('SIGKILL');
+      await Promise.allSettled([server.exited, ...(load === undefined ? [] : [load])]);
+    }
+  },
+  10_000,
+);
+
+it.skipIf(process.platform === 'win32')(
+  'serves a tiny request before a bounded maximum-indexed-frame-density upload completes',
+  async () => {
+    // 32 kbps / 48 kHz without padding is the smallest indexed span: 96 bytes.
+    // Zero stereo side information occupies bytes 4..35; part2_3_length=0
+    // leaves bytes 36..95 ancillary. Header-like payload cannot change sizing.
+    const short = frame({ bitrateIndex: 1, sampleRateIndex: 1 });
+    expect(short.length).toBe(96);
+    for (let offset = 36; offset + 4 <= short.length; offset += 4) {
+      short.set([255, 251, 4, 192], offset);
+    }
+    const frameCount = 65_536;
+    const bytes = Buffer.alloc(frameCount * short.length);
+    for (let offset = 0; offset < bytes.length; offset += short.length) bytes.set(short, offset);
+    const port = await availablePort();
+    const server = startServer(port, String(bytes.length), undefined, '2');
+    const clients: ReturnType<typeof openUpload>[] = [];
+    try {
+      await server.started;
+      const address = `http://127.0.0.1:${port}`;
+      const tiny = frame();
+      const largeUpload = openUpload(address, 'audio/mpeg', bytes.length);
+      const tinyUpload = openUpload(address, 'audio/mpeg', tiny.length);
+      clients.push(largeUpload, tinyUpload);
+      const started = performance.now();
+      const events: { event: string; elapsedMs: number }[] = [];
+      const record = (event: string) =>
+        events.push({ event, elapsedMs: performance.now() - started });
+      // These finish events describe the client's write queue, not server receipt
+      // or parse start. No production hook, scheduler mock or withheld EOF is used.
+      largeUpload.client.once('finish', () => record('large-client-write-finish'));
+      tinyUpload.client.once('finish', () => record('tiny-client-write-finish'));
+      const replies = Promise.all(
+        [largeUpload, tinyUpload].map(async (upload, index) => {
+          const response = await upload.response;
+          record(index === 0 ? 'large-response-complete' : 'tiny-response-complete');
+          return response;
+        }),
+      );
+      record('large-end-called');
+      largeUpload.client.end(bytes);
+      record('tiny-end-called');
+      tinyUpload.client.end(tiny);
+      const [largeResponse, tinyResponse] = await replies;
+      console.info(
+        JSON.stringify({
+          kind: 'bounded-maximum-indexed-frame-density-http',
+          frameCount,
+          frameBytes: short.length,
+          largeBytes: bytes.length,
+          maxConcurrentRequests: 2,
+          events,
+          note: 'HTTP streaming responsiveness, not CPU isolation, free inference or a latency SLA.',
+        }),
+      );
+      expect(largeResponse).toMatchObject({ status: 200, body: { frameCount } });
+      expect(tinyResponse).toMatchObject({ status: 200, body: { frameCount: 1 } });
+      expect(
+        events.filter(({ event }) => event.endsWith('response-complete')).map(({ event }) => event),
+      ).toEqual(['tiny-response-complete', 'large-response-complete']);
+      const recovery = openUpload(address, 'audio/mpeg', tiny.length);
+      clients.push(recovery);
+      recovery.client.end(tiny);
+      expect(await recovery.response).toMatchObject({ status: 200, body: { frameCount: 1 } });
+      expect(server.child.kill('SIGTERM')).toBe(true);
+      expect(await server.exited).toEqual({ code: 0, signal: null });
+    } finally {
+      for (const upload of clients) upload.client.destroy();
+      server.child.kill('SIGKILL');
+      await server.exited;
+    }
+  },
+  10_000,
+);

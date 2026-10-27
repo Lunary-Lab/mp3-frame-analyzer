@@ -168,7 +168,7 @@ describe('free-format candidate characterization', () => {
       name: 'Mp3ParseError',
       kind: 'unsupported-format',
       offset: prefix.length,
-      message: 'Cannot infer a unique free-format MPEG frame size from consecutive headers',
+      message: 'Ambiguous free-format MPEG frame layout',
     });
     expect(reader.offset).toBe(prefix.length);
     expect(reader.peek(bytes.length)).toEqual(bytes);

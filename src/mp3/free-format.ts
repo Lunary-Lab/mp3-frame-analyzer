@@ -1,7 +1,15 @@
+import { yieldToEventLoop } from './cooperative.js';
 import type { AsyncByteReader } from './byte-reader.js';
 import { Mp3ParseError } from './errors.js';
-import { decodeFrameHeader, type FreeFormatFrameHeader } from './frame-header.js';
-import { hasPossibleMetadataPrefix, probeMetadata } from './id3.js';
+import type { FreeFormatFrameHeader } from './frame-header.js';
+import {
+  Probe,
+  type Candidate,
+  type ProbeWork,
+  type SuffixEvidence,
+  type TargetHeader,
+  type Metadata,
+} from './free-format-probe.js';
 
 /** LAME's interoperability ceiling, not an ISO maximum or a decoded-audio guarantee. */
 export const MAX_FREE_FORMAT_FRAME_BYTES = 2_881;
@@ -9,143 +17,292 @@ export const MAX_FREE_FORMAT_FRAME_BYTES = 2_881;
 const MIN_FREE_FORMAT_FRAME_BYTES = 20;
 const MAX_PROBE_BYTES = MAX_FREE_FORMAT_FRAME_BYTES * 3 + 4;
 
-function headerAt(
-  window: Uint8Array,
-  offset: number,
-  sampleRateIndex: number,
-): FreeFormatFrameHeader | undefined {
-  if (offset + 4 > window.length) return undefined;
-  const header = decodeFrameHeader(window.subarray(offset, offset + 4));
-  return header.kind === 'free-format' && header.sampleRateIndex === sampleRateIndex
-    ? header
-    : undefined;
+interface Selection {
+  readonly bestBase: number;
+  readonly bestMatches: number;
+  readonly tied: boolean;
 }
-
-interface Candidate {
-  readonly base: number;
-  readonly matches: number;
-  readonly anchored: boolean;
-  readonly metadataMatches: number;
-  readonly frames: readonly { start: number; end: number; header: FreeFormatFrameHeader }[];
-}
-
-/** Follow one fixed span; metadata is inspected only at that span's predicted boundaries. */
+/** Follow a fixed span; only its predicted boundaries can anchor a new configuration. */
 function followCandidate(
-  window: Uint8Array,
+  probe: Probe,
+  start: number,
   first: FreeFormatFrameHeader,
   base: number,
-  ended: boolean,
 ): Candidate {
-  let position = 0;
+  let position = start;
   let header: FreeFormatFrameHeader | undefined = first;
   let anchored = false;
   let metadataMatches = 0;
+  let transition = false;
+  let closed = false;
   const frames: { start: number; end: number; header: FreeFormatFrameHeader }[] = [];
   while (header !== undefined) {
+    probe.visitFrame();
     const end = position + base + header.padding;
     frames.push({ start: position, end, header });
-    if (end > window.length) break;
-    const metadata = probeMetadata(window, end, ended);
+    if (end > probe.window.length) break;
+    const metadata = probe.boundary(end);
     if (metadata === undefined) break;
     metadataMatches += metadata.tags;
     if (metadata.tags > 0) anchored = true;
-    if (metadata.offset === window.length) {
-      anchored = ended ? metadata.canEnd : anchored;
+    if (metadata.offset === probe.window.length) {
+      anchored = probe.ended ? metadata.canEnd : anchored;
+      closed = probe.ended && metadata.canEnd;
       break;
     }
     position = metadata.offset;
-    // A partial header remains at ID3; a larger validated envelope ends
-    // beyond the probe. headerAt stops either chain; the streaming skipper
-    // later consumes the body and checks its footer.
-    header = headerAt(window, position, first.sampleRateIndex);
-  }
-  return { base, matches: frames.length, anchored, metadataMatches, frames };
-}
-
-/**
- * With only one/two headers, do not swallow another compatible header as
- * payload, swallow a plausible metadata prefix, or select a frame too small
- * for its mandatory prefix. This is a
- * conservative ambiguity check, not compressed-audio or CRC validation.
- */
-function shortCandidateIsUnambiguous(
-  window: Uint8Array,
-  candidate: Candidate,
-  minimumStreamLength: number,
-): boolean {
-  for (const { start, end, header } of candidate.frames) {
-    const minimum = 4 + (header.hasCrc ? 2 : 0) + (header.mono ? 17 : 32);
-    if (end - start < minimum) return false;
-    for (let offset = start + 4; offset + 3 <= end; offset++) {
-      if (
-        (offset + 4 <= end && headerAt(window, offset, header.sampleRateIndex) !== undefined) ||
-        hasPossibleMetadataPrefix(
-          window.subarray(offset),
-          Math.max(minimumStreamLength, end) - offset,
-        )
-      )
-        return false;
+    header = compatibleHeader(probe.headers.get(position), first);
+    if (isSupportedTransition(probe, position, first)) {
+      anchored = true;
+      transition = true;
+      closed = probe.suffixes.get(position)!.closed;
     }
   }
-  return true;
+  return { base, matches: frames.length, anchored, metadataMatches, transition, closed, frames };
+}
+
+function compatibleHeader(
+  next: TargetHeader | undefined,
+  first: FreeFormatFrameHeader,
+): FreeFormatFrameHeader | undefined {
+  return next?.kind === 'free-format' && next.sampleRateIndex === first.sampleRateIndex
+    ? next
+    : undefined;
+}
+
+function isSupportedTransition(
+  probe: Probe,
+  offset: number,
+  first: FreeFormatFrameHeader,
+): boolean {
+  const next = probe.headers.get(offset);
+  return (
+    next !== undefined &&
+    next.sampleRateIndex !== first.sampleRateIndex &&
+    probe.suffixes.get(offset)?.credible === true
+  );
+}
+
+function candidateIsEligible(
+  probe: Probe,
+  candidate: Candidate,
+  capacityRequired: boolean,
+): boolean {
+  if (candidate.matches < 3 && (!candidate.anchored || !probe.shortIsUnambiguous(candidate)))
+    return false;
+  if (
+    (capacityRequired || candidate.transition) &&
+    candidate.frames.some((frame) => !probe.frameMayFit(frame.start, frame.end, frame.header))
+  )
+    return false;
+  return !(capacityRequired && probe.ended && !candidate.closed);
 }
 
 /**
- * Infer a fixed unpadded span in one bounded probe. Prefer the unique longest
- * compatible chain (at least three headers). For shorter streams require a
- * complete EOF closure or a validated ID3v2 boundary, no unexplained payload
- * syncs, and a unique best candidate. Equal evidence rejects rather than breaking ties arbitrarily.
- * EOF/metadata anchoring is project structural policy: it cannot distinguish
- * every truncated free-format frame from a shorter complete one. No bitrate,
- * CRC, ancillary-data completeness or audio decoding is established here.
+ * Select within the existing same-configuration evidence policy. A supported
+ * transition is not outvoted by a coarser span that hides the configuration:
+ * different first spans with such evidence remain ambiguous.
+ */
+function* selectCandidate(
+  probe: Probe,
+  start: number,
+  first: FreeFormatFrameHeader,
+  capacityRequired = false,
+): Generator<ProbeWork, Selection> {
+  const selected = new RankedCandidates();
+  // A suffix whose prefix cannot fit even the largest admitted span cannot
+  // contribute evidence. This also rejects impossible side fields once.
+  if (capacityRequired && !probe.frameMayFit(start, start + MAX_FREE_FORMAT_FRAME_BYTES, first)) {
+    return selected.result();
+  }
+  const begin = probe.landmarkStart(start + first.padding + MIN_FREE_FORMAT_FRAME_BYTES);
+  for (let index = begin; index < probe.landmarks.length; index++) {
+    if (probe.shouldYield()) yield { ...probe.work };
+    const base = probe.landmarks[index]! - start - first.padding;
+    if (base >= MAX_FREE_FORMAT_FRAME_BYTES) break;
+    probe.visitCandidate();
+    const candidate = followCandidate(probe, start, first, base);
+    if (!candidateIsEligible(probe, candidate, capacityRequired)) continue;
+    // Suffix consumers need existence, not ranking or path enumeration.
+    if (capacityRequired) return { bestBase: base, bestMatches: candidate.matches, tied: false };
+    selected.consider(candidate);
+  }
+  return selected.result();
+}
+
+class RankedCandidates {
+  private bestBase = 0;
+  private bestMatches = 0;
+  private bestMetadata = 0;
+  private tied = false;
+  private readonly transitions: number[] = [];
+
+  consider(candidate: Candidate): void {
+    if (candidate.transition) this.transitions.push(candidate.base);
+    const strength = compareCandidateEvidence(candidate, this.bestMatches, this.bestMetadata);
+    if (strength > 0) {
+      this.bestBase = candidate.base;
+      this.bestMatches = candidate.matches;
+      this.bestMetadata = candidate.metadataMatches;
+      this.tied = false;
+    } else if (strength === 0) {
+      this.tied = true;
+    }
+  }
+
+  result(): Selection {
+    return {
+      bestBase: this.bestBase,
+      bestMatches: this.bestMatches,
+      tied: this.tied || this.transitions.some((base) => base !== this.bestBase),
+    };
+  }
+}
+
+/** Preserve existing lexicographic same-configuration evidence. */
+function compareCandidateEvidence(candidate: Candidate, matches: number, metadata: number): number {
+  const byHeaders = candidate.matches - matches;
+  return byHeaders === 0 ? candidate.metadataMatches - metadata : byHeaders;
+}
+
+/** A successor's existence is enough; ambiguity within it is not silently resolved. */
+function indexedEvidence(
+  probe: Probe,
+  offset: number,
+  header: Extract<TargetHeader, { kind: 'indexed' }>,
+): SuffixEvidence {
+  const end = offset + header.length;
+  if (end > probe.window.length || !probe.frameMayFit(offset, end, header)) {
+    return { credible: false, closed: false, indexedMatches: 0 };
+  }
+  const metadata = probe.boundary(end);
+  if (metadata === undefined) return { credible: false, closed: false, indexedMatches: 1 };
+  if (probe.ended && metadata.offset === probe.window.length && metadata.canEnd) {
+    return { credible: true, closed: true, indexedMatches: 1 };
+  }
+  return indexedSuccessorEvidence(probe, metadata, header);
+}
+
+function mayFollowIndexed(header: TargetHeader, next: TargetHeader | undefined): boolean {
+  return (
+    next?.kind === 'indexed' ||
+    (next?.kind === 'free-format' && next.sampleRateIndex !== header.sampleRateIndex)
+  );
+}
+
+function hasOpenIndexedEvidence(
+  tags: number,
+  matches: number,
+  allowed: boolean,
+  suffix: SuffixEvidence | undefined,
+): boolean {
+  return tags > 0 || matches >= 3 || (allowed && suffix!.credible);
+}
+
+function indexedSuccessorEvidence(
+  probe: Probe,
+  metadata: Exclude<Metadata, undefined>,
+  header: TargetHeader,
+): SuffixEvidence {
+  const next = probe.headers.get(metadata.offset);
+  // Every supported successor is at a greater offset and was already
+  // evaluated by the reverse dynamic program.
+  const suffix = probe.suffixes.get(metadata.offset);
+  const allowed = mayFollowIndexed(header, next);
+  const matches = next?.kind === 'indexed' ? 1 + suffix!.indexedMatches : 1;
+  const closed = allowed && suffix!.closed;
+  const credible = probe.ended
+    ? closed
+    : hasOpenIndexedEvidence(metadata.tags, matches, allowed, suffix);
+  return { credible, closed, indexedMatches: matches };
+}
+
+/**
+ * Offset-increasing dynamic program on one fixed probe, evaluated in reverse.
+ * Never enumerate paths, recurse, or give successor headers votes for a prior
+ * configuration's free span. Metrics make worst-case work directly testable.
+ */
+export function* analyzeFreeFormatProbeSteps(
+  window: Uint8Array,
+  first: FreeFormatFrameHeader,
+  ended: boolean,
+  minimumStreamLength: number,
+): Generator<ProbeWork, Selection & ProbeWork> {
+  const probe = new Probe(window, ended, minimumStreamLength);
+  const entries = [...probe.headers];
+  if (entries.some(([, header]) => header.sampleRateIndex !== first.sampleRateIndex)) {
+    for (let index = entries.length - 1; index > 0; index--) {
+      if (probe.shouldYield()) yield { ...probe.work };
+      const [offset, header] = entries[index]!;
+      if (header.kind === 'free-format') {
+        const selection = yield* selectCandidate(probe, offset, header, true);
+        probe.suffixes.set(offset, {
+          credible: selection.bestMatches > 0,
+          closed: probe.ended && selection.bestMatches > 0,
+          indexedMatches: 0,
+        });
+      } else {
+        probe.suffixes.set(offset, indexedEvidence(probe, offset, header));
+      }
+    }
+  }
+  return { ...(yield* selectCandidate(probe, 0, first)), ...probe.work };
+}
+
+/** Synchronous drain for exact analysis/metrics checks; production uses the cooperative driver. */
+export function analyzeFreeFormatProbe(
+  window: Uint8Array,
+  first: FreeFormatFrameHeader,
+  ended: boolean,
+  minimumStreamLength: number,
+): Selection & ProbeWork {
+  const steps = analyzeFreeFormatProbeSteps(window, first, ended, minimumStreamLength);
+  let step = steps.next();
+  while (!step.done) step = steps.next();
+  return step.value;
+}
+
+/** Real event-loop turns, not resolved-promise microtasks; cancellation is not a format error. */
+export async function runFreeFormatProbe(
+  steps: Generator<ProbeWork, Selection & ProbeWork>,
+  signal?: AbortSignal,
+): Promise<Selection & ProbeWork> {
+  signal?.throwIfAborted();
+  let step = steps.next();
+  while (!step.done) {
+    await yieldToEventLoop(signal);
+    step = steps.next();
+  }
+  return step.value;
+}
+
+/**
+ * Structural inference, not a decoder or a universal uniqueness proof. Keep
+ * EOF/metadata-anchored ordinary short streams and strongest same-configuration
+ * chains. New configuration anchors must not make genuinely competing layouts
+ * disappear. The byte probe and all observations are upload-length independent.
  */
 export async function inferFreeFormatBaseLength(
   reader: AsyncByteReader,
   first: FreeFormatFrameHeader,
+  signal?: AbortSignal,
 ): Promise<number> {
   const start = reader.offset;
-  // One unsearched byte distinguishes an exactly full probe at EOF from a
-  // longer stream. Never award a final-tag anchor merely at the probe edge.
   const ended = !(await reader.has(MAX_PROBE_BYTES + 1));
   const minimumStreamLength = Math.min(reader.bufferedLength, MAX_PROBE_BYTES + 1);
   const window = reader.peek(Math.min(reader.bufferedLength, MAX_PROBE_BYTES));
-  let bestBase = 0;
-  let bestMatches = 0;
-  let bestMetadata = 0;
-  let tied = false;
-  for (let base = MIN_FREE_FORMAT_FRAME_BYTES; base < MAX_FREE_FORMAT_FRAME_BYTES; base++) {
-    const candidate = followCandidate(window, first, base, ended);
-    if (
-      candidate.matches < 3 &&
-      (!candidate.anchored || !shortCandidateIsUnambiguous(window, candidate, minimumStreamLength))
-    )
-      continue;
-    const strength = compareCandidateEvidence(candidate, bestMatches, bestMetadata);
-    if (strength > 0) {
-      bestBase = base;
-      bestMatches = candidate.matches;
-      bestMetadata = candidate.metadataMatches;
-      tied = false;
-    } else if (strength === 0) {
-      tied = true;
-    }
-  }
-  if (bestMatches === 0 || tied) {
+  const evidence = await runFreeFormatProbe(
+    analyzeFreeFormatProbeSteps(window, first, ended, minimumStreamLength),
+    signal,
+  );
+  if (evidence.bestMatches === 0 || evidence.tied) {
     throw new Mp3ParseError(
       'unsupported-format',
       start,
-      'Cannot infer a unique free-format MPEG frame size from consecutive headers',
+      evidence.tied
+        ? 'Ambiguous free-format MPEG frame layout'
+        : 'Cannot infer a unique free-format MPEG frame size from consecutive headers',
     );
   }
-  return bestBase;
-}
-
-/** Lexicographic project ranking: header-chain length first, metadata anchors second. */
-function compareCandidateEvidence(
-  candidate: Candidate,
-  bestMatches: number,
-  bestMetadata: number,
-): number {
-  const byHeaders = candidate.matches - bestMatches;
-  return byHeaders === 0 ? candidate.metadataMatches - bestMetadata : byHeaders;
+  return evidence.bestBase;
 }

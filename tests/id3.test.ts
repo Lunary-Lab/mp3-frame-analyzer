@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { hasPossibleMetadataPrefix } from '../src/mp3/id3.js';
 import { countMp3Frames } from '../src/mp3/count-frames.js';
 import { chunks, frame, id3v1, id3v2, mp3, synchsafe } from './helpers/mp3-fixtures.js';
 
@@ -108,4 +109,23 @@ describe('ID3 tag headers', () => {
       });
     }
   });
+});
+
+it('retains the shared conservative metadata-prefix predicate for TAG and nonmetadata', () => {
+  expect(hasPossibleMetadataPrefix(Buffer.from('TAG'), 128)).toBe(true);
+  expect(hasPossibleMetadataPrefix(Buffer.from('TAG'), 129)).toBe(false);
+  expect(hasPossibleMetadataPrefix(Buffer.from('not metadata'), 3)).toBe(false);
+});
+
+it.each([
+  { name: 'empty bytes', bytes: [] },
+  { name: 'one signature byte', bytes: [0x49] },
+  { name: 'two signature bytes', bytes: [0x49, 0x44] },
+  { name: 'wrong first byte', bytes: [0, 0x44, 0x33] },
+  { name: 'wrong second byte', bytes: [0x49, 0, 0x33] },
+  { name: 'wrong third byte', bytes: [0x49, 0x44, 0] },
+  { name: 'plausible fields without ID3', bytes: [0, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0] },
+])('requires the complete ID3 signature for prefix evidence: $name', ({ bytes }) => {
+  expect(hasPossibleMetadataPrefix(Uint8Array.from(bytes), 0)).toBe(false);
+  expect(hasPossibleMetadataPrefix(Buffer.from('ID3'), 0)).toBe(true);
 });
