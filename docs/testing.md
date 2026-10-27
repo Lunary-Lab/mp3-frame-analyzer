@@ -183,6 +183,13 @@ and explicit `false` return 6089 in both upload modes, while `true` returns 6090
 expectations. See
 [the frame-count contract](frame-count-contract.md).
 
+## Pure runtime mutation stage
+
+The separate [pure nonparser mutation gate](nonparser-mutation.md) covers client
+errors, error-response classification and deployment configuration with native
+Stryker/Vitest and a strict 100% threshold. Other runtime/tooling modules remain
+explicitly deferred; this is not full-repository mutation coverage.
+
 ## Native CI jobs and scheduling
 
 The required `All checks` aggregate waits for every native validation job and

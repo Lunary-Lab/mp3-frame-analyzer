@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import {
+  maxActiveUploadsFromEnvironment,
   maxUploadBytesFromEnvironment,
   maxMultipartBytesFromEnvironment,
 } from '../src/server-config.js';
@@ -73,3 +74,23 @@ it.each(['', '0', '-1', '1.5', '1e3', ' 512', '512\n', '9007199254740992'])(
     );
   },
 );
+
+it('validates deployment admission limits without coercions or unlimited mode', () => {
+  expect(maxActiveUploadsFromEnvironment(undefined)).toBe(8);
+  for (const value of ['1', '8', '1024', '0002'])
+    expect(maxActiveUploadsFromEnvironment(value)).toBe(Number(value));
+  for (const value of [
+    '',
+    '0',
+    '-1',
+    '+1',
+    '1.5',
+    ' 1',
+    '1e2',
+    'Infinity',
+    '1025',
+    '9'.repeat(400),
+  ]) {
+    expect(() => maxActiveUploadsFromEnvironment(value)).toThrow('MAX_ACTIVE_UPLOADS');
+  }
+});
