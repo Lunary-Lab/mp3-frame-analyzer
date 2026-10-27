@@ -6,9 +6,9 @@ import {
   parseChecksums,
   releaseNames,
   repositoryRoot,
-  runFile,
+  runTar,
   sha256,
-  validateArchiveEntries,
+  validateRuntimeArchive,
 } from './release-utils.mjs';
 
 export async function packagedLock(lock, root = repositoryRoot) {
@@ -27,17 +27,8 @@ export async function packagedLock(lock, root = repositoryRoot) {
   for (const key of Object.keys(expected))
     assert.equal(manifest[key], expected[key], 'Wrong release identity');
   const archive = join(output, names.archive);
-  const listing = await runFile('tar', ['-tzf', archive]);
-  validateArchiveEntries(listing.stdout.trimEnd().split('\n'), names.base);
-  const verbose = await runFile('tar', ['-tvzf', archive]);
-  assert.ok(
-    verbose.stdout
-      .trimEnd()
-      .split('\n')
-      .every((line) => /^[d-]/.test(line)),
-    'Non-regular archive entry',
-  );
-  const result = await runFile('tar', ['-xOf', archive, `${names.base}/package-lock.json`]);
+  await validateRuntimeArchive(archive, names.base, 'Non-regular archive entry');
+  const result = await runTar(['-xOf', archive, `${names.base}/package-lock.json`]);
   assert.deepEqual(
     JSON.parse(result.stdout),
     lock,

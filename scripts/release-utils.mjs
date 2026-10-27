@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { createReadStream } from 'node:fs';
@@ -33,6 +34,11 @@ export async function runFile(command, args, options = {}) {
       .slice(-3000);
     throw new Error(`${command} ${args.join(' ')} failed: ${details}`, { cause: error });
   }
+}
+
+// Native archive options are not inherited; the selected host PATH remains trusted.
+export function runTar(args) {
+  return runFile('tar', args, { env: { PATH: process.env.PATH, LC_ALL: 'C' } });
 }
 
 export function npmCommand(args, npmExecPath = process.env.npm_execpath) {
@@ -113,4 +119,18 @@ export function validateArchiveEntries(entries, base) {
     required.delete(path);
   }
   if (required.size > 0) throw new Error(`Runtime archive is missing: ${[...required].join(', ')}`);
+}
+
+/** Both artifact consumers require the same safe member names and entry types. */
+export async function validateRuntimeArchive(archive, base, nonRegularMessage) {
+  const listing = await runTar(['-tzf', archive]);
+  validateArchiveEntries(listing.stdout.trimEnd().split('\n'), base);
+  const verbose = await runTar(['-tvzf', archive]);
+  assert.ok(
+    verbose.stdout
+      .trimEnd()
+      .split('\n')
+      .every((line) => /^[d-]/.test(line)),
+    nonRegularMessage,
+  );
 }
