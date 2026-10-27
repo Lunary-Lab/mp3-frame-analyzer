@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import {
   BASELINE,
+  PR_BASELINE,
+  pullRequestIdentity,
   executionSummary,
   fingerprint,
   mutationEnvironment,
@@ -161,7 +163,7 @@ test('ignored Vite test-mode environment files are explicit inputs', async (t) =
   }
 });
 
-test('the actual runner promotes only completed local/main results with the correct identity', async () => {
+test('the actual runner promotes only completed scope-correct results with the correct identity', async () => {
   const { runInNewContext } = await import('node:vm');
   const source = await readFile(new URL('./run-mutations.mjs', import.meta.url), 'utf8');
   const block = source.split('// Promotion is last,')[1]?.split('    console.log(')[0];
@@ -190,6 +192,17 @@ test('the actual runner promotes only completed local/main results with the corr
       undefined,
       null,
     ],
+    [
+      {
+        GITHUB_ACTIONS: 'true',
+        GITHUB_EVENT_NAME: 'pull_request',
+        GITHUB_REF: 'refs/pull/7/merge',
+        GITHUB_REPOSITORY_ID: '42',
+      },
+      key,
+      undefined,
+      'pr:42:7',
+    ],
     [{}, null, undefined, null],
     [{}, key, '--import=unreviewed', null],
   ]) {
@@ -202,6 +215,7 @@ test('the actual runner promotes only completed local/main results with the corr
         inputsHash,
         env: { NODE_OPTIONS: nodeOptions },
         inputCaptureError: null,
+        prIdentity: inputsHash && !nodeOptions ? pullRequestIdentity(env) : null,
         root: '/project',
         report,
         promoteCache: (...args) => {
@@ -211,5 +225,176 @@ test('the actual runner promotes only completed local/main results with the corr
       { timeout: 1000 },
     );
     assert.deepEqual(calls, expected ? [['/project', report, key, expected]] : []);
+  }
+});
+
+test('own-PR identity survives a SHA change but cannot cross PR, input or main scopes', async (t) => {
+  const { root, put } = await fixture(t);
+  const env = {
+    GITHUB_ACTIONS: 'true',
+    GITHUB_EVENT_NAME: 'pull_request',
+    GITHUB_REF: 'refs/pull/7/merge',
+    GITHUB_REPOSITORY_ID: '42',
+    GITHUB_SHA: commit,
+  };
+  const identity = pullRequestIdentity(env);
+  assert.equal(identity, 'pr:42:7');
+  assert.equal(pullRequestIdentity({ ...env, GITHUB_SHA: 'c'.repeat(40) }), identity);
+  for (const delta of [
+    { GITHUB_EVENT_NAME: 'pull_request_target' },
+    { GITHUB_EVENT_NAME: 'push' },
+    { GITHUB_EVENT_NAME: 'workflow_dispatch' },
+    { GITHUB_ACTIONS: '' },
+    { GITHUB_REF: 'refs/heads/main' },
+    { GITHUB_REF: 'refs/pull/7/head' },
+    { GITHUB_REPOSITORY_ID: '' },
+  ])
+    assert.equal(pullRequestIdentity({ ...env, ...delta }), null);
+  const report = { files: {} };
+  await promoteCache(root, report, key, identity);
+  const envelope = JSON.parse(await readFile(join(root, PR_BASELINE), 'utf8'));
+  assert.equal(envelope.prIdentity, identity);
+  assert.equal(Object.hasOwn(envelope, 'sourceCommit'), false);
+  assert.deepEqual((await readCache(root, key, identity, () => {})).report, report);
+  for (const [otherKey, otherIdentity] of [
+    [key, 'pr:42:8'],
+    [key, 'pr:43:7'],
+    [key, commit],
+    ['c'.repeat(64), identity],
+  ])
+    assert.equal((await readCache(root, otherKey, otherIdentity, () => {})).report, null);
+  await put(PR_BASELINE, '{partial');
+  assert.equal((await readCache(root, key, identity, () => {})).report, null);
+});
+
+test('actual runner admission isolates full mode and PR-cache hits from main artifact identity', async () => {
+  const { runInNewContext } = await import('node:vm');
+  const source = await readFile(new URL('./run-mutations.mjs', import.meta.url), 'utf8');
+  const block = source.slice(
+    source.indexOf('    const force ='),
+    source.indexOf('    await mkdir(dirname(join(root, WORKING_REPORT))'),
+  );
+  const env = {
+    GITHUB_ACTIONS: 'true',
+    GITHUB_EVENT_NAME: 'pull_request',
+    GITHUB_REF: 'refs/pull/7/merge',
+    GITHUB_REPOSITORY_ID: '42',
+    MUTATION_BASELINE_SHA: commit,
+    MUTATION_PR_CACHE_RESTORED: 'true',
+  };
+  for (const [delta, args, expected] of [
+    [{}, [], 'pr:42:7'],
+    [{ MUTATION_PR_CACHE_RESTORED: 'false' }, [], commit],
+    [{ MUTATION_PR_CACHE_RESTORED: '' }, [], commit],
+    [{ GITHUB_EVENT_NAME: 'push' }, [], commit],
+    [{ GITHUB_EVENT_NAME: 'pull_request_target' }, [], commit],
+    [{ GITHUB_REF: 'refs/heads/release' }, [], commit],
+    [{}, ['--full'], null],
+  ]) {
+    const calls = [];
+    await runInNewContext(
+      `(async () => {${block}})()`,
+      {
+        args,
+        env: {},
+        inputsHash: key,
+        process: { env: { ...env, ...delta } },
+        pullRequestIdentity,
+        root: '/project',
+        audit: () => {},
+        readCache: async (...values) => {
+          calls.push(values);
+          return { report: null };
+        },
+      },
+      { timeout: 1000 },
+    );
+    assert.deepEqual(
+      calls.map((values) => values[2]),
+      expected ? [expected] : [],
+    );
+  }
+});
+
+test('official PR cache requires exact successful hits and saves only after encoder verification', async () => {
+  const { parse } = await import('yaml');
+  const { runInNewContext } = await import('node:vm');
+  const action = parse(
+    await readFile(
+      new URL('../.github/actions/test-mutations/action.yml', import.meta.url),
+      'utf8',
+    ),
+  );
+  const steps = action.runs.steps;
+  const keyStep = steps.find((step) => step.id === 'pr-key');
+  const restore = steps.find((step) => step.id === 'pr-cache');
+  const save = steps.find((step) => step.uses?.startsWith('actions/cache/save@'));
+  assert.deepEqual(Object.keys(restore.with).sort(), ['key', 'path']);
+  assert.equal(save.with.key, restore.with.key);
+  assert.equal(save.with.path, PR_BASELINE);
+  assert.doesNotMatch(save.with.key, /sha|restore-keys/);
+  assert.equal(restore['continue-on-error'], true);
+  assert.equal(save['continue-on-error'], true);
+  assert.ok(
+    steps.indexOf(save) >
+      steps.findIndex((step) => step.run?.startsWith('node scripts/verify-encoder-discovery')),
+  );
+  const expression = steps
+    .find((step) => step.run?.includes('run-mutations.mjs --full'))
+    .env.MUTATION_PR_CACHE_RESTORED.slice(3, -2)
+    .replaceAll('steps.pr-cache', "steps['pr-cache']")
+    .replaceAll('.cache-hit', "['cache-hit']");
+  for (const outcome of ['success', 'failure', 'skipped'])
+    for (const hit of ['true', 'false', ''])
+      assert.equal(
+        runInNewContext(expression, {
+          steps: { 'pr-cache': { outcome, outputs: { 'cache-hit': hit } } },
+        }),
+        outcome === 'success' && hit === 'true',
+      );
+  for (const [event, ref, full, expected] of [
+    ['pull_request', 'refs/pull/7/merge', 'false', true],
+    ['pull_request_target', 'refs/pull/7/merge', 'false', false],
+    ['workflow_dispatch', 'refs/pull/7/merge', 'false', false],
+    ['pull_request', 'refs/pull/7/head', 'false', false],
+    ['pull_request', 'refs/pull/7/merge', 'true', false],
+  ])
+    assert.equal(
+      runInNewContext(keyStep.if, {
+        inputs: { full },
+        github: { event_name: event, ref, event: { pull_request: { number: 7 } } },
+        format: (pattern, number) => pattern.replace('{0}', number),
+      }),
+      expected,
+    );
+});
+
+test('restored CI envelopes cannot be mistaken for this invocation completing promotion', async () => {
+  const { runInNewContext } = await import('node:vm');
+  const source = await readFile(new URL('./run-mutations.mjs', import.meta.url), 'utf8');
+  const start = source.indexOf('    // CI transport files');
+  const block = source.slice(start, source.indexOf('    console.log(`Mutation cache:', start));
+  assert.ok(start > source.indexOf('if (cache.report) await writeFile'));
+  assert.ok(start < source.indexOf('await promoteCache'));
+  for (const ci of ['true', '']) {
+    const removed = [];
+    await runInNewContext(
+      `(async () => {${block}})()`,
+      {
+        process: { env: { GITHUB_ACTIONS: ci } },
+        BASELINE,
+        PR_BASELINE,
+        root: '/project',
+        join,
+        rm: async (path) => {
+          removed.push(path);
+        },
+      },
+      { timeout: 1000 },
+    );
+    assert.deepEqual(
+      removed,
+      ci ? [join('/project', BASELINE), join('/project', PR_BASELINE)] : [],
+    );
   }
 });

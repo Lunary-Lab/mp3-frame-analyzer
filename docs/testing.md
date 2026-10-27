@@ -202,10 +202,12 @@ older validation for the same branch. Fork PRs have separate identities. Schedul
 runs and explicitly full manual runs use unique run groups: `cancel-in-progress:
 false` alone does not prevent GitHub from replacing a pending run. Release-tag
 validation uses its own noncanceling group, and publication keeps its independent
-lock. Release Please explicitly dispatches non-full PR validation; the normal
-baseline, fresh discovery, authenticated compatible main/ancestor baselines and fail-closed reuse
-policy still apply. Full scheduled/release/manual validation never restores a
-result baseline. These are scheduling changes, not measured hosted speedup claims.
+lock. Release Please supplies a read-only summary and the supported
+[native-event recovery path](releasing.md), rather than dispatching ineligible PR
+checks. Mutation validation retains fresh discovery: ordinary PRs may reuse an
+authenticated compatible main/ancestor baseline or a separately scoped,
+lower-trust own-PR cache. Full scheduled/release/manual validation restores
+neither. These scheduling choices are not measured hosted speedup claims.
 
 Optional npm update notices, pip version checks, Go telemetry, Semgrep metrics,
 Semgrep version checks and tracing are disabled in this workflow. Required package

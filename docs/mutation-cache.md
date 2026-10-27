@@ -59,6 +59,24 @@ experiments and declare new deterministic inputs before enabling reuse.
 `NODE_OPTIONS`, unreadable or unsupported nonregular inputs disable reuse.
 Any detected input change during execution fails and prevents promotion.
 
+### Why changed tests force a fresh run
+
+A local diagnostic with pinned Stryker **10.1.1** (2026-10-27) kept the same 224
+nonparser mutant identities and source bytes while adding 26 tests (75 → 101).
+Direct native incremental execution retained **61 static survivors** that the
+following fresh run, with the identical 101 tests, killed. This demonstrates
+**stale-red results** (an outdated lower score), not an unsafe passing result.
+It is a diagnostic native-tool observation, not an accepted production baseline
+or a claim about a different, subsequently refactored mutation inventory.
+
+The [pinned incremental differ](https://github.com/stryker-mutator/stryker-js/blob/959127763e5bbe2eb65f5341a8161780d6d8a476/packages/core/src/mutants/incremental-differ.ts#L428-L470)
+uses coverage changes when deciding whether to retain non-killed outcomes;
+static results may lack per-test coverage. Our declared-input key therefore
+forces full execution when tests/helpers change instead of adding a custom
+per-mutant refresh engine. Missing duration alone is not a universal reuse
+indicator: erroneous native outcomes can omit it too, and the gate rejects those
+outcomes before counting accepted fresh/reused results.
+
 ## Local and CI provenance
 
 A local successful audited run saves a `sourceCommit: local` baseline; subsequent
@@ -81,10 +99,61 @@ Only ordinary main pushes upload an audited baseline; official
 `actions/upload-artifact` publishes one unzipped JSON file. No custom archive
 parser or artifact authentication client is maintained.
 
+### Optional own-PR cache (lower trust)
+
+Normal `pull_request` merge-ref runs may also use official `actions/cache` for
+`.cache/mutation/pr-baseline.json`. Its exact key binds repository/PR identity
+and the same declared-input fingerprint, **not the commit SHA**: a later docs-only
+update in that same PR can reuse completed results. No restore-prefix keys are
+used. Admission requires a successful restore with an exact cache hit, matching
+`prIdentity` and input key, and the existing report audit. The ordinary suite and
+native discovery/coverage still run; changed declared inputs still run full.
+
+This is an **own-PR optimization, not authenticated producer provenance**.
+`prIdentity`/`audit.execution.baselinePR` name its scope; they are not a producing
+commit or a successful whole-CI attestation. A selected main artifact's SHA is
+never presented as the producer of a PR-cache report. Saving occurs only after
+mutation and encoder checks, not after all sibling CI jobs. Main and release
+runs never read this file; forced-full mode bypasses both result sources.
+`pull_request_target`, dispatches and non-merge refs cannot save or consume it.
+
+Restore/save failures, eviction, partial/corrupt files or incompatible reports
+fall back to full execution. Native caches are immutable: an unusable exact-key
+entry cannot be repaired in place and may remain cold until eviction or a
+reviewed key-namespace change. No cache failure skips tests or weakens the gate.
+See GitHub's [cache-scope restrictions](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache).
+
 The new envelope is not compatible with the old schema3 cache. The first hosted
 native baseline requires successful validation; old reports are not silently
 relabeled. Once available, compatible ancestor results can bridge a still-running
 exact-main baseline. A changed declared input still requires a cold run.
+
+## Bounded native parallelism
+
+The parser uses two native Stryker test runners, while each Vitest runner keeps
+one worker. `timeoutMS` additional allowance (`2000ms`), parser scope and acceptance rules
+are unchanged. GitHub documents four CPUs and 16GB RAM for the public
+[`ubuntu-24.04` runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories).
+The mutation composite logs `os.availableParallelism()` and total memory so the
+actual hosted allocation is observable rather than assumed. Two is also an
+explicit local bound; Stryker's automatic CPU-based default is not used.
+
+The worker budget is a measured native configuration choice, not a custom scheduler
+or a guarantee that more workers are faster. Worker-budget changes are reviewed against the previous
+report for elapsed time, raw timeouts, RuntimeErrors and mutant outcomes—not
+merely whether the adjusted score is green. Contention can
+change timeout behavior; revert the setting if the measured tradeoff is worse.
+See the [native concurrency option](https://stryker-mutator.io/docs/stryker-js/configuration/#concurrency-number--string).
+
+Mutation runs also use Vitest's supported
+[`BaseSequencer` extension](https://vitest.dev/config/sequence.html#sequence-sequencer)
+to try files with shorter native
+[cached durations](https://vitest.dev/api/advanced/vitest.html#cache-gettestspecificationresult)
+first. Stryker can stop after a killing test, so this may avoid expensive tests
+that cannot change an already detected result. The sorter retains every selected
+test specification and inherited native sharding; unknown durations sort last.
+It adds no profiler or timing store, changes no ordinary-test configuration, and
+makes no whole-parser speedup claim. Survivors still require all selected tests.
 
 ## Verification and limits
 

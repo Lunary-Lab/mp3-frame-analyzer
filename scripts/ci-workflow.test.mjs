@@ -232,7 +232,8 @@ test('existing scans, production-only archive smoke and release dispatch remain 
   assert.match(job('package'), /npm run test:artifact/);
   assert.match(job('package'), /name: release-assets/);
   assert.match(job('package'), /SOURCE_COMMIT: \$\{\{ inputs\.ref \|\| github\.sha \}\}/);
-  assert.match(release, /'ci\.yml'[^\n]+ '-f', 'full_mutation=false'/);
+  assert.doesNotMatch(release, /'ci\.yml'|'pr-title\.yml'/);
+  assert.match(release, /'publish-release\.yml'[^\n]+ '--ref', tag/);
 });
 
 test('reusable release outputs bind the verified upload and its exact workflow attempt', () => {
@@ -428,7 +429,7 @@ test('the parent mutation execution contract is fixed while unrelated CI jobs ma
   assert.equal(download.with['digest-mismatch'], 'error');
   assert.equal(download['continue-on-error'], true);
   assert.match(
-    steps.find((step) => step.run?.includes('run-mutations')).env.MUTATION_BASELINE_SHA,
+    steps.find((step) => step.run?.includes('run-mutations.mjs --full')).env.MUTATION_BASELINE_SHA,
     /steps.download.outcome == 'success'/,
   );
   assert.equal(
