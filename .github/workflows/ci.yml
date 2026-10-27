@@ -188,19 +188,12 @@ jobs:
       contents: read
       actions: read
     needs: [types, unit, tooling]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 100
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.ref || github.sha }}
-          persist-credentials: false
-      - uses: ./.github/actions/setup-project
-      - uses: ./.github/actions/test-mutations
-        with:
-          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
-          full: ${{ github.event_name == 'schedule' || inputs.ref != '' || inputs.release_tag != '' || inputs.full_mutation == true }}
-          publish: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && inputs.ref == '' && inputs.release_tag == '' }}
+    uses: ./.github/workflows/mutation.yml
+    with:
+      ref: ${{ inputs.ref || github.sha }}
+      base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+      full: ${{ github.event_name == 'schedule' || inputs.ref != '' || inputs.release_tag != '' || inputs.full_mutation == true }}
+      publish: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && inputs.ref == '' && inputs.release_tag == '' }}
 
   mutation-pure:
     name: Pure runtime mutation (100%)

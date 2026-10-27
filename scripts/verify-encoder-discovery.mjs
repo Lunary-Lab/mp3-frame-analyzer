@@ -13,22 +13,31 @@ export const ENCODER_TEST_NAMES = Object.freeze(
 );
 
 export function assertEncoderDiscovery(report) {
-  const file = report.testFiles?.['tests/mp3/free-format-real.test.ts'];
-  assert.ok(Array.isArray(file?.tests), 'Genuine encoder mutation suite is missing');
-  assert.deepEqual(
-    file.tests.map((test) => test.name).sort(),
-    [...ENCODER_TEST_NAMES].sort(),
-    'Encoder tests missing or skipped',
-  );
-  const active = new Set(
-    Object.values(report.files ?? {}).flatMap((source) =>
-      source.mutants.flatMap((mutant) => mutant.coveredBy ?? []),
-    ),
-  );
-  for (const test of file.tests) {
-    assert.ok(active.has(test.id), `Encoder test did not cover parser mutants: ${test.name}`);
+  return assertEncoderShardDiscovery([report]);
+}
+
+export function assertEncoderShardDiscovery(reports) {
+  const coveredNames = new Set();
+  for (const report of reports) {
+    const file = report.testFiles?.['tests/mp3/free-format-real.test.ts'];
+    assert.ok(Array.isArray(file?.tests), 'Genuine encoder mutation suite is missing');
+    assert.deepEqual(
+      file.tests.map((test) => test.name).sort(),
+      [...ENCODER_TEST_NAMES].sort(),
+      'Encoder tests missing or skipped',
+    );
+    const active = new Set(
+      Object.values(report.files ?? {}).flatMap((source) =>
+        source.mutants.flatMap((mutant) => mutant.coveredBy ?? []),
+      ),
+    );
+    for (const test of file.tests) {
+      if (active.has(test.id)) coveredNames.add(test.name);
+    }
   }
-  return file.tests.length;
+  for (const name of ENCODER_TEST_NAMES)
+    assert.ok(coveredNames.has(name), `Encoder test did not cover parser mutants: ${name}`);
+  return ENCODER_TEST_NAMES.length;
 }
 if (isMain(import.meta.url)) {
   const report = JSON.parse(await readFile(process.argv[2], 'utf8'));

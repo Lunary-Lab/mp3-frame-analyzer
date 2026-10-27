@@ -14,6 +14,10 @@ const mutationAction = await readFile(
   new URL('../.github/actions/test-mutations/action.yml', import.meta.url),
   'utf8',
 );
+const mutationWorkflow = await readFile(
+  new URL('../.github/workflows/mutation.yml', import.meta.url),
+  'utf8',
+);
 const required = [
   'format',
   'lint',
@@ -193,7 +197,11 @@ test('the complete cache campaign is required and parallel to parser mutation', 
   assert.match(mutationAction, /verify-encoder-discovery\.mjs reports\/mutation\/mutation\.json/);
   assert.match(job('mutation'), /inputs\.full_mutation == true/);
   assert.match(mutationAction, /node scripts\/run-mutations\.mjs --full/);
-  assert.match(job('mutation'), /uses: \.\/\.github\/actions\/test-mutations/);
+  assert.match(job('mutation'), /uses: \.\/\.github\/workflows\/mutation\.yml/);
+  assert.equal(
+    parse(mutationWorkflow).jobs.ordinary.steps.at(-1).uses,
+    './.github/actions/test-mutations',
+  );
 });
 
 test('the pure runtime campaign is native, fresh, bounded, and preserves its own report', async () => {

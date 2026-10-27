@@ -35,17 +35,30 @@ export function assertParserTestDiscovery(expected, ordinary, mutation) {
   return { parserFiles: owned, ordinaryFileCount: all.length, mutationFileCount: selected.length };
 }
 
-async function nativeFiles(root, config, env) {
+async function nativeFiles(root, config, env, filesOnly = true) {
   const cli = join(
     dirname(fileURLToPath(import.meta.resolve('vitest/package.json'))),
     'vitest.mjs',
   );
   const { stdout } = await execute(
     process.execPath,
-    [cli, 'list', '--filesOnly', '--json', '--config', config, '--no-fsModuleCache'],
+    [
+      cli,
+      'list',
+      ...(filesOnly ? ['--filesOnly'] : []),
+      '--json',
+      '--config',
+      config,
+      '--no-fsModuleCache',
+    ],
     { cwd: root, env, timeout: 10_000, killSignal: 'SIGKILL', maxBuffer: 4 * 1024 * 1024 },
   );
   return JSON.parse(stdout).map(({ file }) => slash(relative(root, file)));
+}
+
+// Native runnable discovery omits all-skipped suites, as Stryker's report does.
+export async function runnableParserTestFiles(root, env) {
+  return [...new Set(await nativeFiles(root, 'vitest.mutation.config.ts', env, false))].sort();
 }
 
 export async function verifyParserTestDiscovery(root, env = process.env) {

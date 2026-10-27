@@ -1,17 +1,12 @@
-import { createHash } from 'node:crypto';
-
-export const PARSER_GLOB = 'src/mp3/**/*.ts';
-export const VITEST_CONFIG = 'vitest.mutation.config.ts';
-export const sha256 = (text) => createHash('sha256').update(text).digest('hex');
-
-export const sourceContext = (sources) =>
-  sha256(
-    JSON.stringify([...sources.keys()].sort().map((file) => [file, sha256(sources.get(file))])),
-  );
-
-function requireThat(condition, message) {
-  if (!condition) throw new Error(message);
-}
+import { isDeepStrictEqual } from 'node:util';
+import {
+  sha256,
+  requireThat,
+  validateSchemas,
+  validateMutationConfiguration,
+  validateSourceInventory,
+} from './mutation-policy-inputs.mjs';
+export { PARSER_GLOB, VITEST_CONFIG, sha256, sourceContext } from './mutation-policy-inputs.mjs';
 
 /** Convert Stryker's 1-based UTF-16 coordinates into an exact source slice. */
 export function originalAt(source, location) {
@@ -64,55 +59,6 @@ function exceptionKey(entry) {
     entry.location?.end?.line,
     entry.location?.end?.column,
   ]);
-}
-
-function validateSchemas(report, policy) {
-  requireThat(policy?.schemaVersion === 1, 'Unsupported equivalence-policy schema');
-  requireThat(policy.target === 100, 'The adjusted mutation gate must remain 100%');
-  requireThat(report?.schemaVersion === '1.0', 'Unsupported Stryker report schema');
-  requireThat(
-    report.framework?.name === 'StrykerJS' && report.framework.version === policy.strykerVersion,
-    'Stryker version changed: review the mutation policy',
-  );
-}
-
-function validateExecutionConfiguration(config) {
-  requireThat(
-    config.testRunner === 'vitest' &&
-      config.vitest?.configFile === VITEST_CONFIG &&
-      config.vitest?.related === false &&
-      config.vitest?.pool === 'forks' &&
-      config.coverageAnalysis === 'perTest' &&
-      config.incremental === true &&
-      config.incrementalFile === '.cache/mutation/working.json',
-    'Unexpected mutation execution configuration',
-  );
-}
-
-function validateMutationConfiguration(config) {
-  requireThat(
-    JSON.stringify(config?.mutate) === JSON.stringify([PARSER_GLOB]),
-    'Mutation scope must include the entire parser',
-  );
-  validateExecutionConfiguration(config);
-  requireThat(
-    !config.mutator?.excludedMutations?.length && !config.ignorers?.length,
-    'Broad mutation exclusions are forbidden',
-  );
-}
-
-function validateSourceInventory(report, policy, sources) {
-  requireThat(sources instanceof Map && sources.size > 0, 'Empty parser source inventory');
-  const paths = [...sources.keys()].sort();
-  requireThat(
-    report.files && JSON.stringify(Object.keys(report.files).sort()) === JSON.stringify(paths),
-    'Mutation report does not contain every current parser source',
-  );
-  requireThat(
-    policy.contextSha256 === sourceContext(sources),
-    'Parser context changed: re-review equivalence proofs before updating the context hash',
-  );
-  return paths;
 }
 
 function reviewedExceptions(policy, sources) {
@@ -267,29 +213,83 @@ function auditSourceMutants(file, source, record, context) {
 export function auditMutations(report, policy, sources, { nativeReuse = false } = {}) {
   validateSchemas(report, policy);
   validateMutationConfiguration(report.config);
-  const paths = validateSourceInventory(report, policy, sources);
+  const paths = validateSourceInventory(Object.keys(report.files ?? {}), policy, sources);
+  return auditReports([report], policy, sources, paths, nativeReuse === true);
+}
+
+const executionConfig = (config) =>
+  Object.fromEntries(Object.entries(config).filter(([key]) => key !== 'mutate'));
+
+function validateShard(report, scope, referenceConfig, policy) {
+  validateSchemas(report, policy);
+  validateMutationConfiguration(report.config, scope);
+  requireThat(
+    report.config.concurrency === 2 && report.config.force === true,
+    'Shards require fresh execution with two workers',
+  );
+  requireThat(
+    isDeepStrictEqual(executionConfig(report.config), executionConfig(referenceConfig)),
+    'Inconsistent shard execution configurations',
+  );
+  requireThat(
+    isDeepStrictEqual(Object.keys(report.files ?? {}).sort(), scope.toSorted()),
+    'Shard report does not match its assigned source files',
+  );
+  for (const record of Object.values(report.files))
+    for (const mutant of record.mutants)
+      requireThat(
+        Number.isFinite(mutant.duration) && mutant.duration >= 0,
+        'Shard contains a result without fresh execution evidence',
+      );
+}
+
+/** Audit disjoint raw reports without merging their local mutant or test IDs. */
+export function auditMutationShards(reports, policy, sources, scopes) {
+  requireThat(
+    Array.isArray(scopes) &&
+      scopes.length > 0 &&
+      scopes.every((scope) => Array.isArray(scope) && scope.length > 0),
+    'Missing or empty shard scopes',
+  );
+  requireThat(
+    Array.isArray(reports) && reports.length === scopes.length,
+    'Missing or extra shard reports',
+  );
+  const paths = validateSourceInventory(scopes.flat(), policy, sources);
+  reports.forEach((report, index) =>
+    validateShard(report, scopes[index], reports[0]?.config, policy),
+  );
+  return auditReports(reports, policy, sources, paths, false);
+}
+
+function auditReports(reports, policy, sources, paths, nativeReuse) {
   const exceptions = reviewedExceptions(policy, sources);
-  const testIds = nativeTestIds(report.testFiles);
   const context = {
-    nativeReuse: nativeReuse === true,
+    nativeReuse,
     exceptions,
-    testIds,
     seen: new Set(),
-    mutantIds: new Set(),
     timedOutEquivalents: [],
   };
   const totals = { killed: 0, timedOut: 0, equivalent: 0, total: 0 };
   const perFile = {};
-  for (const file of paths) {
-    const counts = auditSourceMutants(file, sources.get(file), report.files[file], context);
-    perFile[file] = counts;
-    for (const k of Object.keys(totals)) totals[k] += counts[k];
+  for (const report of reports) {
+    context.testIds = nativeTestIds(report.testFiles);
+    context.mutantIds = new Set();
+    for (const file of Object.keys(report.files).sort()) {
+      const counts = auditSourceMutants(file, sources.get(file), report.files[file], context);
+      perFile[file] = counts;
+      for (const k of Object.keys(totals)) totals[k] += counts[k];
+    }
   }
+  return summarize(context, totals, perFile, paths, policy);
+}
+
+function summarize(context, totals, perFile, paths, policy) {
+  const { exceptions, timedOutEquivalents } = context;
   requireThat(
     context.seen.size === exceptions.size,
     'Stale exception: its exact mutant was not generated',
   );
-  const { timedOutEquivalents } = context;
   const detected = totals.killed + totals.timedOut;
   // Raw counts keep Stryker's timeout outcomes. An exact reviewed equivalent
   // that timed out is excluded from both sides of the adjusted calculation;

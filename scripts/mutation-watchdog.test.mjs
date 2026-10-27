@@ -9,13 +9,14 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 
-const source = readFileSync(new URL('./run-mutations.mjs', import.meta.url), 'utf8');
-const parsed = ts.createSourceFile('run-mutations.mjs', source, ts.ScriptTarget.Latest, true);
+const source = readFileSync(new URL('./mutation-process.mjs', import.meta.url), 'utf8');
+const parsed = ts.createSourceFile('mutation-process.mjs', source, ts.ScriptTarget.Latest, true);
 const declaration = parsed.statements.find(
-  (statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === 'run',
+  (statement) =>
+    ts.isFunctionDeclaration(statement) && statement.name?.text === 'runMutationProcess',
 );
 assert.ok(declaration, 'Exercise the actual runner function, not a test-side reimplementation');
-const implementation = `(${declaration.getText(parsed)})`;
+const implementation = `(${declaration.getText(parsed).replace(/^export /, '')})`;
 const budget = 90 * 60 * 1000;
 
 function fixture() {
@@ -72,10 +73,15 @@ test('the finite 90-minute child watchdog fits inside the 100-minute parser job'
   await rejected;
   assert.deepEqual(f.killed, [{ pid: -4242, signal: 'SIGKILL' }]);
   f.clean();
-  const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
-  const mutation = workflow.split('\n  mutation:\n')[1]?.split(/\n {2}[a-z][a-z-]*:\n/)[0];
-  assert.ok(mutation, 'The existing full parser job must remain present');
-  assert.match(mutation, /timeout-minutes: 100\n/);
+  const workflow = readFileSync(
+    new URL('../.github/workflows/mutation.yml', import.meta.url),
+    'utf8',
+  );
+  for (const name of ['ordinary', 'shard']) {
+    const mutation = workflow.split(`\n  ${name}:\n`)[1]?.split(/\n {2}[a-z][a-z-]*:\n/)[0];
+    assert.ok(mutation, 'Both native parser execution jobs must remain present');
+    assert.match(mutation, /timeout-minutes: 100\n/);
+  }
   const config = JSON.parse(readFileSync(new URL('../stryker.config.json', import.meta.url)));
   assert.equal(config.timeoutMS, 2000);
   assert.deepEqual(config.mutate, ['src/mp3/**/*.ts']);
