@@ -14,6 +14,30 @@ production gates fail at 11 complexity, 301 file lines, 61 function lines, and
 5. **Regression**: three real FFmpeg/libmp3lame fixtures: CBR and VBR with Xing/Info metadata (33 physical frames each), plus CBR without Xing metadata (51 physical frames).
 6. **Security**: oversized upload, malformed multipart, forged filename, invalid frame/header and metadata corruption.
 
+## Mirrored parser-test discovery
+
+Parser suites live under `tests/mp3/**/*.test.ts`, mirroring `src/mp3/`.
+The ordinary Vitest glob still discovers all `tests/**/*.test.ts`; the mutation
+config uses the mirrored parser glob, not a filename list, and explicitly fails
+an empty run. New nested parser suites need no config update. Helpers and binary
+fixtures remain in their shared existing directories. Existing mixed parser/API
+assertions stay intact; this layout does not silently split or remove them.
+
+Before mutation execution, `scripts/parser-test-discovery.mjs` compares native
+`vitest list --filesOnly --json` results for both actual configurations against
+Node's native filesystem glob for the mirrored directory. Missing, extra,
+duplicate or empty selections fail; an exclusion inherited by both configs is
+still detected. The resulting `reports/mutation/discovery.json` records the
+selected paths. Native real-runner regressions add an unknown nested suite,
+rename it, narrow either config and verify empty-run failure.
+
+This is directory ownership, not a dependency graph or process/network purity
+analyzer. A parser test placed outside the declared mirrored directory is a
+review/layout error; the guard does not infer its meaning from imports. Existing
+HTTP/process suites outside that directory remain ordinary-only. Moving test
+paths conservatively invalidates the native mutation cache; no cache witnesses
+or source-equivalence proofs are rewritten to preserve reuse.
+
 ## Production coverage gate
 
 `npm run test:coverage` includes **every `src/**/*.ts` file**, including the server

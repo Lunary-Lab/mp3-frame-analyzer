@@ -4,7 +4,7 @@ Releases distribute a versioned runtime archive through GitHub Releases. The npm
 
 ## Version authority
 
-[Release Please Action v5](https://github.com/googleapis/release-please-action/blob/v5.0.0/README.md) maintains the release PR, changelog, package version, lockfile version, and `.release-please-manifest.json`. The manifest was initialized at **1.0.0**, with bootstrap commit `fa85190d2f4ad31453c32e90cff0b76ae432526a`. That was a version baseline, not a published 1.0.0 artifact; the first nonbreaking `feat` release advanced it to **1.1.0**. For the current source version, consult the package and release manifest rather than this historical initialization record. `last-release-sha` is an explicit commit-walk stop, not a permanent promise about future release boundaries. The pinned Release Please implementation stops at that SHA if it encounters it before the expected release commit. Keep the existing bootstrap and last-release anchors unchanged until the expected tag, manifest version, and ancestry have been verified; do not substitute an anchor for a release tag in generated comparisons.
+[Release Please Action v5](https://github.com/googleapis/release-please-action/blob/45996ed1f6d02564a971a2fa1b5860e934307cf7/README.md) maintains the release PR, changelog, package version, lockfile version, and `.release-please-manifest.json`. The manifest was initialized at **1.0.0**, with bootstrap commit `fa85190d2f4ad31453c32e90cff0b76ae432526a`. That was a version baseline, not a published 1.0.0 artifact; the first nonbreaking `feat` release advanced it to **1.1.0**. For the current source version, consult the package and release manifest rather than this historical initialization record. `last-release-sha` is an explicit commit-walk stop, not a permanent promise about future release boundaries. The pinned Release Please implementation stops at that SHA if it encounters it before the expected release commit. Keep the existing bootstrap and last-release anchors unchanged until the expected tag, manifest version, and ancestry have been verified; do not substitute an anchor for a release tag in generated comparisons.
 
 Use Conventional Commit PR titles and **squash merge with the PR title as the commit title**. Release Please reads the resulting commits on `main`; PR labels do not provide a second versioning authority. The squash commit body defaults to **blank** because Release Please also parses commit bodies: a `BREAKING CHANGE:` note or a paragraph starting `fix:` copied from branch commits or a PR description would otherwise add releases the title did not declare. Mark breaking changes with `!` in the PR title; a deliberate `BREAKING CHANGE:` footer can still be typed into the merge dialog. Optional scopes describe the changed area without changing the bump. Dependabot uses `fix(deps):` for production dependency updates, `build(deps-dev):` for development-only updates, and `ci(deps):` for Actions updates.
 
@@ -142,10 +142,10 @@ Focused tests run with `node --test scripts/release-notes*.test.mjs scripts/rele
 and are included in `npm run test:tooling`.
 
 The behavior above was checked against
-[Release Please 17.6.0's commit boundaries](https://github.com/googleapis/release-please/blob/v17.6.0/src/manifest.ts),
-[its default changelog generator](https://github.com/googleapis/release-please/blob/v17.6.0/src/changelog-notes/default.ts),
+[Release Please 17.6.0's commit boundaries](https://github.com/googleapis/release-please/blob/712fcf01effd08d7b0e7b1fd3861f2cb388bc8d1/src/manifest.ts),
+[its default changelog generator](https://github.com/googleapis/release-please/blob/712fcf01effd08d7b0e7b1fd3861f2cb388bc8d1/src/changelog-notes/default.ts),
 the pinned preset's
-[breaking-note handling](https://github.com/conventional-changelog/conventional-changelog/blob/conventional-changelog-conventionalcommits-v6.1.0/packages/conventional-changelog-conventionalcommits/writer-opts.js),
+[breaking-note handling](https://github.com/conventional-changelog/conventional-changelog/blob/2e5fe6d9574ba896fa90b5bfcb50fb73d28af6d6/packages/conventional-changelog-conventionalcommits/writer-opts.js),
 and GitHub's
 [native categorization](https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes)
 and [generate-notes API](https://docs.github.com/en/rest/releases/releases#generate-release-notes-content-for-a-release).

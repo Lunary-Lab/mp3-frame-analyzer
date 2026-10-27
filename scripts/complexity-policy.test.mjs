@@ -38,7 +38,7 @@ test('complexity above ten is an error across maintained production TS and JS', 
 
 test('test code retains the separately reviewed advisory limit', async () => {
   for (const path of [
-    'tests/count-frames.test.ts',
+    'tests/mp3/count-frames.test.ts',
     'tests/helpers/mp3-fixtures.ts',
     'scripts/mutation-policy.test.mjs',
     'scripts/mutation-cache.test.mjs',

@@ -80,7 +80,7 @@ with 1.2-second per-probe timeouts, at most 180 candidate executions and a
 22-second overall reduction budget. The minimized input stays under
 `fuzz/crashes/` for human inspection. Promote a confirmed fix by copying its
 minimized input to `fuzz/regressions/<target>/`, adding a Vitest assertion of
-expected behavior to `tests/fuzz-regressions.test.ts`, and committing both.
+expected behavior to `tests/mp3/fuzz-regressions.test.ts`, and committing both.
 Never silently regard an arbitrary positive count as correct. If the replay
 subprocess fails without a recognized fuzz-failure marker (for example, an
 unavailable runtime or exit 127), minimization fails closed and preserves the

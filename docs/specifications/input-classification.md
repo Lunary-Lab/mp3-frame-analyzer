@@ -18,8 +18,8 @@ integrity. HTTP mappings and message wording are application decisions.
   `1111`. The standard's MPEG-1 layout uses a twelve-bit sync and one-bit ID;
   the implementation's eleven-bit sync/two-bit version view also identifies
   out-of-scope MPEG-2 and MPEG-2.5. The reserved two-bit version `01` is not
-  another supported codec. [FFmpeg's header checker](https://github.com/FFmpeg/FFmpeg/blob/master/libavcodec/mpegaudiodecheader.h)
-  and [mpg123's header definitions](https://github.com/libsdl-org/mpg123/blob/main/src/libmpg123/mpeghead.h)
+  another supported codec. [FFmpeg's header checker](https://github.com/FFmpeg/FFmpeg/blob/c220739be57307ea821d1197ad89ff6e372180e8/libavcodec/mpegaudiodecheader.h)
+  and [mpg123's header definitions](https://github.com/libsdl-org/mpg123/blob/b6881556a0ee8f417ccc14ded553893b533ffe0c/src/libmpg123/mpeghead.h)
   provide independent implementation context, not additional ISO requirements.
   These are original summaries; standard-document bytes and full decoder
   conformance are outside this repository.

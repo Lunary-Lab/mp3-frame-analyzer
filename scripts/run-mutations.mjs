@@ -4,6 +4,7 @@ import { readFile, readdir, rm, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { auditMutations, sourceContext } from './mutation-policy.mjs';
+import { verifyParserTestDiscovery } from './parser-test-discovery.mjs';
 import {
   WORKING_REPORT,
   BASELINE,
@@ -137,6 +138,8 @@ try {
         'Parser context changed: review equivalence proofs before rerunning mutations',
       );
     }
+    const discovery = await verifyParserTestDiscovery(root, env);
+    await writeFile(join(output, 'discovery.json'), JSON.stringify(discovery, null, 2) + '\n');
     const audit = (report, options) => auditMutations(report, policy, sources, options);
     const force = args.includes('--full') || Boolean(env.NODE_OPTIONS) || !inputsHash;
     const prIdentity = force ? null : pullRequestIdentity(process.env);

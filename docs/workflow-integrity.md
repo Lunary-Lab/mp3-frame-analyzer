@@ -74,8 +74,8 @@ databases remain live data, not frozen executable dependencies.
 Primary sources, reviewed 2026-10-26:
 
 - [zizmor 1.31.1 release](https://github.com/zizmorcore/zizmor/releases/tag/v1.31.1)
-- [Native reference audit](https://github.com/zizmorcore/zizmor/blob/v1.31.1/crates/zizmor/src/audit/unpinned_uses.rs)
-- [Native image audit](https://github.com/zizmorcore/zizmor/blob/v1.31.1/crates/zizmor/src/audit/unpinned_images.rs)
+- [Native reference audit](https://github.com/zizmorcore/zizmor/blob/effdb35fa7868863f11655db256d9008922fa427/crates/zizmor/src/audit/unpinned_uses.rs)
+- [Native image audit](https://github.com/zizmorcore/zizmor/blob/effdb35fa7868863f11655db256d9008922fa427/crates/zizmor/src/audit/unpinned_images.rs)
 - [zizmor usage and failure modes](https://docs.zizmor.sh/usage/)
 - [yaml parser documentation](https://eemeli.org/yaml/)
 

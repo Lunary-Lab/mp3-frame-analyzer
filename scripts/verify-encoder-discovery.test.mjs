@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { assertEncoderDiscovery, ENCODER_TEST_NAMES } from './verify-encoder-discovery.mjs';
 const report = () => ({
   testFiles: {
-    'tests/free-format-real.test.ts': {
+    'tests/mp3/free-format-real.test.ts': {
       tests: ENCODER_TEST_NAMES.map((name, index) => ({ name, id: String(index) })),
     },
   },
@@ -13,8 +13,13 @@ test('required encoder coverage is present and active, never tool-dependent skip
   assert.equal(assertEncoderDiscovery(report()), 5);
   assert.throws(() => assertEncoderDiscovery({ testFiles: {} }));
   const skipped = report();
-  skipped.testFiles['tests/free-format-real.test.ts'].tests.pop();
+  skipped.testFiles['tests/mp3/free-format-real.test.ts'].tests.pop();
   assert.throws(() => assertEncoderDiscovery(skipped));
+  const stale = report();
+  stale.testFiles['tests/free-format-real.test.ts'] =
+    stale.testFiles['tests/mp3/free-format-real.test.ts'];
+  delete stale.testFiles['tests/mp3/free-format-real.test.ts'];
+  assert.throws(() => assertEncoderDiscovery(stale), /Genuine encoder mutation suite is missing/);
   const inactive = report();
   inactive.files['src/mp3/example.ts'].mutants[0].coveredBy.pop();
   assert.throws(() => assertEncoderDiscovery(inactive));
