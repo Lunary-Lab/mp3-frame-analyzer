@@ -2,8 +2,8 @@ name: Locked Node project setup
 description: Pinned supported Node/npm with lifecycle scripts disabled during installation
 inputs:
   node:
-    description: Supported Node major
-    default: '24'
+    description: Exact reviewed Node version
+    default: '24.22.1'
   npm:
     description: Reviewed npm version
     default: '11.19.0'
@@ -13,11 +13,9 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+    - uses: ./.github/actions/setup-node-verified
       with:
-        node-version: ${{ inputs.node }}
-        cache: npm
-        check-latest: false
+        version: ${{ inputs.node }}
     - name: Use the reviewed package manager
       shell: bash
       env:
@@ -25,9 +23,16 @@ runs:
         NPM_VERSION: ${{ inputs.npm }}
       run: |
         node scripts/bootstrap-npm.mjs "$NPM_VERSION"
+    # Cache only: omitting a Node version leaves the verified runtime untouched.
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        cache: npm
+        cache-dependency-path: package-lock.json
     - name: Install exact locked dependencies without lifecycle scripts
       if: inputs.install == 'true'
       shell: bash
       env:
         NPM_CONFIG_UPDATE_NOTIFIER: 'false'
-      run: npm ci --ignore-scripts --no-audit --no-fund
+      run: |
+        node scripts/verify-npm-lock.mjs
+        npm ci --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org --replace-registry-host=never

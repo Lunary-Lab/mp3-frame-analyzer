@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import base from './vitest.config.js';
+import MutationFastFirstSequencer from './scripts/mutation-fast-first-sequencer.mjs';
 
 export default defineConfig({
   ...base,
@@ -7,6 +8,8 @@ export default defineConfig({
     ...base.test,
     include: [
       'tests/byte-reader.test.ts',
+      'tests/cooperative.test.ts',
+      'tests/traversal-scheduling.test.ts',
       'tests/count-frames.test.ts',
       'tests/count-frames.property.test.ts',
       'tests/frame-header.test.ts',
@@ -28,5 +31,6 @@ export default defineConfig({
     isolate: true,
     fsModuleCache: false,
     maxWorkers: 1,
+    sequence: { sequencer: MutationFastFirstSequencer },
   },
 });

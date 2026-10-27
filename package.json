@@ -43,8 +43,9 @@
     "test:artifact": "node scripts/verify-artifact.mjs",
     "test:mutation-policy": "node --test scripts/mutation-policy*.test.mjs",
     "mutation:full": "node scripts/run-mutations.mjs --full",
-    "test:mutation-cache": "node --test scripts/mutation-cache*.test.mjs scripts/mutation-impact*.test.mjs scripts/mutation-import-capabilities.test.mjs scripts/mutation-compatibility.test.mjs scripts/mutation-execution-guard.test.mjs scripts/mutation-loader-inputs.test.mjs scripts/mutation-module-capabilities.test.mjs scripts/mutation-runtime*.test.mjs scripts/mutation-reviewed-data-access.test.mjs scripts/restore-mutation-baseline*.test.mjs",
-    "test:mutation-cache:integration": "node scripts/verify-mutation-cache.mjs"
+    "mutation:pure": "node -e \"require('node:fs').rmSync('reports/mutation-pure', { recursive: true, force: true })\" && stryker run stryker.nonparser-pure.config.mjs && node scripts/nonparser-pure-scope.mjs reports/mutation-pure/mutation.json",
+    "test:mutation-cache": "node --test scripts/mutation-cache.test.mjs",
+    "test:mutation-cache:integration": "node --test scripts/native-mutation.integration.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "10.1.6",

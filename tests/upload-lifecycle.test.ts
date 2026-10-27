@@ -233,12 +233,18 @@ it.each(['abort', 'idle timeout'] as const)(
     });
     const form = multipartBody(Buffer.alloc(512));
     const upload = open(address, form.contentType, form.payload.length);
+    let clientTimedOut = false;
+    upload.client.once('timeout', () => {
+      clientTimedOut = true;
+    });
     upload.client.write(form.payload.subarray(0, -128));
     const serverRequest = await raw;
     const closed = new Promise<void>((resolve) => serverRequest.once('close', resolve));
     expect(serverRequest.listeners('data').some((fn) => fn.name === 'onData')).toBe(true);
     if (ending === 'abort') upload.client.destroy();
     await closed;
+    // Neither ending may be supplied by the test client's fallback watchdog.
+    expect(clientTimedOut).toBe(false);
     expect(serverRequest.aborted).toBe(true);
     expect(serverRequest.listeners('data').some((fn) => fn.name === 'onData')).toBe(false);
     expect(serverRequest.listeners('close').some((fn) => fn.name === 'cleanup')).toBe(false);

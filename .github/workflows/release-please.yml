@@ -36,35 +36,52 @@ jobs:
           manifest-file: .release-please-manifest.json
           target-branch: main
 
-  check-release-pr:
+  release-pr-status:
     needs: version
     if: needs.version.outputs.prs_created == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     permissions:
-      actions: write
-      contents: read
+      pull-requests: read
     steps:
-      # GITHUB_TOKEN-generated PR runs may require approval.
-      # Explicit workflow_dispatch validates the generated head without a PAT.
-      - name: Dispatch CI and title validation for every created or updated release PR
+      # Dispatched job checks cannot satisfy PR rulesets. Report the native path
+      # instead of launching an expensive duplicate validation that cannot admit it.
+      - name: Report generated release PR and native validation next step
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_PRS: ${{ needs.version.outputs.prs }}
         run: |
           node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
           import { execFileSync } from 'node:child_process';
+          import { appendFileSync } from 'node:fs';
+          const repo = process.env.GH_REPO;
+          assert.match(repo, /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/);
           const prs = JSON.parse(process.env.RELEASE_PRS);
-          if (!Array.isArray(prs) || prs.length === 0) throw new Error('Release PR output is empty');
+          assert.ok(Array.isArray(prs) && prs.length > 0, 'Release PR output is empty');
+          const rows = [];
           for (const pr of prs) {
-            if (pr.baseBranchName !== 'main' || !/^release-please--branches--main(?:--.*)?$/.test(pr.headBranchName)) {
-              throw new Error('Unexpected release PR branch');
-            }
-            if (!Number.isSafeInteger(pr.number) || pr.number < 1) throw new Error('Invalid release PR number');
-            execFileSync('gh', ['workflow', 'run', 'ci.yml', '--repo', process.env.GH_REPO, '--ref', pr.headBranchName, '-f', 'full_mutation=false'], { stdio: 'inherit' });
-            execFileSync('gh', ['workflow', 'run', 'pr-title.yml', '--repo', process.env.GH_REPO, '--ref', pr.headBranchName, '-f', `pr_number=${pr.number}`], { stdio: 'inherit' });
+            assert.equal(pr.baseBranchName, 'main');
+            assert.match(pr.headBranchName, /^release-please--branches--main(?:--.*)?$/);
+            assert.ok(Number.isSafeInteger(pr.number) && pr.number > 0, 'Invalid release PR number');
+            const current = JSON.parse(execFileSync('gh', ['api', `repos/${repo}/pulls/${pr.number}`], { encoding: 'utf8' }));
+            assert.equal(current.number, pr.number);
+            assert.equal(current.state, 'open');
+            assert.equal(current.base.ref, 'main');
+            assert.equal(current.head.repo.full_name, repo);
+            assert.equal(current.head.ref, pr.headBranchName);
+            assert.match(current.head.sha, /^[0-9a-f]{40}$/);
+            rows.push(`- [PR #${pr.number}](https://github.com/${repo}/pull/${pr.number}) at \`${current.head.sha}\``);
           }
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+            '## Release PR validation', '', ...rows, '',
+            'After the intended main-branch changes are complete, review the current release PR head.',
+            'A maintainer can close and reopen the PR to trigger native CI and metadata-only title validation; if it is behind main, Update branch also triggers them.',
+            'Review any Approve workflows to run prompt. Confirm All checks and Conventional Commit PR title pass in the PR checks before merging.',
+            'workflow_dispatch checks do not satisfy PR rulesets. This summary does not approve workflows, and workflow approval does not merge or publish.',
+            'Final publication still requires the separate owner approval in the release environment.', '',
+          ].join('\n'));
           JS
 
   release:

@@ -16,94 +16,165 @@ const response = (
 
 const internal = response(500, 'internal-error', 'Unable to process upload', { unexpected: true });
 
-it.each<[string, unknown, UploadForm, ErrorResponse]>([
+it.each<[string, () => unknown, UploadForm, ErrorResponse]>([
   [
     'a deliberate failure keeps its status, code and message',
-    new ClientError(413, 'file-too-large', 'File exceeds configured upload limit'),
+    () => new ClientError(413, 'file-too-large', 'File exceeds configured upload limit'),
     'raw',
     response(413, 'file-too-large', 'File exceeds configured upload limit'),
   ],
   [
     'a deliberate pre-read failure requests connection closure',
-    new ClientError(400, 'invalid-option', 'bad option', { closeConnection: true }),
+    () => new ClientError(400, 'invalid-option', 'bad option', { closeConnection: true }),
     'multipart',
     response(400, 'invalid-option', 'bad option', { closeConnection: true }),
   ],
   [
     'an unsupported MPEG format is 415',
-    new Mp3ParseError('unsupported-format', 0, 'MPEG-2 is not supported'),
+    () => new Mp3ParseError('unsupported-format', 0, 'MPEG-2 is not supported'),
     'multipart',
     response(415, 'unsupported-format', 'MPEG-2 is not supported'),
   ],
   [
     'malformed MPEG data is 422',
-    new Mp3ParseError('truncated-mp3', 9, 'Truncated final frame'),
+    () => new Mp3ParseError('truncated-mp3', 9, 'Truncated final frame'),
     'raw',
     response(422, 'truncated-mp3', 'Truncated final frame'),
   ],
   [
     'a typed framework failure on a raw upload requests connection closure',
-    failure('internal detail', { code: 'FST_ERR_CTP_INVALID_MEDIA_TYPE', statusCode: 415 }),
+    () => failure('internal detail', { code: 'FST_ERR_CTP_INVALID_MEDIA_TYPE', statusCode: 415 }),
     'raw',
     response(415, 'unsupported-media-type', 'Expected an MP3 upload', { closeConnection: true }),
   ],
   [
     'a typed framework failure on a multipart upload does not request connection closure',
-    failure('internal detail', { code: 'FST_PARTS_LIMIT', statusCode: 413 }),
+    () => failure('internal detail', { code: 'FST_PARTS_LIMIT', statusCode: 413 }),
     'multipart',
     response(413, 'too-many-parts', 'Only one multipart part is allowed'),
   ],
   [
     'a known Busboy protocol message on a multipart upload is 400',
-    new Error('Unexpected end of form'),
+    () => new Error('Unexpected end of form'),
     'multipart',
     response(400, 'invalid-upload', 'Invalid or incomplete multipart request'),
   ],
   [
     'a multipart stream that closed before the form ended is 400',
-    failure('Premature close', { code: 'ERR_STREAM_PREMATURE_CLOSE' }),
+    () => failure('Premature close', { code: 'ERR_STREAM_PREMATURE_CLOSE' }),
     'multipart',
     response(400, 'invalid-upload', 'Invalid or incomplete multipart request'),
   ],
   [
     'a premature close on a raw upload is not a multipart failure',
-    failure('Premature close', { code: 'ERR_STREAM_PREMATURE_CLOSE' }),
+    () => failure('Premature close', { code: 'ERR_STREAM_PREMATURE_CLOSE' }),
     'raw',
     internal,
   ],
   [
     'a Busboy message on a raw upload is not a multipart failure',
-    new Error('Unexpected end of form'),
+    () => new Error('Unexpected end of form'),
     'raw',
     internal,
   ],
   [
     'an unknown framework 413 keeps its status with a sanitized message',
-    failure('internal resource detail', { statusCode: 413 }),
+    () => failure('internal resource detail', { statusCode: 413 }),
     'multipart',
     response(413, 'request-too-large', 'Request exceeds configured limits'),
   ],
   [
     'an unknown framework 415 on a raw upload requests connection closure',
-    failure('internal detail', { statusCode: 415 }),
+    () => failure('internal detail', { statusCode: 415 }),
     'raw',
     response(415, 'unsupported-media-type', 'Expected an MP3 upload', { closeConnection: true }),
   ],
   [
     'any other framework 4xx is an invalid request',
-    failure('internal detail', { statusCode: 431 }),
+    () => failure('internal detail', { statusCode: 431 }),
     'raw',
     response(431, 'invalid-request', 'Invalid HTTP request', { closeConnection: true }),
   ],
   [
     'an untyped code does not match the framework table',
-    failure('internal detail', { code: 42 }),
+    () => failure('internal detail', { code: 42 }),
     'raw',
     internal,
   ],
-  ['a framework 5xx is internal', failure('internal detail', { statusCode: 503 }), 'raw', internal],
-  ['an arbitrary error is internal', new Error('diagnostic detail'), 'multipart', internal],
-  ['a thrown non-error is internal', 'thrown string', 'raw', internal],
-])('%s', (_, error, form, expected) => {
-  expect(errorResponseFor(error, form)).toEqual(expected);
+  [
+    'a framework 5xx is internal',
+    () => failure('internal detail', { statusCode: 503 }),
+    'raw',
+    internal,
+  ],
+  ['an arbitrary error is internal', () => new Error('diagnostic detail'), 'multipart', internal],
+  ['a thrown non-error is internal', () => 'thrown string', 'raw', internal],
+])('%s', (_, createError, form, expected) => {
+  expect(errorResponseFor(createError(), form)).toEqual(expected);
 });
+
+it.each([NaN, Infinity, -Infinity, 399, 400.5, 499.5, 500, '400', null, undefined])(
+  'treats an invalid framework client status %s as an unexpected internal failure',
+  (statusCode) => {
+    for (const form of ['raw', 'multipart'] as const) {
+      expect(errorResponseFor(failure('private diagnostic', { statusCode }), form)).toEqual(
+        internal,
+      );
+    }
+  },
+);
+
+it.each([400, 499])('preserves the valid framework client-status boundary %i', (statusCode) => {
+  for (const form of ['raw', 'multipart'] as const) {
+    expect(errorResponseFor(failure('private diagnostic', { statusCode }), form)).toEqual(
+      response(statusCode, 'invalid-request', 'Invalid HTTP request', {
+        closeConnection: form === 'raw',
+      }),
+    );
+  }
+});
+
+it.each<[string, number, string, string]>([
+  ['FST_REQ_FILE_TOO_LARGE', 413, 'file-too-large', 'MP3 file exceeds the upload limit'],
+  ['FST_FILES_LIMIT', 413, 'too-many-files', 'Only one file part is allowed'],
+  ['FST_FIELDS_LIMIT', 413, 'unexpected-fields', 'Multipart text fields are not allowed'],
+  ['FST_PARTS_LIMIT', 413, 'too-many-parts', 'Only one multipart part is allowed'],
+  ['FST_MP_PREMATURE_CLOSE', 400, 'invalid-upload', 'Multipart request ended early'],
+  ['FST_PROTO_VIOLATION', 400, 'invalid-upload', 'Invalid multipart field name'],
+  ['FST_INVALID_JSON_FIELD_ERROR', 400, 'invalid-upload', 'Invalid multipart field'],
+  ['FST_INVALID_MULTIPART_CONTENT_TYPE', 415, 'unsupported-media-type', 'Expected an MP3 upload'],
+  ['FST_ERR_CTP_INVALID_MEDIA_TYPE', 415, 'unsupported-media-type', 'Expected an MP3 upload'],
+  ['FST_ERR_CTP_EMPTY_JSON_BODY', 415, 'unsupported-media-type', 'Expected an MP3 upload'],
+  ['FST_ERR_CTP_INVALID_JSON_BODY', 415, 'unsupported-media-type', 'Expected an MP3 upload'],
+  ['FST_ERR_CTP_INVALID_CONTENT_LENGTH', 400, 'invalid-request', 'Invalid Content-Length'],
+  ['FST_ERR_CTP_BODY_TOO_LARGE', 413, 'request-too-large', 'Request body exceeds the limit'],
+])(
+  'sanitizes the exact %s contract before fallback status classification',
+  (code, status, kind, message) => {
+    for (const form of ['raw', 'multipart'] as const) {
+      expect(errorResponseFor(failure('secret', { code, statusCode: 499 }), form)).toEqual(
+        response(status, kind, message, { closeConnection: form === 'raw' }),
+      );
+    }
+  },
+);
+
+it.each([
+  'Multipart: Boundary not found',
+  'Unexpected end of multipart data',
+  'Unexpected end of form',
+  'Part terminated early due to unexpected end of multipart data',
+  'Preamble terminated early due to unexpected end of multipart data',
+])('recognizes only multipart protocol failure %s', (message) => {
+  expect(errorResponseFor(new Error(message), 'multipart')).toEqual(
+    response(400, 'invalid-upload', 'Invalid or incomplete multipart request'),
+  );
+  expect(errorResponseFor(new Error(message), 'raw')).toEqual(internal);
+});
+
+it.each([null, undefined, 400, { code: 'FST_PARTS_LIMIT' }, { statusCode: 413 }])(
+  'does not trust properties on non-Error value %j',
+  (error) => {
+    expect(errorResponseFor(error, 'raw')).toEqual(internal);
+  },
+);

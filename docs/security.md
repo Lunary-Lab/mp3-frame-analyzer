@@ -32,6 +32,17 @@ When a consumer rejects multipart input early, its error can respond before the 
 
 The runtime observes shutdown failures and allows up to 10 seconds for requests and close hooks to drain. A failed close or expired deadline is logged and ends the process with a failure status. Connection-level failures and aborted requests cannot always receive JSON.
 
+The HTTP route gives its actual parser consumer an `AbortSignal`. An incomplete
+request closing, the response closing, or an early response finishing cancels
+still-running cooperative parser work. Normal request EOF is not cancellation,
+including Node's normal completed-request `close` event. Listeners remain attached
+to the consumer after an aggregate multipart-budget response wins its race, and
+are removed when that consumer settles. Cancellation does not replace an already
+chosen 413 response; a disconnected client cannot receive a new error response.
+Graceful shutdown does not preempt accepted work before transport teardown. This
+is cooperative cancellation at parser checkpoints, not a promise to interrupt
+arbitrary synchronous code or detached custom-consumer tasks.
+
 ## Application logging boundary
 
 `src/logging.ts` limits application logs to server-generated request correlation IDs,
@@ -101,6 +112,14 @@ never replace a failed digest with the observed bytes merely to make CI pass.
 Hash identity does not establish package benignness, CVE safety, or an immutable
 hosted runner/Node/tar. See [npm registry signatures](https://docs.npmjs.com/about-registry-signatures/).
 
+Extraction passes only the selected host PATH to GNU tar, preventing inherited
+`TAR_OPTIONS` checkpoint commands and gzip options. The npm version probe runs
+through the active Node executable with a private working directory/HOME and a
+minimal environment, not another Node selected by PATH or inherited preload/cache
+options. These child-process controls do not sanitize an already running parent
+Node process or establish trust in the host PATH/tools. Published npm paths and
+mutation-cache environment identity are unchanged.
+
 ## Semgrep installation integrity
 
 The Semgrep CE install uses the complete reviewed version/SHA-256 wheel lock in
@@ -127,6 +146,50 @@ Do not replace a failed hash with the newly observed value merely to pass CI.
 Hashes prevent substitution relative to reviewed bytes, not malicious upstream
 code. The hosted runner, Python and pip remain trusted platform infrastructure,
 not immutable dependencies covered by this wheel lock.
+
+## Node runtime installation integrity
+
+CI project commands use reviewed Node 24.22.1 or 26.12.1 Linux x86-64 archives.
+`.github/security/node-archives.sha256` binds each exact version and filename to
+the SHA-256 published in Node's signed release checksums. The reviewed digests
+were checked against both official signed manifests and the Node release-key
+ring; refresh both version and digest together using the
+[official release verification procedure](https://github.com/nodejs/node#verifying-binaries).
+`.nvmrc` records the default exact version; the package engines still describe
+the wider supported compatibility range rather than an archive trust policy.
+
+The small native bootstrap downloads only the bound `nodejs.org/dist` HTTPS
+URL, disables ambient curl configuration, rejects redirects and bounds time and
+size. Native `sha256sum` must succeed before clean-environment tar extraction
+or the initial Node probe. Deterministic version-plus-full-digest directories
+preserve cache input stability; exclusive creation rejects existing files,
+directories, symlinks and concurrent reuse. No previously extracted runtime is
+trusted or deleted. The optional offline archive path receives the same checks.
+
+All callers explicitly clear `NODE_OPTIONS`, `NODE_PATH` and
+`NODE_COMPILE_CACHE`, and set `NODE_DISABLE_COMPILE_CACHE=1`. Verified bytes alone
+would not stop inherited preload code or a mutable compile cache. The composite
+checks that profile before acquisition, and the initial version probe uses a
+clean environment independently. These variables are set in workflow YAML,
+not through `GITHUB_ENV`, which GitHub forbids for `NODE_OPTIONS`. This is not a
+claim that every possible host environment hook or later trusted project code
+is constrained.
+
+Project setup installs the separately verified npm before invoking the existing
+SHA-pinned `actions/setup-node` solely for its maintained npm cache feature.
+That cache-only call omits both Node version inputs, so it neither acquires nor
+replaces the verified runtime. Compatibility check names retain their major
+labels while the matrix selects exact archive versions. Mutation provenance
+still includes the full environment; it is not weakened to preserve old cache
+entries across this runtime/profile change.
+
+The hosted runner, Bash, curl, coreutils and tar remain platform trust inputs;
+explicit proxy/CA transport configuration can influence connection trust but
+cannot replace the committed artifact digest. GitHub's JavaScript Action
+runtime and privileged no-checkout metadata/publishing controls remain hosted
+platform boundaries. No project checkout or bootstrap is added to those
+controls merely to replace their host Node. Hashes establish identity, not
+absence of vulnerabilities or malicious upstream behavior.
 
 ## Go helper installation integrity
 
@@ -212,7 +275,7 @@ Raw MP3 content types are passed directly as Node streams by Fastify, not buffer
 
 When an incomplete multipart ending is the observed failure, it maps to HTTP 400 `invalid-upload`. Known Busboy premature-ending messages and Node's `ERR_STREAM_PREMATURE_CLOSE` from the multipart reader receive that classification. If MPEG validation has already rejected the file, its response is not replaced by a later error while draining the remainder: for example, an early invalid MPEG header can produce 422 before the missing multipart ending arrives. The single-burst cutoff cases in `tests/security.test.ts` cover the 400 path; `tests/http.e2e.test.ts` covers an early 422 followed by an unterminated form during draining. These cases do not establish one status for every arrival order. A client disconnect may leave no writable response.
 
-An empty named file is HTTP 400 `empty-file`; a nonempty but malformed MPEG file remains HTTP 422. Unsupported MIME types are 415 whether rejected by the upload module or before the handler by Fastify. The API explicitly returns HTTP 405 with `Allow: POST` for other methods on `/file-upload`; unknown routes return JSON 404. Application-generated errors never include parser internals beyond the existing typed MPEG error messages.
+An empty named file is HTTP 400 `empty-file`; a nonempty but malformed MPEG file remains HTTP 422. For `POST /file-upload`, unsupported MIME types are 415 whether rejected by the upload module or before the handler by Fastify. The API explicitly returns HTTP 405 with `Allow: POST` for other methods on `/file-upload`; unknown routes return JSON 404. Application-generated errors never include parser internals beyond the existing typed MPEG error messages. Unknown routes and unsupported methods close after their existing JSON 404/405 response when a framed request body is still incomplete, rather than draining outside the upload limits. Requests without a body and already completed bodies retain keep-alive reuse. This does not bound all TCP connections or eliminate transport read-ahead; deployment ingress protections remain necessary.
 
 Early rejection of **raw** uploads closes the HTTP/1.1 connection after responding rather than consuming an unbounded remainder. This prevents attackers from using an invalid first header to force a background drain. A raw request that was cancelled at the TCP layer may be impossible to answer; these are not silently converted into HTTP 500. Multipart early rejection permits pipelining and connection reuse only when the entire body finishes within the separate aggregate body budget and transport timeouts. The per-file limit alone does not bound discarded bytes.
 
