@@ -18,3 +18,7 @@ governance/.terraform/
 governance/snapshots/
 
 .stryker-pure-tmp/
+
+# Exact upstream schema/license bytes; checksums and provenance are in README.md.
+scripts/schemas/cyclonedx-1.5/*.json
+scripts/schemas/cyclonedx-1.5/LICENSE
