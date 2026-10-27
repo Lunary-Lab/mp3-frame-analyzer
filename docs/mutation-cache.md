@@ -13,9 +13,34 @@ adjusted score**. An unexplained survivor still fails.
 Stryker's full configured `src/mp3/**/*.ts` discovery and fresh coverage dry run.
 A compatible completed baseline is supplied unchanged through Stryker's native
 `incrementalFile`. Otherwise `--force` executes every current mutant. We do not
-narrow `--mutate` or preserve an old inventory in place of current discovery.
-`npm run mutation:full`, scheduled CI, full manual CI and exact-source release
-validation force full execution.
+narrow `--mutate` on this ordinary path or preserve an old inventory in place of
+current discovery. `npm run mutation:full` remains a single fresh local campaign.
+
+Scheduled CI, full manual CI and exact-source release validation instead use the
+native GitHub matrix in `.github/workflows/mutation.yml`. Node's filesystem glob
+discovers every parser source; sorted whole files are assigned round-robin to at
+most 11 nonempty parser jobs. The existing pure-runtime campaign occupies the
+twelfth mutation slot. This ceiling is not a measured optimum or a cap on other
+CI jobs. Each parser job retains two Stryker workers, the ordinary full Vitest
+suite, native parser-test discovery and a fresh Stryker coverage dry run.
+
+Fresh jobs remove native working state before `--force --mutate`, because force
+alone can retain out-of-scope results from an old incremental report. They never
+restore or publish mutation-result caches. The collector checks every assigned
+file exactly once, current source/test bytes, common configuration and declared
+inputs, clean process completion, run/attempt/commit identity and artifact/report
+digests. It applies the existing source-bound equivalent proofs and 100% adjusted
+policy across unchanged raw reports, resolving test IDs within each report.
+Missing, duplicate, stale, failed or inconsistent evidence fails the full gate.
+Rerun **all jobs** after a partial failure; artifacts from an older attempt cannot
+complete a newer one. Raw `full-parser-shard-<attempt>-<index>` artifacts and the
+`full-parser-mutation-report-<attempt>` audit remain separate; no merged report is
+constructed for Stryker or the cache.
+
+Ordinary PR/main runs, including cache misses, retain the single-runner path.
+File workloads may be uneven; runner count alone does not establish a latency
+guarantee. The short native regression in `scripts/full-mutations.integration.test.mjs`
+checks the real runner/collector, fresh state, changed inputs and failed evidence.
 
 Native reuse includes killed, timeout and reviewed-equivalent outcomes. It is
 not fresh execution: reused native records omit `duration`. The audit permits an

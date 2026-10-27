@@ -1,0 +1,137 @@
+name: Parser mutation verification
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+      base:
+        type: string
+        required: true
+      full:
+        type: boolean
+        required: true
+      publish:
+        type: boolean
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+# Workflow-level environment does not propagate from a reusable-workflow caller.
+env:
+  NODE_OPTIONS: ''
+  NODE_PATH: ''
+  NODE_COMPILE_CACHE: ''
+  NODE_DISABLE_COMPILE_CACHE: '1'
+  NPM_CONFIG_UPDATE_NOTIFIER: 'false'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  OTEL_SDK_DISABLED: 'true'
+
+jobs:
+  ordinary:
+    name: Native incremental parser mutation
+    if: ${{ !inputs.full }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - uses: ./.github/actions/test-mutations
+        with:
+          base: ${{ inputs.base }}
+          full: 'false'
+          publish: ${{ inputs.publish }}
+
+  plan:
+    name: Discover full parser partitions
+    if: inputs.full
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+        with:
+          install: 'false'
+      - id: plan
+        run: |
+          matrix=$(node scripts/full-mutations.mjs plan)
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  shard:
+    name: Fresh parser partition ${{ matrix.shard }}
+    if: inputs.full
+    needs: plan
+    strategy:
+      fail-fast: false
+      # The independent pure-runtime campaign occupies the twelfth mutation slot.
+      max-parallel: 11
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - name: Run ordinary tests and native full partition
+        env:
+          MUTATION_SHARD: ${{ matrix.shard }}
+        run: node scripts/full-mutations.mjs run "$MUTATION_SHARD"
+      - name: Retain raw partition evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: full-parser-shard-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: reports/mutation/
+          if-no-files-found: error
+          retention-days: 14
+
+  collect:
+    name: Audit complete fresh parser evidence
+    if: always() && inputs.full
+    needs: [plan, shard]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Require every partition to finish successfully
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          const results = JSON.parse(process.env.RESULTS);
+          assert.deepEqual(Object.keys(results).sort(), ['plan', 'shard']);
+          for (const { result } of Object.values(results)) assert.equal(result, 'success');
+          JS
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: full-parser-shard-${{ github.run_attempt }}-*
+          path: reports/mutation-shards/
+          merge-multiple: false
+          digest-mismatch: error
+      - run: node scripts/full-mutations.mjs collect reports/mutation-shards
+      - name: Retain full parser audit
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: full-parser-mutation-report-${{ github.run_attempt }}
+          path: reports/mutation/
+          if-no-files-found: error
+          retention-days: 14
