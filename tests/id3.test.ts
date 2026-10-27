@@ -29,7 +29,7 @@ describe('ID3 tag headers', () => {
     expect([...synchsafe(0x12345)]).toEqual([0, 4, 70, 69]);
   });
 
-  it.each([0, 1, 5, 255])('rejects unsupported ID3v2 major version %i', async (version) => {
+  it.each([0, 1, 5, 254])('rejects unsupported ID3v2 major version %i', async (version) => {
     const tag = id3v2(Buffer.alloc(1));
     tag[3] = version;
     const { bytes, offset } = afterFirstTag(tag);
@@ -45,9 +45,9 @@ describe('ID3 tag headers', () => {
     invalid[4] = 0xff;
     const { bytes, offset } = afterFirstTag(invalid);
     await expect(count(bytes)).rejects.toMatchObject({
-      kind: 'unsupported-format',
+      kind: 'invalid-mp3',
       offset,
-      message: 'Unsupported ID3v2 version',
+      message: 'ID3v2 version and revision must not be 0xff',
     });
     const valid = id3v2(Buffer.alloc(1), 4);
     valid[4] = 0xfe;

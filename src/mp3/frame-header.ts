@@ -22,8 +22,9 @@ export interface FreeFormatFrameHeader extends HeaderFields {
 export type FrameHeader = IndexedFrameHeader | FreeFormatFrameHeader;
 
 /**
- * `unsupported` is a valid MPEG sync for another version or layer; `invalid`
- * is anything else, including MPEG-1 Layer III with reserved field values.
+ * `unsupported` identifies another nonreserved version/layer, not a validated
+ * bitstream for that codec. `invalid` includes reserved version/layer identifiers
+ * and MPEG-1 Layer III headers with forbidden or reserved field values.
  */
 export type DecodedHeader =
   FrameHeader | { readonly kind: 'unsupported' } | { readonly kind: 'invalid' };
@@ -41,6 +42,7 @@ export function decodeFrameHeader(bytes: Uint8Array): DecodedHeader {
   if (word >>> 21 !== 0x7ff) return INVALID; // 11-bit sync marker
   const version = (word >>> 19) & 0b11;
   const layer = (word >>> 17) & 0b11;
+  if (version === 0b01 || layer === 0b00) return INVALID; // Reserved identifiers are not codecs.
   if (version !== 0b11 || layer !== 0b01) return UNSUPPORTED; // MPEG-1 Layer III only
 
   const bitrateIndex = (word >>> 12) & 0b1111;

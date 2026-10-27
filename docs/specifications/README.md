@@ -42,6 +42,14 @@ The [successive-sequence policy](successive-sequences.md) separately records ISO
 - [`http-api.md`](http-api.md): original endpoint contract vs documented extensions, MIME/form rules, errors and limits.
 - [`conformance.md`](conformance.md): explicit required/supported/limited/out-of-scope matrix with current source paths.
 
+## Input classification evidence
+
+The [supported/unsupported/malformed input matrix](input-classification.md) links
+MPEG-1 header-field rules in ISO/IEC 11172-3:1993 §§2.4.1.3/2.4.2.3, ID3
+version-byte prohibitions and independent implementation checks to exact parser
+and raw/multipart HTTP tests. It separates format rules from the project's
+error mapping and does not certify rejected codecs or full decoder conformance.
+
 ## Safe referencing practice
 
 These Markdown files contain short **original implementation summaries**, not reproductions of the copyrighted ISO standard. The mandatory-prefix and free-format minimum-span rules reference ISO/IEC 11172-3:1993 clauses; independently constructed fixtures exercise those findings. This is not full decoder or certified bitstream conformance. The ISO public catalog verifies the identity/current status but does not supply every byte-level clause; numeric tables and bit layouts below are implementation-oriented summaries independently corroborated by [FFmpeg's MPEG header decoder](https://github.com/FFmpeg/FFmpeg/blob/master/libavcodec/mpegaudiodecheader.c), [mpg123's bit masks](https://github.com/libsdl-org/mpg123/blob/main/src/libmpg123/mpeghead.h), and LAME. If a disputed conformance interpretation matters, consult the complete ISO text or ISO/IEC 11172-4 instead of asserting an invented clause number.

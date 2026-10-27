@@ -138,9 +138,7 @@ function decodeTagHeader(bytes: Uint8Array, offset: number): TagHeader | undefin
   const version = bytes[3] ?? 2;
   const revision = bytes[4];
   const flags = bytes[5] ?? 0;
-  if (version < 2 || version > 4 || revision === 0xff) {
-    throw new Mp3ParseError('unsupported-format', offset, 'Unsupported ID3v2 version');
-  }
+  validateTagVersion(version, revision, offset);
   const definedFlags = ID3V2_DEFINED_FLAGS[version]!;
   if ((flags & ~definedFlags) !== 0) {
     throw new Mp3ParseError('invalid-mp3', offset, 'Reserved ID3v2 flags are set');
@@ -159,6 +157,16 @@ function decodeTagHeader(bytes: Uint8Array, offset: number): TagHeader | undefin
   const bodyLength =
     (sizeBytes[0]! << 21) | (sizeBytes[1]! << 14) | (sizeBytes[2]! << 7) | sizeBytes[3]!;
   return { bytes, bodyLength, hasFooter: version === 4 && (flags & 0x10) !== 0 };
+}
+
+/** Forbidden identifiers are malformed; other unknown versions stay unsupported. */
+function validateTagVersion(version: number, revision: number | undefined, offset: number): void {
+  if (version === 0xff || revision === 0xff) {
+    throw new Mp3ParseError('invalid-mp3', offset, 'ID3v2 version and revision must not be 0xff');
+  }
+  if (version < 2 || version > 4) {
+    throw new Mp3ParseError('unsupported-format', offset, 'Unsupported ID3v2 version');
+  }
 }
 
 /** Skip the already-inspected ID3v2 header and body, then verify and skip any footer. */

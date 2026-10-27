@@ -114,6 +114,17 @@ not a native mutation score. The unchanged acceptance rule still requires a
 complete, audited final-source campaign. Historical totals below do not validate
 this new source context.
 
+The input-classification follow-up reanchors the same two ID3 claims after its
+identifier-validation gate. Forbidden/unsupported versions fail before either
+site; accepted-version flag rules and strict/partial callers preserve the
+existing proof obligations. No additional equivalence entry is introduced.
+
+The seven probe/suffix proofs retain their exact source identities and assumptions
+under this classification change. Valid target-header acceptance, initial free
+header identity, increasing boundary traversal and rejection of impossible
+metadata evidence are unchanged; only malformed-versus-unsupported labels change
+for rejected identifiers. Their source arguments do not depend on those labels.
+
 ## Evidence and compatibility
 
 The measurements below come from the completed full local campaign combining

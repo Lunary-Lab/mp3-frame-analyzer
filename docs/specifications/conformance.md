@@ -17,7 +17,7 @@ Legend: **Required** = assessment's format; **Supported** = implemented structur
 | Same-rate free/indexed switching                                 | Separate decision, Open                          | Existing rejection retained; not asserted ISO-forbidden                                                  | [Sequence scope](successive-sequences.md#authority-and-scope)                                                         |
 | Necessary new-sequence side fields                               | Inference evidence, Supported                    | Check capacity, pairs, switched block type, used first codebook and minimum scale bits; not decode audio | sequence-capacity.test.ts, side-information.test.ts, sequence-side-information.test.ts                                |
 | Dense free-format candidate graphs                               | Resource policy, Limited                         | Fixed probe, cooperative scheduling and caller cancellation                                              | sequence-work.test.ts                                                                                                 |
-| Reserved index 15 / reserved sample rate                         | Required, Supported                              | Reject                                                                                                   | [MPEG syntax](mpeg-1-layer-iii.md)                                                                                    |
+| Forbidden index 15 / reserved sample rate                        | Required, Supported                              | Reject                                                                                                   | [MPEG syntax](mpeg-1-layer-iii.md)                                                                                    |
 | Mono, stereo, joint stereo, dual channel                         | Required, Supported structurally                 | Header mode accepted; necessary new-sequence capacity fields read                                        | `frame-header.ts` and encoder-frame recognition                                                                       |
 | Padding and CRC-protected frames                                 | Required, Supported structurally                 | Padding affects length; CRC bytes included, **CRC not validated**                                        | `frame-header.test.ts`                                                                                                |
 | Mandatory header / CRC / side-information space                  | Structural validation, Supported                 | Each actual free-format span fits its 21/23/36/38-byte mode/CRC prefix; no decoding                      | [RFC 5219 §3](https://www.rfc-editor.org/rfc/rfc5219.html#section-3), `free-format.test.ts`                           |
@@ -37,6 +37,16 @@ Legend: **Required** = assessment's format; **Supported** = implemented structur
 | Multipart and raw upload, same `POST /file-upload`               | Assessment + API extensions                      | Both supported; single file part `file`                                                                  | [RFC 7578](https://www.rfc-editor.org/rfc/rfc7578.html), `upload.ts`                                                  |
 | Media-type matching, raw and form part                           | RFC normative + API Policy                       | One predicate: case-insensitive, SP/HTAB optional whitespace only, parameters ignored (policy)           | R9110 §8.3.1/§5.6.3, R2045 §5.1, `app.test.ts`                                                                        |
 | Configurable file limit, resource bounds, malformed HTTP         | Project Security Policy                          | 50 MiB default; streamed configurable limit and typed errors                                             | `upload.ts`, `error-response.ts`, [security](../security.md)                                                          |
+
+## Error distinctions and executable coverage
+
+See the [input classification matrix](input-classification.md) for supported
+geometry, recognized out-of-scope identifiers, reserved/forbidden identifiers,
+truncation, unknown future ID3 versions and exact raw/multipart HTTP errors.
+Reserved MPEG version/layer identifiers and forbidden ID3 `0xff` version bytes
+are malformed (422), not a genuinely identified unsupported format (415).
+The matrix distinguishes encoder-produced fixtures from header-only probes;
+rejection does not validate another codec's payload or frame geometry.
 
 ## Rules for tests and claims
 
