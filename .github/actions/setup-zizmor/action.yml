@@ -1,0 +1,13 @@
+name: Verified zizmor bootstrap
+description: Install the reviewed Linux x86-64 scanner archive by exact SHA-256
+runs:
+  using: composite
+  steps:
+    - name: Download and verify the pinned zizmor release
+      shell: bash
+      run: |
+        directory="${RUNNER_TEMP}/zizmor-tool"
+        mkdir -m 700 "$directory"
+        curl -q --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 180 --max-filesize 16777216 https://github.com/zizmorcore/zizmor/releases/download/v1.31.1/zizmor-x86_64-unknown-linux-gnu.tar.gz --output "$directory/zizmor.tar.gz"
+        echo "d185f726bdaf92df78273217dfdd24ebcd6b0ef48cf3ce776ff5762b6e138c99  $directory/zizmor.tar.gz" | sha256sum --check --strict
+        env -i PATH=/usr/bin:/bin tar -xzf "$directory/zizmor.tar.gz" -C "$directory" --no-same-owner --no-same-permissions zizmor
