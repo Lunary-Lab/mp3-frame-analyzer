@@ -100,3 +100,37 @@ it('never probes metadata outside the fixed observation window', () => {
     boundary.mockRestore();
   }
 });
+
+it('charges the bounded failed-envelope walk once and includes it in scheduling', () => {
+  const bytes = new Uint8Array(70);
+  // Four valid ten-byte tags, then an invalid fifth header. The failed
+  // envelope must charge at least the five inspected headers, and at most
+  // the six iterations (including termination) possible in this 50-byte tail.
+  for (const offset of [20, 30, 40, 50, 60]) {
+    bytes.set([73, 68, 51, offset === 60 ? 5 : 4, 0, 0, 0, 0, 0, 0], offset);
+  }
+  const probe = new Probe(bytes, true, bytes.length);
+  for (let index = 0; index < FREE_FORMAT_WORK_QUANTUM - 5; index++) probe.visitCandidate();
+  expect(probe.shouldYield()).toBe(false);
+  expect(probe.boundary(20)).toBeUndefined();
+  expect(probe.work.metadataSteps).toBeGreaterThanOrEqual(5);
+  expect(probe.work.metadataSteps).toBeLessThanOrEqual(6);
+  expect(probe.shouldYield()).toBe(true);
+  const charged = probe.work.metadataSteps;
+  expect(probe.boundary(20)).toBeUndefined();
+  expect(probe.work.metadataSteps).toBe(charged);
+  expect(probe.shouldYield()).toBe(false);
+});
+
+it('charges each validated tag and termination once without resetting the scheduling quantum', () => {
+  const bytes = Uint8Array.from([73, 68, 51, 4, 0, 0, 0, 0, 0, 0, 73, 68, 51, 4, 0, 0, 0, 0, 0, 0]);
+  const probe = new Probe(bytes, true, bytes.length);
+  for (let index = 0; index < FREE_FORMAT_WORK_QUANTUM - 3; index++) probe.visitCandidate();
+  expect(probe.shouldYield()).toBe(false);
+  expect(probe.boundary(0)).toMatchObject({ offset: 20, tags: 2 });
+  expect(probe.work.metadataSteps).toBe(3);
+  expect(probe.shouldYield()).toBe(true);
+  expect(probe.boundary(0)).toMatchObject({ offset: 20, tags: 2 });
+  expect(probe.work.metadataSteps).toBe(3);
+  expect(probe.shouldYield()).toBe(false);
+});

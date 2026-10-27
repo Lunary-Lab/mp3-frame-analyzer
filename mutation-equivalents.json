@@ -483,6 +483,146 @@
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned bytes/count, typed errors, iterator lifecycle and bounded resource ownership; it does not promise identical instruction counts for bounded empty copies. Exact promise-resolution or internal microtask scheduling is not an API guarantee.",
       "proof": "The private decoder has two strict callers, readTagHeader and probeTagEnvelope, which prove a complete ten-byte header before calling. Its only incomplete-input caller is hasPossibleMetadataPrefix, which observes metadata plausibility, not the returned header or size. For a still-plausible prefix shorter than ten bytes, every available size byte has already passed the synchsafe check. Missing size bytes coerce to zero in the bounded bitwise size expression, so bodyLength remains nonnegative. A computed footer begins at least ten bytes from the prefix start, beyond all available bytes; its supplied footer view is empty and matchesFooterPrefix returns true. Without a footer the other branch likewise returns true. The original undefined result also returns true immediately. Invalid prefixes still throw at the same earlier validation and become false in the same caller. No reader method, iterator operation, cursor, propagated error, returned count or resource ownership changes. Only a fixed local header object and bounded arithmetic are added; neither retained-input size nor asymptotic memory/work bounds change."
+    },
+    {
+      "id": "EQ-PROBE-INERT-LEADING-LANDMARK",
+      "file": "src/mp3/free-format-probe.ts",
+      "sourceSha256": "2fda82d26864da47faf039cbe833e08d47ac210eb72c2d0ba384ddd9c21bb409",
+      "mutatorName": "ArrayDeclaration",
+      "original": "[]",
+      "replacement": "[\"Stryker was here\"]",
+      "location": {
+        "start": {
+          "line": 33,
+          "column": 34
+        },
+        "end": {
+          "line": 33,
+          "column": 36
+        }
+      },
+      "assumptions": "Ordinary immutable Buffer/Uint8Array input produced by inferFreeFormatBaseLength at a recognized free-format header; first is decoded from the same window at offset zero. The window is at most 8647 bytes; an open full probe establishes minimumStreamLength=8648. Candidate starts and prefix indices are nonnegative integers. No proxies, overridden typed-array methods, concurrent mutation or detachment, private-state reflection or prototype monkey-patching. The observable contract includes returned counts, typed errors, evidence selection, accounted work and explicit cooperative-yield/cancellation checkpoints, not identical instruction counts or nanosecond CPU/GC timing. Bounded local operations must preserve upload-length-independent memory and work bounds.",
+      "proof": "indexOffset(0) must add the recognized initial free header, making the mutated landmarks [sentinel, 0, ...ascending numeric landmarks]. Every landmarkStart call receives a minimum >= 20, including suffix calls. The ordinary numeric zero is strictly below the sought minimum. In the lower-bound binary search, any midpoint at index >= 1 has exactly the original numeric predicate. Its insertion point is therefore >= 2; it cannot finish at or before index 1 because that element is < minimum. The nonnumeric sentinel at index 0 is never selected or used in candidate arithmetic. All original eligible numeric landmarks are enumerated in the same order with the same values; only array indices shift by one. Consequently followCandidate, side/metadata observations, caches, work totals, yielded values, and selection/error paths are identical. The sentinel never reaches subtraction or any native parser error path. The extra constant array slot and possibly a different bounded binary-search comparison path do not change the upload-length-independent memory/work bound. No work-reserve or yield call is added. This proof depends on the real initial header at offset 0; an arbitrary isolated new Probe(empty, ...) or dishonest analyzer first is outside this production-call domain."
+    },
+    {
+      "id": "EQ-PROBE-INERT-END-INDEX",
+      "file": "src/mp3/free-format-probe.ts",
+      "sourceSha256": "2fda82d26864da47faf039cbe833e08d47ac210eb72c2d0ba384ddd9c21bb409",
+      "mutatorName": "EqualityOperator",
+      "original": "offset < window.length",
+      "replacement": "offset <= window.length",
+      "location": {
+        "start": {
+          "line": 55,
+          "column": 26
+        },
+        "end": {
+          "line": 55,
+          "column": 48
+        }
+      },
+      "assumptions": "Ordinary immutable Buffer/Uint8Array input produced by inferFreeFormatBaseLength at a recognized free-format header; first is decoded from the same window at offset zero. The window is at most 8647 bytes; an open full probe establishes minimumStreamLength=8648. Candidate starts and prefix indices are nonnegative integers. No proxies, overridden typed-array methods, concurrent mutation or detachment, private-state reflection or prototype monkey-patching. The observable contract includes returned counts, typed errors, evidence selection, accounted work and explicit cooperative-yield/cancellation checkpoints, not identical instruction counts or nanosecond CPU/GC timing. Bounded local operations must preserve upload-length-independent memory and work bounds.",
+      "proof": "The sole additional call is indexOffset(window.length). Its byte view is empty. targetHeaderAt immediately rejects because offset + 4 > window.length; startsMetadata(empty) is false. Thus neither headers nor landmarks is changed. The three indexFreeHeader assignments and two metadata prefix assignments target typed-array index window.length + 1, while every prefix array has length window.length + 1 (last valid index is window.length). JavaScript typed-array out-of-range assignments are ignored, not appended, and throw no error for these ordinary assignments. Existing last valid prefix entries are read but unmodified. The explicit EOF landmark push remains unchanged. All future observations, totals, selections, errors, and yield/cancellation locations are therefore identical. The extra empty view and five ignored writes are bounded constant work with no retained growth or asynchronous behavior."
+    },
+    {
+      "id": "EQ-PROBE-PREFIX-ORDER-GUARD",
+      "file": "src/mp3/free-format-probe.ts",
+      "sourceSha256": "2fda82d26864da47faf039cbe833e08d47ac210eb72c2d0ba384ddd9c21bb409",
+      "mutatorName": "ConditionalExpression",
+      "original": "from < stop",
+      "replacement": "true",
+      "location": {
+        "start": {
+          "line": 165,
+          "column": 12
+        },
+        "end": {
+          "line": 165,
+          "column": 23
+        }
+      },
+      "assumptions": "Ordinary immutable Buffer/Uint8Array input produced by inferFreeFormatBaseLength at a recognized free-format header; first is decoded from the same window at offset zero. The window is at most 8647 bytes; an open full probe establishes minimumStreamLength=8648. Candidate starts and prefix indices are nonnegative integers. No proxies, overridden typed-array methods, concurrent mutation or detachment, private-state reflection or prototype monkey-patching. The observable contract includes returned counts, typed errors, evidence selection, accounted work and explicit cooperative-yield/cancellation checkpoints, not identical instruction counts or nanosecond CPU/GC timing. Bounded local operations must preserve upload-length-independent memory and work bounds.",
+      "proof": "any is called only from shortIsUnambiguous after each candidate frame meets its mandatory prefix. stop = min(through + 1, window.length) is a valid nonnegative prefix index. Each unmutated prefix array starts at zero and adds only 0 or 1 per indexed byte. Since at most 8,647 bytes are indexed, no Uint16 overflow occurs: each array is nondecreasing on valid indices. When from < stop, evaluation is unchanged. When from === stop, strict comparison reads the same value twice and is false. When from > stop and in range, monotonicity gives prefix[stop] <= prefix[from], also false. When from lies beyond the array, the right operand is undefined, whose numeric comparison is false. Candidate starts ensure from is never negative in the original source. Thus the added comparisons return false on exactly the previously short-circuited cases. They have no side effects, cannot throw, and add no cache/work/yield operations. shortIsUnambiguous and every downstream accepted count/error remain identical. Prefix monotonicity and the 8,647-byte bound are essential assumptions; unrestricted larger helper inputs that wrap Uint16 are not covered."
+    },
+    {
+      "id": "EQ-PROBE-PREFIX-EQUAL-BOUND",
+      "file": "src/mp3/free-format-probe.ts",
+      "sourceSha256": "2fda82d26864da47faf039cbe833e08d47ac210eb72c2d0ba384ddd9c21bb409",
+      "mutatorName": "EqualityOperator",
+      "original": "from < stop",
+      "replacement": "from <= stop",
+      "location": {
+        "start": {
+          "line": 165,
+          "column": 12
+        },
+        "end": {
+          "line": 165,
+          "column": 23
+        }
+      },
+      "assumptions": "Ordinary immutable Buffer/Uint8Array input produced by inferFreeFormatBaseLength at a recognized free-format header; first is decoded from the same window at offset zero. The window is at most 8647 bytes; an open full probe establishes minimumStreamLength=8648. Candidate starts and prefix indices are nonnegative integers. No proxies, overridden typed-array methods, concurrent mutation or detachment, private-state reflection or prototype monkey-patching. The observable contract includes returned counts, typed errors, evidence selection, accounted work and explicit cooperative-yield/cancellation checkpoints, not identical instruction counts or nanosecond CPU/GC timing. Bounded local operations must preserve upload-length-independent memory and work bounds.",
+      "proof": "Only equality gains evaluation of the right operand. At equality both reads address the same typed-array cell, so prefix[stop] > prefix[from] is false. If outside range, both are undefined and the comparison is still false. For all other integer pairs the branch decision is unchanged. No mutation, callback, throw, cache change, or accounted work occurs. All selection, error, resource bounds, explicit scheduling and cancellation observations remain identical. Unlike EQ-PROBE-PREFIX-ORDER-GUARD, this equality proof does not rely on prefix monotonicity."
+    },
+    {
+      "id": "EQ-PROBE-DUPLICATE-SYNC-GUARD",
+      "file": "src/mp3/free-format-probe.ts",
+      "sourceSha256": "2fda82d26864da47faf039cbe833e08d47ac210eb72c2d0ba384ddd9c21bb409",
+      "mutatorName": "ConditionalExpression",
+      "original": "window[offset] !== 0xff",
+      "replacement": "false",
+      "location": {
+        "start": {
+          "line": 170,
+          "column": 37
+        },
+        "end": {
+          "line": 170,
+          "column": 60
+        }
+      },
+      "assumptions": "Ordinary immutable Buffer/Uint8Array input produced by inferFreeFormatBaseLength at a recognized free-format header; first is decoded from the same window at offset zero. The window is at most 8647 bytes; an open full probe establishes minimumStreamLength=8648. Candidate starts and prefix indices are nonnegative integers. No proxies, overridden typed-array methods, concurrent mutation or detachment, private-state reflection or prototype monkey-patching. The observable contract includes returned counts, typed errors, evidence selection, accounted work and explicit cooperative-yield/cancellation checkpoints, not identical instruction counts or nanosecond CPU/GC timing. Bounded local operations must preserve upload-length-independent memory and work bounds.",
+      "proof": "The length guard offset + 4 > window.length is unchanged. For each additionally decoded four-byte view the first byte is not 0xff. decodeFrameHeader builds the unsigned 32-bit word and first checks word >>> 21 !== 0x7ff. An eleven-bit all-one sync requires the top eight bits (the first byte) to be 0xff, so every such view returns the same singleton INVALID before reading version/layer/indices. The unchanged kind filter at line 172 turns INVALID into undefined, exactly matching the original early return. No target header, landmark or prefix increment is added. The extra decoder/view work is constant per already-indexed byte, preserving the single bounded O(window.length) indexing pass and fixed memory. No reserve, boundary cache call, yield or cancellation checkpoint occurs in this path. Thus all parser selection/count/error and explicit cancellation behavior is identical. This proof does not apply to mutant 653, which changes the kind filter itself."
+    },
+    {
+      "id": "EQ-FREE-KNOWN-SUFFIX-ACCESS",
+      "file": "src/mp3/free-format.ts",
+      "sourceSha256": "a824d37c8c8ffa62f47f963006c32a4d40af59b187e628f5d03304d0ccf6367c",
+      "mutatorName": "OptionalChaining",
+      "original": "probe.suffixes.get(offset)?.credible",
+      "replacement": "probe.suffixes.get(offset).credible",
+      "location": {
+        "start": {
+          "line": 82,
+          "column": 5
+        },
+        "end": {
+          "line": 82,
+          "column": 41
+        }
+      },
+      "assumptions": "Ordinary immutable Buffer/Uint8Array input produced by inferFreeFormatBaseLength at a recognized free-format header; first is decoded from the same window at offset zero. The window is at most 8647 bytes; an open full probe establishes minimumStreamLength=8648. Candidate starts and prefix indices are nonnegative integers. No proxies, overridden typed-array methods, concurrent mutation or detachment, private-state reflection or prototype monkey-patching. The observable contract includes returned counts, typed errors, evidence selection, accounted work and explicit cooperative-yield/cancellation checkpoints, not identical instruction counts or nanosecond CPU/GC timing. Bounded local operations must preserve upload-length-independent memory and work bounds.",
+      "proof": "Exact change: probe.suffixes.get(offset)?.credible becomes probe.suffixes.get(offset).credible in isSupportedTransition. In the scoped parser, first is decoded from the valid free header at window offset zero. Probe.headers inserts exactly the valid indexed/free headers in increasing window-offset order. Every call to isSupportedTransition is made by followCandidate only after end = position + base + padding with base >= 20 and padding >= 0, and after a successful metadata observation whose returned offset is at least end. Thus queried offset is strictly greater than the candidate start and is never zero. If next is undefined, or its rate equals the current candidate rate, evaluation short-circuits before either property access. Otherwise: (a) while evaluating a suffix, the reverse dynamic program has already stored SuffixEvidence for every greater-offset valid header; (b) while evaluating the root, any header with a rate different from root first necessarily made entries.some(...) true, so the completed reverse loop populated every non-root header. When that loop did not run, every stored header has the root first rate and the differing-rate conjunct is false. Therefore whenever either access is reached, the key exists and its value is a non-undefined SuffixEvidence object. Both expressions return the identical credible boolean; neither adds/removes work reservations, yields, side effects, errors or reader operations. This proof assumes production-consistent first/window input and the unmodified increasing-offset Probe and metadata semantics; it is not a claim about callers fabricating an inconsistent internal helper argument or mutating private probe maps."
+    },
+    {
+      "id": "EQ-FREE-UNOBSERVED-SUFFIX-TIE",
+      "file": "src/mp3/free-format.ts",
+      "sourceSha256": "a824d37c8c8ffa62f47f963006c32a4d40af59b187e628f5d03304d0ccf6367c",
+      "mutatorName": "BooleanLiteral",
+      "original": "false",
+      "replacement": "true",
+      "location": {
+        "start": {
+          "line": 127,
+          "column": 90
+        },
+        "end": {
+          "line": 127,
+          "column": 95
+        }
+      },
+      "assumptions": "Ordinary immutable Buffer/Uint8Array input produced by inferFreeFormatBaseLength at a recognized free-format header; first is decoded from the same window at offset zero. The window is at most 8647 bytes; an open full probe establishes minimumStreamLength=8648. Candidate starts and prefix indices are nonnegative integers. No proxies, overridden typed-array methods, concurrent mutation or detachment, private-state reflection or prototype monkey-patching. The observable contract includes returned counts, typed errors, evidence selection, accounted work and explicit cooperative-yield/cancellation checkpoints, not identical instruction counts or nanosecond CPU/GC timing. Bounded local operations must preserve upload-length-independent memory and work bounds.",
+      "proof": "Exact change: the tied: false property in selectCandidate's if (capacityRequired) return ... becomes true. selectCandidate is module-private. Its sole capacityRequired=true caller is the reverse free-suffix branch in analyzeFreeFormatProbeSteps. That caller reads only selection.bestMatches (for credible and closed); it never reads tied or bestBase. Root selection invokes selectCandidate without the parameter, so its false default prevents this return branch from being reached. The changed tied value is therefore never forwarded to returned root Selection, candidate ranking, suffix evidence, an error, a yield value, metrics or traversal. The same candidate was already followed and accepted before either identical-shape return object is constructed; operation count and scheduling checkpoints are unchanged. The suffix object's tied property has no getter or externally observable reference. Hence both variants have exactly identical parser results/errors, work, cancellation checkpoints and reader interactions on all scoped calls. This proof depends on the current complete call graph and reads of Selection, not on survivor status."
     }
   ]
 }

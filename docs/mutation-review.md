@@ -76,11 +76,24 @@ verified ancestor main baseline with the same declared inputs. Releases and week
 
 ## Cooperative sequence source binding
 
-The current eleven-module parser policy retains **24** exact single-mutant
+The current eleven-module parser policy retains the original **24** exact single-mutant
 proofs. Each was independently re-reviewed against the reader scheduler,
 sequence inference, necessary side-information filter and caller/cleanup paths
 before its context binding changed. Existing proof text and assumptions are
-unchanged; this review does not grant new behavioral exclusions.
+unchanged. Seven additional source-bound proofs bring the current policy to **31**:
+an inert leading landmark, one inert final indexing iteration, two redundant
+prefix-range guards, a duplicate sync-byte guard, a known-present suffix access,
+and an unread suffix-only tie flag. Their explicit production-domain assumptions
+retain bounded window geometry, immutable inputs, accounted work and cooperative
+yield/cancellation checkpoints; they do not promise identical CPU/GC timing.
+
+The first full sequence campaign generated 1,274 mutants: 1,162 killed, 31 timed
+out and 81 survived. It correctly failed because only 24 survivors matched the
+then-reviewed policy. Focused ordinary counterfactuals distinguish 50 of the
+remaining mutations; the seven additional entries rest on independently reviewed
+source proofs, not merely survival. The raw failed report remains unchanged and
+cannot seed a passing cache. These regressions and proofs still require a new
+complete final-source audit; a narrow diagnostic is not that acceptance gate.
 
 Two former free-format entries are removed, not waived:
 

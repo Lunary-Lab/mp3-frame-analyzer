@@ -14,6 +14,8 @@ export default defineConfig({
       'tests/count-frames.property.test.ts',
       'tests/frame-header.test.ts',
       'tests/free-format.test.ts',
+      'tests/free-format-probe.test.ts',
+      'tests/free-format-evidence.test.ts',
       'tests/free-format-minimum.test.ts',
       'tests/encoder-layouts.test.ts',
       'tests/metadata-layouts.test.ts',
