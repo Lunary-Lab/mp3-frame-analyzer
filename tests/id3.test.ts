@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { hasPossibleMetadataPrefix } from '../src/mp3/id3.js';
 import { countMp3Frames } from '../src/mp3/count-frames.js';
 import { chunks, frame, id3v1, id3v2, mp3, synchsafe } from './helpers/mp3-fixtures.js';
 
@@ -108,4 +109,10 @@ describe('ID3 tag headers', () => {
       });
     }
   });
+});
+
+it('retains the shared conservative metadata-prefix predicate for TAG and nonmetadata', () => {
+  expect(hasPossibleMetadataPrefix(Buffer.from('TAG'), 128)).toBe(true);
+  expect(hasPossibleMetadataPrefix(Buffer.from('TAG'), 129)).toBe(false);
+  expect(hasPossibleMetadataPrefix(Buffer.from('not metadata'), 3)).toBe(false);
 });

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "strykerVersion": "10.1.1",
   "target": 100,
-  "contextSha256": "cdb327d77801720c68847d042e2e954ab3e0bef1cea9cbd14c88325980212974",
+  "contextSha256": "9282b2226e6d93cee659ff62200c3d285ef0f42000e5de492ef5f840e074490a",
   "equivalents": [
     {
       "id": "EQ-COPY-OR",
@@ -107,7 +107,7 @@
     {
       "id": "EQ-CLEANUP-INITIAL-FLAG",
       "file": "src/mp3/count-frames.ts",
-      "sourceSha256": "346e5077915ec691e0c0d9e3b69d898c1749a700e476dd3ff95e7fd69004c15e",
+      "sourceSha256": "dbcae62524cac2fff797a233993676cf486c81140f4bcc0d089dcc5d807e39ac",
       "mutatorName": "BooleanLiteral",
       "original": "false",
       "replacement": "true",
@@ -127,7 +127,7 @@
     {
       "id": "EQ-CLEANUP-CONDITION",
       "file": "src/mp3/count-frames.ts",
-      "sourceSha256": "346e5077915ec691e0c0d9e3b69d898c1749a700e476dd3ff95e7fd69004c15e",
+      "sourceSha256": "dbcae62524cac2fff797a233993676cf486c81140f4bcc0d089dcc5d807e39ac",
       "mutatorName": "ConditionalExpression",
       "original": "failed",
       "replacement": "true",
@@ -147,7 +147,7 @@
     {
       "id": "EQ-CLEANUP-SUCCESS",
       "file": "src/mp3/count-frames.ts",
-      "sourceSha256": "346e5077915ec691e0c0d9e3b69d898c1749a700e476dd3ff95e7fd69004c15e",
+      "sourceSha256": "dbcae62524cac2fff797a233993676cf486c81140f4bcc0d089dcc5d807e39ac",
       "mutatorName": "BlockStatement",
       "original": "{\n      await reader.close();\n    }",
       "replacement": "{}",
@@ -163,26 +163,6 @@
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned bytes/count, typed errors, iterator lifecycle and bounded resource ownership; it does not promise identical instruction counts for bounded empty copies. Exact promise-resolution or internal microtask scheduling is not an API guarantee.",
       "proof": "A successful count returns only after has() observes EOF and proves no bytes remain, either after the last frame or when skipFrameBoundaryMetadata returns true. That helper returns true only after EOF, including after final ID3v1; embedded tags return false and traversal continues. skipExactly has consumed and released all queued chunks. The success-only close call is already a no-op on externally owned resources. Short acquisition may read EOF early, but success still consumes all bytes before returning. No reader escapes to callers."
-    },
-    {
-      "id": "EQ-FREE-TIED-INITIAL",
-      "file": "src/mp3/free-format.ts",
-      "sourceSha256": "c848d4e2633b7b48a55f576305602aed40f8307140b37ab3ccf23915d653bf10",
-      "mutatorName": "BooleanLiteral",
-      "original": "false",
-      "replacement": "true",
-      "location": {
-        "start": {
-          "line": 115,
-          "column": 14
-        },
-        "end": {
-          "line": 115,
-          "column": 19
-        }
-      },
-      "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and messages, iterator lifecycle and bounded resource ownership.",
-      "proof": "tied is read only after the bounded candidate loop. The first qualifying candidate has at least one MPEG header and therefore strictly exceeds initial bestMatches = 0; that branch resets tied = false. Subsequent comparisons do not depend on the initial value. If no candidate qualifies, bestMatches === 0 throws regardless of tied. Metadata evidence only breaks ties after a candidate has already been accepted and does not alter this initialization argument."
     },
     {
       "id": "EQ-ID3V2-FOOTER-VERSION",
@@ -483,26 +463,6 @@
       },
       "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no private-state reflection, prototype monkey-patching or concurrent mutation. The observable contract includes returned bytes and counts, typed errors, iterator lifecycle and bounded live queue storage. It does not promise an exact compaction frequency, identical instruction counts, or a particular throughput measurement.",
       "proof": "headIndex starts at zero. With the mutated <1024 comparison, the first completed chunk increments it to one. If the queue empties, the unchanged empty branch resets it to zero; otherwise one is below 1024, so compaction removes the cleared prefix and resets it to zero. Induction gives the same reset on every later completed chunk. Thus this exact mutant performs eager nonempty compaction, equivalent to EQ-QUEUE-EAGER-COMPACTION for bytes, offsets, errors, lifecycle and bounded storage. It cannot reach the apparent no-compaction state at headIndex>=1024 under a single-mutant execution."
-    },
-    {
-      "id": "EQ-FREE-OUTSIDE-PROBE-GUARD",
-      "file": "src/mp3/free-format.ts",
-      "mutatorName": "ConditionalExpression",
-      "original": "end > window.length",
-      "replacement": "false",
-      "proof": "When end exceeds the fixed probe length, the original breaks after appending the current frame descriptor. Without that early guard, probeMetadata(window, end) inspects only empty subarrays and returns the same offset, zero tags and canEnd=true; neither ID3 signature can match. Adding zero tags does not change metadataMatches or anchored. The offset is strictly beyond, not equal to, the probe end, so the EOF branch is not taken. headerAt then returns undefined at its offset+4>length guard and the loop terminates. The returned base, frame descriptors, matches, anchored and metadataMatches are identical. Candidate positions and spans are bounded finite nonnegative integers. No reader method, iterator operation or payload decoder is invoked on the extra path. It allocates only a fixed number of temporary empty views within the already bounded candidate loop; retained input, lookahead, cursor movement and resource ownership do not change.",
-      "sourceSha256": "c848d4e2633b7b48a55f576305602aed40f8307140b37ab3ccf23915d653bf10",
-      "assumptions": "Ordinary Buffer/Uint8Array inputs and standards-conforming async iterators; no proxies, overwritten typed-array methods, concurrent mutation/detachment, private-state reflection or prototype monkey-patching. Observable contract includes returned counts, typed errors and offsets/messages, iterator lifecycle, bounded lookahead and resource ownership. Exact internal instruction counts or promise/microtask scheduling are not API guarantees.",
-      "location": {
-        "start": {
-          "line": 47,
-          "column": 9
-        },
-        "end": {
-          "line": 47,
-          "column": 28
-        }
-      }
     },
     {
       "id": "EQ-ID3-PREFIX-COMPLETENESS",

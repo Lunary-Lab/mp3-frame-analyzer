@@ -8,7 +8,7 @@ production gates fail at 11 complexity, 301 file lines, 61 function lines, and
 ## Test pyramid
 
 1. **Unit**: table-based validation of bitrate, rate, padding, CRC bit, invalid indices, reserved flags and synchsafe ID3 lengths. A table drives `errorResponseFor` through every failure mechanism, and stub consumers drive the upload module's guarantees.
-2. **Property-based**: fast-check generates valid VBR sequences, random payloads, and arbitrary chunk boundaries. The invariant is that every generated frame is counted exactly once regardless of chunk partitioning. Reproducible seeds and minimized counterexamples come from fast-check.
+2. **Property-based**: fast-check generates valid VBR sequences, random payloads, and arbitrary chunk boundaries. Exact-count domains require every constructed frame to be counted once regardless of chunk partitioning. The sequence-aware domain separately generates ambiguous or arbitrary layouts, where construction counts are not assumed unique and the oracle checks explicit ambiguity or chunk-invariant outcomes. Reproducible seeds and minimized counterexamples come from fast-check.
 3. **Integration**: Fastify `inject()` exercises multipart parsing, content type, limits, validation, JSON response and status codes.
 4. **Real HTTP**: a listening server receives multipart `FormData` via Node's native `fetch`.
 5. **Regression**: three real FFmpeg/libmp3lame fixtures: CBR and VBR with Xing/Info metadata (33 physical frames each), plus CBR without Xing metadata (51 physical frames).
@@ -71,7 +71,7 @@ To reproduce a failing mutation input use `FUZZ_CASES` with the deterministic PR
 - `npm run test:performance` owns a local server in a separate process, sends two concurrent valid uploads of approximately 32 MiB, and issues small valid uploads while they run. Correct counts, JSON content type, completion, and clean server exit are required. Upload/probe latencies and server event-loop delays are reported without a timing pass/fail threshold.
 - `k6 run bench/upload.k6.js` is optional for longer local experiments. It requires zero incorrect/failed responses. Use the default loopback address or an environment you explicitly operate.
 
-The parser-memory source has no artificial scheduling sleeps: ordinary reader traversal includes real event-loop turns at the documented work intervals, while bounded free-format candidate inference remains synchronous. The HTTP experiment measures actual socket/backpressure behavior separately. Neither result justifies calling performance optimal or treating a few requests as a statistical capacity estimate. Associate results with Node version, hardware, runtime load, input size, and chunk size. The parser's linear traversal and bounded buffering remain appropriate for this task.
+The parser-memory source has no artificial scheduling sleeps: ordinary reader traversal includes real event-loop turns at the documented work intervals, and bounded free-format inference has its own cooperative work quantum. The HTTP experiment measures actual socket/backpressure behavior separately. Neither result justifies calling performance optimal or treating a few requests as a statistical capacity estimate. Associate results with Node version, hardware, runtime load, input size, and chunk size. The parser's linear traversal and bounded buffering remain appropriate for this task.
 
 CI saves JSON performance measurements as workflow artifacts. Investigate a sustained regression on a controlled runner before introducing a latency SLA or a microbenchmark speed gate.
 
@@ -354,3 +354,15 @@ error response. `tests/upload-iterator.test.ts` checks EOF versus early iterator
 cleanup, untouched iterators and cleanup rejection without masking the primary
 error. Deployment tests validate both environment limits before listening.
 These tests do not establish a global ingress, concurrency or wire-byte bound.
+
+### Successive-sequence and cooperative inference verification
+
+The sequence property and native fuzz target vary in-file sample-rate transitions,
+indexed/free configurations, short prefixes, CRC/modes/padding, ancillary bytes
+and boundary metadata. Independent exact-count domains, explicit competing-layout
+witnesses and arbitrary-layout invariance are distinct oracles. Scheduling tests
+compare synchronous and cooperative analysis, exact work quanta, queued event-loop
+turns, caller cancellation, bounded lookahead and iterator cleanup. Side-field
+controls cover every granule/channel/CRC/mode/switch branch at 288 and 289 spectral
+pairs and exact main-data capacity. These are necessary evidence checks, not an
+assertion of full decoder validity.

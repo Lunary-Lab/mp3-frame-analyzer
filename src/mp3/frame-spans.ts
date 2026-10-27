@@ -14,21 +14,23 @@ interface FreeFormatMode {
   readonly baseLength: number;
   readonly sampleRateIndex: number;
 }
-type BitrateMode = { readonly kind: 'indexed' } | FreeFormatMode;
-const INDEXED: BitrateMode = { kind: 'indexed' };
+type BitrateMode = { readonly kind: 'indexed'; readonly sampleRateIndex: number } | FreeFormatMode;
 
 /**
  * Resolves the span of each physical frame in one stream. An indexed frame's
  * length comes from its decoded header. A free-format stream's base length is
  * discovered once, from its first frames, and locked together with its sample
- * rate; each frame then adds its own padding. One stream never mixes the two.
+ * rate; each frame then adds its own padding. A resolved sample-rate change
+ * starts a new configuration. Same-rate mode switching retains existing policy.
  */
 export class FrameSpans {
   private mode: BitrateMode | undefined;
   private readonly reader: AsyncByteReader;
+  private readonly signal: AbortSignal | undefined;
 
-  constructor(reader: AsyncByteReader) {
+  constructor(reader: AsyncByteReader, signal?: AbortSignal) {
     this.reader = reader;
+    this.signal = signal;
   }
 
   /**
@@ -44,6 +46,27 @@ export class FrameSpans {
     if (header.kind === 'invalid') {
       throw new Mp3ParseError('invalid-mp3', offset, 'Invalid MPEG-1 Layer III frame header');
     }
+    this.prepareMode(header, offset);
+    if (header.kind === 'indexed') {
+      this.mode = { kind: 'indexed', sampleRateIndex: header.sampleRateIndex };
+      return { header, length: header.length };
+    }
+    const mode = this.mode?.kind === 'free-format' ? this.mode : await this.discover(header);
+    const length = mode.baseLength + header.padding;
+    validateFreeFormatPrefix(header, length, offset);
+    return { header, length };
+  }
+
+  private prepareMode(
+    header: Exclude<FrameHeader, { kind: 'invalid' | 'unsupported' }>,
+    offset: number,
+  ): void {
+    // A changed sampling rate starts a new in-scope configuration under the
+    // project's successive-sequence compatibility policy. Decode first: an
+    // invalid or identified unsupported header cannot reset parser state.
+    if (this.mode !== undefined && this.mode.sampleRateIndex !== header.sampleRateIndex) {
+      this.mode = undefined;
+    }
     // Mixing needs two valid MPEG-1 Layer III headers; invalid and unsupported
     // headers report themselves first, after free-format and indexed frames alike.
     if (this.mode !== undefined && this.mode.kind !== header.kind) {
@@ -55,24 +78,13 @@ export class FrameSpans {
           : 'Cannot mix indexed and free-format MPEG frames',
       );
     }
-    if (header.kind === 'indexed') {
-      this.mode = INDEXED;
-      return { header, length: header.length };
-    }
-    const mode = this.mode?.kind === 'free-format' ? this.mode : await this.discover(header);
-    if (header.sampleRateIndex !== mode.sampleRateIndex) {
-      throw new Mp3ParseError('invalid-mp3', offset, 'Free-format sample rate changed');
-    }
-    const length = mode.baseLength + header.padding;
-    validateFreeFormatPrefix(header, length, offset);
-    return { header, length };
   }
 
   /** Discover and lock a free-format stream's base length and sample rate from its first frames. */
   private async discover(first: FreeFormatFrameHeader): Promise<FreeFormatMode> {
     const mode: FreeFormatMode = {
       kind: 'free-format',
-      baseLength: await inferFreeFormatBaseLength(this.reader, first),
+      baseLength: await inferFreeFormatBaseLength(this.reader, first, this.signal),
       sampleRateIndex: first.sampleRateIndex,
     };
     this.mode = mode;

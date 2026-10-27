@@ -32,6 +32,8 @@ This directory is the **AI-agent and reviewer source register for this TypeScrip
 4. **Free-format is not MPEG-2 or an invalid bitrate.** Index zero is a valid MPEG-1 Layer III encoding choice with no table-derived frame length. A decoder's size-search heuristic is evidence of interoperability, not the ISO text itself.
 5. **Full ISO Layer III bitstream conformance would require decoding-side checks** (side information, bit reservoir, Huffman, CRC, etc.). This assessment explicitly requests logical _frame counting_. Do not change the project into an audio decoder.
 
+The [successive-sequence policy](successive-sequences.md) separately records ISO sequence invariants, RFC 3003 elementary-stream terminology, the MSE-specific W3C frame-combination profile and bounded project inference decisions. These are not universal unique-framing rules.
+
 ## Topic documents
 
 - [`assessment-scope.md`](assessment-scope.md): controlling checklist of employer requirements, optional extensions, the owner-selected count policy and dated evaluator clarification.

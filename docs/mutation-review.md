@@ -74,6 +74,33 @@ requests, pushes to `main`, manual dispatches, and a weekly forced-full run.
 Compatible PRs can reuse native outcomes from an authenticated exact-base or
 verified ancestor main baseline with the same declared inputs. Releases and weekly verification always execute all mutants.
 
+## Cooperative sequence source binding
+
+The current eleven-module parser policy retains **24** exact single-mutant
+proofs. Each was independently re-reviewed against the reader scheduler,
+sequence inference, necessary side-information filter and caller/cleanup paths
+before its context binding changed. Existing proof text and assumptions are
+unchanged; this review does not grant new behavioral exclusions.
+
+Two former free-format entries are removed, not waived:
+
+- `EQ-FREE-TIED-INITIAL` now changes the public no-inference message to the
+  ambiguity message when no candidate qualifies.
+- `EQ-FREE-OUTSIDE-PROBE-GUARD` permits observations beyond the fixed probe and
+  can add a real scheduling turn. A 5,598-byte original malformed stream reports
+  its truncated-MP3 error, while that exact mutant instead exposes the caller's
+  queued terminal-EOF cancellation. The regression preserves the actual error,
+  not an invented timing threshold.
+
+The cached-EOF fast-path waiver was already removed with cooperative reader
+traversal; it remains absent. Successful cleanup still requires consumed EOF,
+queue alternatives preserve bytes and scheduler checkpoints, and encoder
+recognition remains upload-initial-only. Source-bound identity verification and
+finite isolated-variant comparisons corroborate the logical review; they are
+not a native mutation score. The unchanged acceptance rule still requires a
+complete, audited final-source campaign. Historical totals below do not validate
+this new source context.
+
 ## Evidence and compatibility
 
 The measurements below come from the completed full local campaign combining

@@ -8,8 +8,10 @@ import { classifyReplayProcess } from './classify-replay.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const [target, inputFile] = process.argv.slice(2);
-if (!['raw', 'structured'].includes(target) || !inputFile) {
-  throw new Error('Usage: node scripts/minimize-fuzz-crash.mjs <raw|structured> <crash-file>');
+if (!['raw', 'structured', 'sequences'].includes(target) || !inputFile) {
+  throw new Error(
+    'Usage: node scripts/minimize-fuzz-crash.mjs <raw|structured|sequences> <crash-file>',
+  );
 }
 const original = await readFile(inputFile);
 const run = (bytes) => {

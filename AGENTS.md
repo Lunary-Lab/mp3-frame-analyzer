@@ -20,6 +20,7 @@ Read this file before changing parser, API, fixtures, fuzzers, or counts. This f
 
 - MPEG-1 is version bits `11`; Layer III is layer bits `01`. Support bitrate indices 1–14 **and free-format index 0** (bounded frame-spacing inference); reject reserved index 15 and reserved sample rate 3. MPEG-2, MPEG-2.5, Layers I/II, ADTS/AAC and MP4 are out of assessment scope.
 - Compute indexed frame lengths independently for **every frame**, including VBR/ABR, rather than multiplying the first frame length by the count or trusting a Xing/VBRI count.
+- Successive in-file sample-rate configurations use the [bounded sequence policy](docs/specifications/successive-sequences.md). They are separate from multiple uploaded files; do not claim a universal ISO concatenation mandate. Same-rate mode switching remains separate.
 - Free-format has no table bitrate; cache the **unpadded frame length**, then apply each frame's padding. Follow the documented EOF/metadata-anchored short inference policy; reject equally supported candidates and disclose unavoidable singleton ambiguity. Never allow unbounded lookahead, rescans or backtracking.
 - **Current owner-selected policy:** HTTP omitted/`false` excludes at most one recognized _initial_ Xing/Info/VBRI encoder frame; HTTP `true` and direct parser calls with no option count complete physical MPEG frames. **ID3 frames are metadata records, not MPEG audio frames.** Exclusion must recognize the initial encoder structure, never subtract one blindly, and does not prove that every counted frame decodes to audio.
 - Skip supported ID3 tags from their encoded, bounded lengths; do not interpret tag content, decompress, execute, download art, log uploaded bytes, or load entire uploads into memory.
@@ -30,8 +31,8 @@ Read this file before changing parser, API, fixtures, fuzzers, or counts. This f
 ## Source/test map
 
 `src/mp3/frame-header.ts`: one header decoder: indexed, free-format, unsupported or invalid, with the bitrate table.
-`src/mp3/frame-spans.ts`: each physical frame's span: indexed length from the decoder, free-format discovery and lock, no mixing.
-`src/mp3/free-format.ts`: bounded free-format discovery.
+`src/mp3/frame-spans.ts`: each physical frame's span: indexed length from the decoder, free-format discovery/lock and resolved sample-rate configuration changes.
+`src/mp3/free-format.ts`: bounded candidate selection; `src/mp3/free-format-probe.ts`: cached observations, necessary side-field bounds and cooperative work accounting.
 `src/mp3/count-frames.ts`: streaming boundaries and count semantics.
 `src/mp3/id3.ts`: boundary-aligned tags (leading/embedded/appended placement, footers, final ID3v1); `src/mp3/encoder-frame.ts`: encoder-frame recognition from a decoded header and complete frame.
 `src/mp3/byte-reader.ts`: chunk partition independence / bounded memory.

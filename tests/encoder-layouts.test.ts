@@ -45,6 +45,23 @@ async function assertPolicies(bytes: Buffer, expected: number, excluded: number)
 }
 
 describe('encoder-header layout matrix (structural, not an audio decoder)', () => {
+  it.each(['Xing', 'Info'] as const)(
+    '%s declared count zero or uint32-max cannot override physical traversal',
+    async (kind) => {
+      for (const declared of [0, 0xffffffff]) {
+        for (const physical of [1, 3]) {
+          const initial = xingFrame(kind, 1, base);
+          initial.writeUInt32BE(declared, xingPosition(base) + 8);
+          const bytes = Buffer.concat([
+            initial,
+            ...Array.from({ length: physical - 1 }, () => indexedFrame(base)),
+          ]);
+          await assertPolicies(bytes, physical, physical - 1);
+        }
+      }
+    },
+  );
+
   for (const kind of ['Xing', 'Info'] as const) {
     it.each(layouts)(
       `${kind}: channel $channel, CRC $crc, offset adjustment $crcShift, padding $padding`,
