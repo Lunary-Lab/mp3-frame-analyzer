@@ -5,6 +5,11 @@ export const tagPattern = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 export const shaPattern = /^[0-9a-f]{40}$/;
 export const digest = (value) => createHash('sha256').update(value).digest('hex');
 
+// Exact default emitted by the pinned Release Please 17.6.0 producer.
+// https://github.com/googleapis/release-please/blob/712fcf01effd08d7b0e7b1fd3861f2cb388bc8d1/src/util/pull-request-body.ts
+const releasePleaseFooter =
+  '\n\n---\nThis PR was generated with [Release Please](https://github.com/googleapis/release-please). See [documentation](https://github.com/googleapis/release-please#release-please).';
+
 export function validateIdentity({ repository, repositoryId, tag, sha }) {
   assert.match(repositoryId, /^[1-9]\d*$/);
   assert.match(repository, /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/);
@@ -219,6 +224,7 @@ export function composeReleaseNotes(plan, native) {
     pullRequests: plan.pullRequests.map((pr) => ({ number: pr.number, sha: pr.merge_commit_sha })),
     directCommits: plan.directCommits.map((commit) => commit.sha),
     userNotesSha256: digest(plan.userNotes),
+    releasePleaseNotesSha256: digest(plan.userNotes + releasePleaseFooter),
     nativeNotesSha256: digest(native.body),
     bodySha256: digest(body),
     producer: plan.producer,
