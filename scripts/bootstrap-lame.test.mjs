@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
+import { parse } from 'yaml';
 
 const names = ['lame_3.100.orig.tar.gz', 'lame_3.100-6build1.debian.tar.xz'];
 async function fixture(run, probeExit = 0) {
@@ -254,11 +255,8 @@ test('LAME composite publishes the successful exact binary and stops on bootstra
     new URL('../.github/actions/setup-lame-verified/action.yml', import.meta.url),
     'utf8',
   );
-  const block = source
-    .split('      run: |\n')[1]
-    .split('\n')
-    .map((line) => line.replace(/^ {8}/, ''))
-    .join('\n');
+  const block = parse(source).runs.steps.find((step) => step.id === 'encoder')?.run;
+  assert.equal(typeof block, 'string', 'Missing encoder shell step');
   for (const status of [0, 17]) {
     const root = await mkdtemp(join(tmpdir(), 'lame-action-'));
     try {

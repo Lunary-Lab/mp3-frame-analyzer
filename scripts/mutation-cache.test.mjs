@@ -4,6 +4,8 @@ import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
+import { runInNewContext } from 'node:vm';
+import ts from 'typescript';
 import {
   BASELINE,
   PR_BASELINE,
@@ -19,6 +21,68 @@ import {
 
 const commit = 'a'.repeat(40);
 const key = 'b'.repeat(64);
+const runnerSource = await readFile(new URL('./run-mutations.mjs', import.meta.url), 'utf8');
+
+function selectRunnerPolicy(source) {
+  const parsed = ts.createSourceFile('run-mutations.mjs', source, ts.ScriptTarget.Latest, true);
+  assert.equal(parsed.parseDiagnostics.length, 0, 'Runner source must parse');
+  const tries = parsed.statements.filter(ts.isTryStatement);
+  assert.equal(tries.length, 1, 'Expected one top-level runner try block');
+  const declarationName = (statement) =>
+    ts.isVariableStatement(statement) &&
+    statement.declarationList.declarations.length === 1 &&
+    statement.declarationList.declarations[0].name.getText(parsed);
+  const branches = tries[0].tryBlock.statements.filter(
+    (statement) =>
+      ts.isIfStatement(statement) &&
+      statement.elseStatement &&
+      ts.isBlock(statement.elseStatement) &&
+      statement.elseStatement.statements.some((child) => declarationName(child) === 'cache'),
+  );
+  assert.equal(branches.length, 1, 'Expected one runner branch declaring the admitted cache');
+  const statements = branches[0].elseStatement.statements;
+  const names = ['force', 'prIdentity', 'sourceIdentity', 'cache'];
+  const admission = statements.filter((statement) => names.includes(declarationName(statement)));
+  assert.deepEqual(
+    admission.map(declarationName),
+    names,
+    'Expected all admission declarations once, in dependency order',
+  );
+  const callName = (statement) =>
+    ts.isExpressionStatement(statement) &&
+    ts.isAwaitExpression(statement.expression) &&
+    ts.isCallExpression(statement.expression.expression) &&
+    statement.expression.expression.expression.getText(parsed);
+  const guards = statements.filter(ts.isIfStatement);
+  const promotion = guards.filter(
+    (statement) => callName(statement.thenStatement) === 'promoteCache',
+  );
+  assert.equal(promotion.length, 2, 'Expected both direct promotion guards');
+  const cleanup = guards.filter(
+    (statement) =>
+      ts.isForOfStatement(statement.thenStatement) &&
+      callName(statement.thenStatement.statement) === 'rm',
+  );
+  assert.equal(cleanup.length, 1, 'Expected one restored-envelope cleanup guard');
+  const files = cleanup[0].thenStatement.expression;
+  assert.ok(ts.isArrayLiteralExpression(files));
+  assert.deepEqual(
+    files.elements.map((file) => file.getText(parsed)),
+    ['BASELINE', 'PR_BASELINE'],
+  );
+  const workingCopy = guards.filter(
+    (statement) => callName(statement.thenStatement) === 'writeFile',
+  );
+  assert.equal(workingCopy.length, 1, 'Expected one admitted working-copy write');
+  assert.ok(admission.at(-1).pos < workingCopy[0].pos);
+  assert.ok(workingCopy[0].pos < cleanup[0].pos && cleanup[0].pos < promotion[0].pos);
+  // AST nodes bound each span; intervening statements must execute too.
+  const text = (nodes) => source.slice(nodes[0].getStart(parsed), nodes.at(-1).end);
+  return { admission: text(admission), cleanup: text(cleanup), promotion: text(promotion) };
+}
+
+const runnerPolicy = selectRunnerPolicy(runnerSource);
+
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'native-cache-test-'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -168,12 +232,9 @@ test('ignored Vite test-mode environment files are explicit inputs', async (t) =
   }
 });
 
-test('the actual runner promotes only completed scope-correct results with the correct identity', async () => {
-  const { runInNewContext } = await import('node:vm');
-  const source = await readFile(new URL('./run-mutations.mjs', import.meta.url), 'utf8');
-  const block = source.split('// Promotion is last,')[1]?.split('    console.log(')[0];
-  assert.ok(block);
-  const program = block.slice(block.indexOf('    if ('));
+// These checks execute isolated runner policy fragments with reconstructed state.
+// They do not exercise process completion, report auditing or lifecycle ordering.
+async function assertPromotionPolicy(program) {
   for (const [env, inputsHash, nodeOptions, expected] of [
     [{}, key, undefined, 'local'],
     [
@@ -231,7 +292,10 @@ test('the actual runner promotes only completed scope-correct results with the c
     );
     assert.deepEqual(calls, expected ? [['/project', report, key, expected]] : []);
   }
-});
+}
+
+test('the runner promotion policy fragment chooses the permitted cache identity', () =>
+  assertPromotionPolicy(runnerPolicy.promotion));
 
 test('own-PR identity survives a SHA change but cannot cross PR, input or main scopes', async (t) => {
   const { root, put } = await fixture(t);
@@ -272,13 +336,7 @@ test('own-PR identity survives a SHA change but cannot cross PR, input or main s
   assert.equal((await readCache(root, key, identity, () => {})).report, null);
 });
 
-test('actual runner admission isolates full mode and PR-cache hits from main artifact identity', async () => {
-  const { runInNewContext } = await import('node:vm');
-  const source = await readFile(new URL('./run-mutations.mjs', import.meta.url), 'utf8');
-  const block = source.slice(
-    source.indexOf('    const force ='),
-    source.indexOf('    await mkdir(dirname(join(root, WORKING_REPORT))'),
-  );
+test('the runner admission policy fragment distinguishes full mode, PR hits and main identity', async () => {
   const env = {
     GITHUB_ACTIONS: 'true',
     GITHUB_EVENT_NAME: 'pull_request',
@@ -298,7 +356,7 @@ test('actual runner admission isolates full mode and PR-cache hits from main art
   ]) {
     const calls = [];
     await runInNewContext(
-      `(async () => {${block}})()`,
+      `(async () => {${runnerPolicy.admission}})()`,
       {
         args,
         env: {},
@@ -323,7 +381,6 @@ test('actual runner admission isolates full mode and PR-cache hits from main art
 
 test('official PR cache requires exact successful hits and saves only after encoder verification', async () => {
   const { parse } = await import('yaml');
-  const { runInNewContext } = await import('node:vm');
   const action = parse(
     await readFile(
       new URL('../.github/actions/test-mutations/action.yml', import.meta.url),
@@ -374,17 +431,11 @@ test('official PR cache requires exact successful hits and saves only after enco
     );
 });
 
-test('restored CI envelopes cannot be mistaken for this invocation completing promotion', async () => {
-  const { runInNewContext } = await import('node:vm');
-  const source = await readFile(new URL('./run-mutations.mjs', import.meta.url), 'utf8');
-  const start = source.indexOf('    // CI transport files');
-  const block = source.slice(start, source.indexOf('    console.log(`Mutation cache:', start));
-  assert.ok(start > source.indexOf('if (cache.report) await writeFile'));
-  assert.ok(start < source.indexOf('await promoteCache'));
+test('the runner cleanup policy fragment removes restored envelopes only in CI', async () => {
   for (const ci of ['true', '']) {
     const removed = [];
     await runInNewContext(
-      `(async () => {${block}})()`,
+      `(async () => {${runnerPolicy.cleanup}})()`,
       {
         process: { env: { GITHUB_ACTIONS: ci } },
         BASELINE,
@@ -402,4 +453,74 @@ test('restored CI envelopes cannot be mistaken for this invocation completing pr
       ci ? [join('/project', BASELINE), join('/project', PR_BASELINE)] : [],
     );
   }
+});
+
+test('policy fragment selection tolerates indentation, comments and surrounding logging', async () => {
+  const edited = runnerSource
+    .replace(/^[ \t]*\/\/[^\r\n]*/gm, '// Reworded fixture comment.')
+    .replace('const force =', 'console.log("before admission");\nconst force =')
+    .replace(
+      'if (inputsHash && prIdentity)',
+      'console.log("between promotions");\nif (inputsHash && prIdentity)',
+    )
+    .replace(/^[ \t]+/gm, '\t');
+  assert.notEqual(edited, runnerSource);
+  for (const source of [runnerSource, edited]) {
+    const policy = source === runnerSource ? runnerPolicy : selectRunnerPolicy(source);
+    const calls = [];
+    await runInNewContext(
+      `(async () => {${policy.admission}\n${policy.cleanup}\n${policy.promotion}})()`,
+      {
+        args: [],
+        env: {},
+        console: { log() {} },
+        inputsHash: key,
+        process: {
+          env: {
+            GITHUB_ACTIONS: 'true',
+            GITHUB_EVENT_NAME: 'pull_request',
+            GITHUB_REF: 'refs/pull/7/merge',
+            GITHUB_REPOSITORY_ID: '42',
+            MUTATION_PR_CACHE_RESTORED: 'true',
+          },
+        },
+        pullRequestIdentity,
+        root: '/project',
+        report: { current: true },
+        audit() {},
+        BASELINE,
+        PR_BASELINE,
+        join,
+        readCache: (...values) => calls.push(['read', values[2]]),
+        rm: (path) => calls.push(['remove', path]),
+        promoteCache: (...values) => calls.push(['promote', values[3]]),
+      },
+      { timeout: 1000 },
+    );
+    assert.deepEqual(calls, [
+      ['read', 'pr:42:7'],
+      ['remove', join('/project', BASELINE)],
+      ['remove', join('/project', PR_BASELINE)],
+      ['promote', 'pr:42:7'],
+    ]);
+  }
+});
+
+test('policy fragment selection retains an additional promotion between the guards', async () => {
+  const edited = runnerSource.replace(
+    'if (inputsHash && prIdentity)',
+    "await promoteCache(root, report, inputsHash, 'local');\nif (inputsHash && prIdentity)",
+  );
+  assert.notEqual(edited, runnerSource);
+  await assert.rejects(
+    () => assertPromotionPolicy(selectRunnerPolicy(edited).promotion),
+    (error) => {
+      assert.equal(error.code, 'ERR_ASSERTION');
+      assert.deepEqual(error.actual, [
+        ['/project', { current: true }, key, 'local'],
+        ['/project', { current: true }, key, 'local'],
+      ]);
+      return true;
+    },
+  );
 });

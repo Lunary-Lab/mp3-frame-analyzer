@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "strykerVersion": "10.1.1",
   "target": 100,
-  "contextSha256": "24f2d8f730a26a550a969d5708a8f7488dc6b0aba9660f13244d3931ff1af4ea",
+  "contextSha256": "e5d1eff8f98dd02a72951ab77f1ef926d2d48ab9f53276ee5c60f8684d88afb0",
   "equivalents": [
     {
       "id": "EQ-COPY-OR",
@@ -587,7 +587,7 @@
     {
       "id": "EQ-FREE-KNOWN-SUFFIX-ACCESS",
       "file": "src/mp3/free-format.ts",
-      "sourceSha256": "a824d37c8c8ffa62f47f963006c32a4d40af59b187e628f5d03304d0ccf6367c",
+      "sourceSha256": "6e01e42c1a1f83b0a12e1201be68977464405f53e50b569efe8eb4da3b88ac65",
       "mutatorName": "OptionalChaining",
       "original": "probe.suffixes.get(offset)?.credible",
       "replacement": "probe.suffixes.get(offset).credible",
@@ -607,22 +607,22 @@
     {
       "id": "EQ-FREE-UNOBSERVED-SUFFIX-TIE",
       "file": "src/mp3/free-format.ts",
-      "sourceSha256": "a824d37c8c8ffa62f47f963006c32a4d40af59b187e628f5d03304d0ccf6367c",
+      "sourceSha256": "6e01e42c1a1f83b0a12e1201be68977464405f53e50b569efe8eb4da3b88ac65",
       "mutatorName": "BooleanLiteral",
       "original": "false",
       "replacement": "true",
       "location": {
         "start": {
-          "line": 127,
-          "column": 90
+          "line": 131,
+          "column": 70
         },
         "end": {
-          "line": 127,
-          "column": 95
+          "line": 131,
+          "column": 75
         }
       },
       "assumptions": "Ordinary immutable Buffer/Uint8Array input produced by inferFreeFormatBaseLength at a recognized free-format header; first is decoded from the same window at offset zero. The window is at most 8647 bytes; an open full probe establishes minimumStreamLength=8648. Candidate starts and prefix indices are nonnegative integers. No proxies, overridden typed-array methods, concurrent mutation or detachment, private-state reflection or prototype monkey-patching. The observable contract includes returned counts, typed errors, evidence selection, accounted work and explicit cooperative-yield/cancellation checkpoints, not identical instruction counts or nanosecond CPU/GC timing. Bounded local operations must preserve upload-length-independent memory and work bounds.",
-      "proof": "Exact change: the tied: false property in selectCandidate's if (capacityRequired) return ... becomes true. selectCandidate is module-private. Its sole capacityRequired=true caller is the reverse free-suffix branch in analyzeFreeFormatProbeSteps. That caller reads only selection.bestMatches (for credible and closed); it never reads tied or bestBase. Root selection invokes selectCandidate without the parameter, so its false default prevents this return branch from being reached. The changed tied value is therefore never forwarded to returned root Selection, candidate ranking, suffix evidence, an error, a yield value, metrics or traversal. The same candidate was already followed and accepted before either identical-shape return object is constructed; operation count and scheduling checkpoints are unchanged. The suffix object's tied property has no getter or externally observable reference. Hence both variants have exactly identical parser results/errors, work, cancellation checkpoints and reader interactions on all scoped calls. This proof depends on the current complete call graph and reads of Selection, not on survivor status."
+      "proof": "Exact change: the tied: false property in selectCandidate's if (successorEvidenceOnly) return ... becomes true. selectCandidate is module-private. Its sole successorEvidenceOnly=true caller is the reverse free-suffix branch in analyzeFreeFormatProbeSteps. That caller reads only selection.bestMatches (for credible and closed); it never reads tied or bestBase. Root selection invokes selectCandidate without the parameter, so its false default prevents this return branch from being reached. The changed tied value is therefore never forwarded to returned root Selection, candidate ranking, suffix evidence, an error, a yield value, metrics or traversal. The same candidate was already followed and accepted before either identical-shape return object is constructed; operation count and scheduling checkpoints are unchanged. The suffix object's tied property has no getter or externally observable reference. Hence both variants have exactly identical parser results/errors, work, cancellation checkpoints and reader interactions on all scoped calls. This proof depends on the current complete call graph and reads of Selection, not on survivor status."
     }
   ]
 }
