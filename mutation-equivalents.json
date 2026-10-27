@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "strykerVersion": "10.1.1",
   "target": 100,
-  "contextSha256": "9282b2226e6d93cee659ff62200c3d285ef0f42000e5de492ef5f840e074490a",
+  "contextSha256": "24f2d8f730a26a550a969d5708a8f7488dc6b0aba9660f13244d3931ff1af4ea",
   "equivalents": [
     {
       "id": "EQ-COPY-OR",
@@ -167,17 +167,17 @@
     {
       "id": "EQ-ID3V2-FOOTER-VERSION",
       "file": "src/mp3/id3.ts",
-      "sourceSha256": "f13877e703b53e693eac737adf407af71eee039155000b7bef728ec8a96fbfa1",
+      "sourceSha256": "65be61bf46b56e28a4eb94db4b7fd8095777cf1525a4e0f0ee5aec377064eecc",
       "mutatorName": "ConditionalExpression",
       "original": "version === 4",
       "replacement": "true",
       "location": {
         "start": {
-          "line": 161,
+          "line": 159,
           "column": 42
         },
         "end": {
-          "line": 161,
+          "line": 159,
           "column": 55
         }
       },
@@ -467,17 +467,17 @@
     {
       "id": "EQ-ID3-PREFIX-COMPLETENESS",
       "file": "src/mp3/id3.ts",
-      "sourceSha256": "f13877e703b53e693eac737adf407af71eee039155000b7bef728ec8a96fbfa1",
+      "sourceSha256": "65be61bf46b56e28a4eb94db4b7fd8095777cf1525a4e0f0ee5aec377064eecc",
       "mutatorName": "ConditionalExpression",
       "original": "bytes.length < ID3V2_HEADER_BYTES",
       "replacement": "false",
       "location": {
         "start": {
-          "line": 157,
+          "line": 155,
           "column": 7
         },
         "end": {
-          "line": 157,
+          "line": 155,
           "column": 40
         }
       },

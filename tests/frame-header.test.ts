@@ -84,7 +84,7 @@ describe('MPEG-1 Layer III headers', () => {
     }
   });
 
-  it('rejects reserved rate, reserved bitrate and reserved emphasis as invalid', () => {
+  it('rejects reserved rate, forbidden bitrate and reserved emphasis as invalid', () => {
     expect(kindOf([0xff, 0xfb, 0xf0, 0])).toBe('invalid');
     expect(kindOf([0xff, 0xfb, 0x9c, 0])).toBe('invalid');
     expect(kindOf([0xff, 0xfb, 0x0c, 0])).toBe('invalid');
@@ -100,12 +100,12 @@ describe('MPEG-1 Layer III headers', () => {
     expect(kindOf([0xff, 0xdb, 0x90, 0])).toBe('invalid');
   });
 
-  it('classifies other MPEG versions and layers as unsupported', () => {
+  it('distinguishes other MPEG versions and layers from reserved identifiers', () => {
     expect(kindOf([0xff, 0xf3, 0x90, 0])).toBe('unsupported'); // MPEG-2 Layer III
     expect(kindOf([0xff, 0xe3, 0x90, 0])).toBe('unsupported'); // MPEG-2.5 Layer III
-    expect(kindOf([0xff, 0xeb, 0x90, 0])).toBe('unsupported'); // reserved version
+    expect(kindOf([0xff, 0xeb, 0x90, 0])).toBe('invalid'); // reserved version
     expect(kindOf([0xff, 0xfd, 0x90, 0])).toBe('unsupported'); // MPEG-1 Layer II
     expect(kindOf([0xff, 0xff, 0x90, 0])).toBe('unsupported'); // MPEG-1 Layer I
-    expect(kindOf([0xff, 0xf9, 0x90, 0])).toBe('unsupported'); // reserved layer
+    expect(kindOf([0xff, 0xf9, 0x90, 0])).toBe('invalid'); // reserved layer
   });
 });

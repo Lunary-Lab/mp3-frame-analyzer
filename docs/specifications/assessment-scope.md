@@ -46,7 +46,7 @@ are in [MPEG-1 Layer III rules](mpeg-1-layer-iii.md).
   The current parser supports inferable free-format streams but **cannot
   claim unconditional full coverage**: ambiguous one-/two-frame streams
   are rejected.
-- Reserved bitrate index **15** and sample-rate index **3** are not valid
+- Forbidden bitrate index **15** and reserved sample-rate index **3** are not valid
   MPEG-1 Layer III frame configurations. MPEG-2, MPEG-2.5, Layers I/II,
   AAC/ADTS and MP4 are explicitly **outside the assignment**.
 - Layer III compressed-audio decoding, bit-reservoir validation, full

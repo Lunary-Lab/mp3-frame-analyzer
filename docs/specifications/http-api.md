@@ -46,12 +46,16 @@ Current application-generated errors: `{"error": string, "message": string}`, JS
 
 - 400: invalid upload structure or query value, missing `file`.
 - 413: upload exceeds configured file size, aggregate multipart-body budget or multipart resource limits.
-- 415: unsupported media type or explicitly unsupported MPEG subtype.
-- 422: structurally invalid/truncated MPEG data.
+- 415: unsupported media type, recognized out-of-scope MPEG identifiers or unknown ID3 major version.
+- 422: structurally invalid/truncated data, including reserved MPEG identifiers and forbidden ID3 version bytes.
 - 503: upload admission exhausted (`server-busy`, `Retry-After: 1`, connection closes).
 - 500: unexpected internal failure (sanitized client message).
 
 These are **project mappings** compatible with RFC 9110 statuses, not exact error bodies mandated by the RFC. Admission rejects directly before body parsing; for errors raised while handling accepted requests, one pure function, `errorResponseFor` in [`src/error-response.ts`](../../src/error-response.ts), maps every failure the route raises to its status and body, and says whether the connection must close. The upload module also closes raw uploads it rejects, and a client that disconnected gets no response at all. An abandoned TCP connection or low-level timeout cannot always deliver a JSON reply.
+
+The [input classification matrix](input-classification.md) records exact messages,
+precedence and tests. A 415 scope rejection does not certify the other codec;
+mislabeled arbitrary bytes are not automatically called an unsupported format.
 
 ## Resource/security policy (project, not MPEG/HTTP normative limits)
 

@@ -6,11 +6,11 @@
 
 Only MPEG-**1** Audio Layer **III** (MP3) elementary audio frames. A compliant frame may use any valid MPEG-1 Layer III table bitrate, sample rate, CRC-protection setting, padding setting, channel mode, and other valid header flags. CBR/VBR/ABR describe encoder bitrate behavior; **they are not different MPEG versions or distinct frame header syntaxes**. The frame length must be resolved afresh at each indexed-bitrate frame.
 
-Header values outside this target: MPEG-2 Layer III, non-ISO MPEG-2.5, MPEG-1 Layers I/II, ADTS AAC and MPEG-4/MP4. MPEG ancillary data does not change the underlying frame-boundary counting requirement. Reject as unsupported rather than pretending to count as Layer III.
+Formats outside this target include MPEG-2 Layer III, non-ISO MPEG-2.5, MPEG-1 Layers I/II, ADTS AAC and MPEG-4/MP4. Recognized nonreserved MPEG version/layer identifiers reject as unsupported; reserved identifiers are malformed. AAC/MP4 declared media types reject as unsupported media, while mislabeled non-MPEG bytes need not be identified by codec. See the [exact input classification contract](input-classification.md). MPEG ancillary data does not change the underlying frame-boundary counting requirement.
 
 ## 2. Four-byte header: bit-accurate layout
 
-Header is 32 bits in big-endian/MSB-first order; offsets are bit positions within the 32-bit unsigned header word.
+Header is 32 bits in big-endian/MSB-first order; offsets are bit positions within the 32-bit unsigned header word. The table uses the common eleven-bit sync/two-bit version view for compatibility classification. ISO/IEC 11172-3:1993 describes a twelve-bit sync plus one-bit ID; these identify the same MPEG-1 prefix, without making other version combinations part of its requirements.
 
 | Bits  | Width | Meaning and relevant values                                                 |
 | ----- | ----: | --------------------------------------------------------------------------- |
@@ -18,7 +18,7 @@ Header is 32 bits in big-endian/MSB-first order; offsets are bit positions withi
 | 20–19 |     2 | Version: `11` = MPEG-1; `10` MPEG-2; `00` MPEG-2.5 extension; `01` reserved |
 | 18–17 |     2 | Layer: `01` = III; `10` = II; `11` = I; `00` reserved                       |
 | 16    |     1 | Protection: `0` means protected by a 16-bit CRC; `1` no CRC                 |
-| 15–12 |     4 | Bitrate index: `0000` free-format, `0001`–`1110` table, `1111` reserved     |
+| 15–12 |     4 | Bitrate index: `0000` free-format, `0001`–`1110` table, `1111` forbidden    |
 | 11–10 |     2 | Sampling-rate index: `00` 44100, `01` 48000, `10` 32000 Hz; `11` reserved   |
 | 9     |     1 | Padding: `0` = no extra slot, `1` = one byte for Layer III                  |
 | 8     |     1 | Private application bit: must not change Layer III frame sizing             |
@@ -30,9 +30,9 @@ Header is 32 bits in big-endian/MSB-first order; offsets are bit positions withi
 
 **Valid MPEG-1 Layer III indexed bitrate table**, from `BITRATES_KBPS` ([source](../../src/mp3/frame-header.ts)):
 
-| Index (hex) | 0    | 1   | 2   | 3   | 4   | 5   | 6   | 7   | 8   | 9   | A   | B   | C   | D   | E   | F        |
-| ----------- | ---- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | -------- |
-| kbps        | free | 32  | 40  | 48  | 56  | 64  | 80  | 96  | 112 | 128 | 160 | 192 | 224 | 256 | 320 | reserved |
+| Index (hex) | 0    | 1   | 2   | 3   | 4   | 5   | 6   | 7   | 8   | 9   | A   | B   | C   | D   | E   | F         |
+| ----------- | ---- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --------- |
+| kbps        | free | 32  | 40  | 48  | 56  | 64  | 80  | 96  | 112 | 128 | 160 | 192 | 224 | 256 | 320 | forbidden |
 
 Frame header bit fields are unsigned; do not let JavaScript signed 32-bit operators change the interpretation of the highest bit. The emphasis value `10` is reserved, and the current strict project policy rejects it; some real-world decoders tolerate it as an interoperability exception.
 
