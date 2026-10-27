@@ -81,10 +81,51 @@ Only ordinary main pushes upload an audited baseline; official
 `actions/upload-artifact` publishes one unzipped JSON file. No custom archive
 parser or artifact authentication client is maintained.
 
+### Optional own-PR cache (lower trust)
+
+Normal `pull_request` merge-ref runs may also use official `actions/cache` for
+`.cache/mutation/pr-baseline.json`. Its exact key binds repository/PR identity
+and the same declared-input fingerprint, **not the commit SHA**: a later docs-only
+update in that same PR can reuse completed results. No restore-prefix keys are
+used. Admission requires a successful restore with an exact cache hit, matching
+`prIdentity` and input key, and the existing report audit. The ordinary suite and
+native discovery/coverage still run; changed declared inputs still run full.
+
+This is an **own-PR optimization, not authenticated producer provenance**.
+`prIdentity`/`audit.execution.baselinePR` name its scope; they are not a producing
+commit or a successful whole-CI attestation. A selected main artifact's SHA is
+never presented as the producer of a PR-cache report. Saving occurs only after
+mutation and encoder checks, not after all sibling CI jobs. Main and release
+runs never read this file; forced-full mode bypasses both result sources.
+`pull_request_target`, dispatches and non-merge refs cannot save or consume it.
+
+Restore/save failures, eviction, partial/corrupt files or incompatible reports
+fall back to full execution. Native caches are immutable: an unusable exact-key
+entry cannot be repaired in place and may remain cold until eviction or a
+reviewed key-namespace change. No cache failure skips tests or weakens the gate.
+See GitHub's [cache-scope restrictions](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache).
+
 The new envelope is not compatible with the old schema3 cache. The first hosted
 native baseline requires successful validation; old reports are not silently
 relabeled. Once available, compatible ancestor results can bridge a still-running
 exact-main baseline. A changed declared input still requires a cold run.
+
+## Bounded native parallelism
+
+The parser uses four native Stryker test runners, while each Vitest runner keeps
+one worker. `timeoutMS` additional allowance (`2000ms`), parser scope and acceptance rules
+are unchanged. GitHub documents four CPUs and 16GB RAM for the public
+[`ubuntu-24.04` runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories).
+The mutation composite logs `os.availableParallelism()` and total memory so the
+actual hosted allocation is observable rather than assumed. Four is also an
+explicit local bound; Stryker's automatic CPU-based default is not used.
+
+This is a bounded native concurrency choice, not a custom scheduler or a promise
+of twice the speed. Worker-budget changes are reviewed against the previous
+report for elapsed time, raw timeouts, RuntimeErrors and mutant outcomes—not
+merely whether the adjusted score is green. Contention can
+change timeout behavior; revert the setting if the measured tradeoff is worse.
+See the [native concurrency option](https://stryker-mutator.io/docs/stryker-js/configuration/#concurrency-number--string).
 
 ## Verification and limits
 

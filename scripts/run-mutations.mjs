@@ -6,12 +6,15 @@ import { fileURLToPath } from 'node:url';
 import { auditMutations, sourceContext } from './mutation-policy.mjs';
 import {
   WORKING_REPORT,
+  BASELINE,
+  PR_BASELINE,
   mutationEnvironment,
   mutationInputs,
   fingerprint,
   readCache,
   promoteCache,
   executionSummary,
+  pullRequestIdentity,
 } from './mutation-cache.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -135,14 +138,23 @@ try {
       );
     }
     const audit = (report, options) => auditMutations(report, policy, sources, options);
-    const sourceCommit =
-      process.env.GITHUB_ACTIONS === 'true' ? process.env.MUTATION_BASELINE_SHA : 'local';
     const force = args.includes('--full') || Boolean(env.NODE_OPTIONS) || !inputsHash;
+    const prIdentity = force ? null : pullRequestIdentity(process.env);
+    const sourceIdentity =
+      prIdentity && process.env.MUTATION_PR_CACHE_RESTORED === 'true'
+        ? prIdentity
+        : process.env.GITHUB_ACTIONS === 'true'
+          ? process.env.MUTATION_BASELINE_SHA
+          : 'local';
     const cache = force
       ? { report: null, reason: 'native-full-required' }
-      : await readCache(root, inputsHash, sourceCommit, audit);
+      : await readCache(root, inputsHash, sourceIdentity, audit);
     await mkdir(dirname(join(root, WORKING_REPORT)), { recursive: true });
     if (cache.report) await writeFile(join(root, WORKING_REPORT), JSON.stringify(cache.report));
+    // CI transport files are not proof of successful promotion by this invocation.
+    // Keep the admitted native working copy, but only save freshly promoted envelopes.
+    if (process.env.GITHUB_ACTIONS === 'true')
+      for (const path of [BASELINE, PR_BASELINE]) await rm(join(root, path), { force: true });
     console.log(`Mutation cache: ${cache.reason}. Native Stryker owns result reuse.`);
     const started = performance.now();
     // A normal unmutated run is mandatory even for a 100% cache hit. Stryker
@@ -176,7 +188,9 @@ try {
         ...execution,
         mode: cache.report ? 'incremental' : 'full',
         cacheReason: cache.reason,
-        baselineCommit: cache.report ? sourceCommit : null,
+        baselineCommit:
+          cache.report && /^[a-f0-9]{40}$/.test(sourceIdentity) ? sourceIdentity : null,
+        baselinePR: cache.report && sourceIdentity?.startsWith('pr:') ? sourceIdentity : null,
         elapsedMs: Math.round(performance.now() - started),
         inputsHash,
         inputCaptureError,
@@ -198,6 +212,7 @@ try {
         inputsHash,
         process.env.GITHUB_ACTIONS === 'true' ? process.env.GITHUB_SHA : 'local',
       );
+    if (inputsHash && prIdentity) await promoteCache(root, report, inputsHash, prIdentity);
     console.log(
       `Mutants executed this invocation: ${execution.executed}; reused validated results: ${execution.reused}.`,
     );
