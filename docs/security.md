@@ -14,7 +14,7 @@ Controls:
 - Structured typed parser failures; generic JSON for unexpected exceptions. Application logs use an explicit field and message allowlist; see the logging boundary below.
 - Listener binds only to `127.0.0.1` by default. Configurable bind address for intentional external deployment.
 - No spawning external binaries, decoding audio, disk writes, database, shell, or credentials.
-- CI audits both the production tree and the complete development/build tree, failing on moderate-or-higher advisories. A weekly workflow repeats these audits. It also runs full-Git-history Betterleaks secret scanning, maintained `eslint-plugin-security` rules in `src/`, and local Semgrep architecture rules prohibiting dynamic code and process execution. JavaScript build, fuzz, and benchmark tools are covered by ordinary ESLint rules.
+- CI audits both the production tree and the complete development/build tree, failing on moderate-or-higher advisories. A weekly workflow repeats these audits. It also runs full-Git-history Betterleaks secret scanning, maintained `eslint-plugin-security` rules in `src/`, and fixed-config ESLint architecture rules prohibiting dynamic code and process-execution capabilities. JavaScript build, fuzz, and benchmark tools are covered by ordinary ESLint rules.
 
 ## Limitations
 
@@ -120,32 +120,46 @@ options. These child-process controls do not sanitize an already running parent
 Node process or establish trust in the host PATH/tools. Published npm paths and
 mutation-cache environment identity are unchanged.
 
-## Semgrep installation integrity
+## Runtime architecture SAST and tool dependencies
 
-The Semgrep CE install uses the complete reviewed version/SHA-256 wheel lock in
-`.github/security/semgrep-requirements.txt`: 66 scanner and transitive
-distributions for CPython 3.12 on Linux x86_64. Other interpreter/platform targets
-fail explicitly; this is not a universal lock. Native
-[pip hash-checking mode](https://pip.pypa.io/en/stable/topics/secure-installs/)
-checks every archive before installation. Binary-only downloads from PyPI are
-followed by a hash-required offline install and `pip check`; source builds and
-their separately resolved build dependencies are not allowed. Python isolated
-mode, pip isolated mode and `PIP_CONFIG_FILE=/dev/null` prevent accidental local
-configuration or environment overrides. The scan still uses only repository
-rules, with optional metrics, version checks and tracing disabled.
+The required **Runtime architecture SAST (ESLint)** job uses the already pinned
+ESLint/TypeScript-ESLint toolchain, with `@eslint-community/eslint-utils@4.10.1`
+explicitly pinned as a direct development dependency. Its archive integrity and
+resolved dependencies are in `package-lock.json`; the complete npm dependency
+CVE gate therefore covers this scanner as well as application and build packages.
+This is not merely the ordinary configurable `eslint .` invocation.
 
-`scripts/test-semgrep-lock.py` exercises native pip against the downloaded
-wheels without network access. It checks the complete graph and rejects wrong or
-missing hashes, a modified wheel, an omitted or newly introduced transitive
-dependency, and a source-only package without executing its build backend.
+`npm run sast:runtime` uses native `Linter.verify` with one fixed configuration:
+maintained eval/Function/import rules plus a small architecture rule using native
+reference tracking and constant evaluation. It prohibits `child_process` imports,
+reexports and supported CommonJS/dynamic/builtin/createRequire loaders, including
+aliases and statically known module names. Bare `execSync`, `exec` and `spawn`
+calls preserve the original policy; unrelated local and regular-expression
+`.exec()` methods remain allowed. This is a focused architecture boundary, not
+arbitrary JavaScript deobfuscation, whole-program dataflow analysis or a promise
+that every possible process-execution path is detected. GitHub CodeQL and the
+other security checks remain separate and unchanged.
 
-To update, resolve the complete wheel graph for the same target, review package
-versions and official PyPI metadata against the actual wheel SHA-256s, update the
-whole lock, then repeat the native install, failure controls and scanner checks.
-Do not replace a failed hash with the newly observed value merely to pass CI.
-Hashes prevent substitution relative to reviewed bytes, not malicious upstream
-code. The hosted runner, Python and pip remain trusted platform infrastructure,
-not immutable dependencies covered by this wheel lock.
+The runner never discovers project ESLint configuration, ignore files, caches or
+bulk suppressions, and native inline configuration is disabled. It enumerates all
+regular JS/TS files under `src/`, including hidden and untracked files. Missing or
+empty source, symlinks, unsupported file types, unreadable files, parser errors and
+any diagnostic fail closed. Target/configuration/ignore/cache CLI overrides are
+rejected. Input source is parsed, never imported or executed. Native positive and
+negative fixtures preserve every original and enhanced architecture example;
+additional tests cover aliases, TypeScript wrappers, actual process exit codes,
+source coverage, and attempted suppression/configuration overrides.
+
+This replacement removes the complete Semgrep/Python wheel installation rather
+than accepting its vulnerable dependencies. The removed graph included MCP1.29.0
+and OpenTelemetry API1.37.0, with known advisories
+[CVE-2026-115563](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-qx49-fqc8-xw99),
+[GHSA-5h93-6whr-6q8j](https://github.com/modelcontextprotocol/python-sdk/security/advisories/GHSA-5h93-6whr-6q8j),
+[CVE-2026-59951](https://github.com/advisories/GHSA-84m7-p3x7-pcfv) and
+[CVE-2026-114603](https://github.com/open-telemetry/opentelemetry-python/security/advisories/GHSA-xcq7-p3pf-p88h).
+No advisory ignore or VEX exception is introduced. Historical scan evidence and
+Git history are not rewritten. Hash integrity establishes selected bytes, not
+benignness; dependency advisories still need current feeds and upstream review.
 
 ## Node runtime installation integrity
 

@@ -45,7 +45,9 @@
     "mutation:full": "node scripts/run-mutations.mjs --full",
     "mutation:pure": "node -e \"require('node:fs').rmSync('reports/mutation-pure', { recursive: true, force: true })\" && stryker run stryker.nonparser-pure.config.mjs && node scripts/nonparser-pure-scope.mjs reports/mutation-pure/mutation.json",
     "test:mutation-cache": "node --test scripts/mutation-cache.test.mjs",
-    "test:mutation-cache:integration": "node --test scripts/native-mutation.integration.mjs"
+    "test:mutation-cache:integration": "node --test scripts/native-mutation.integration.mjs",
+    "sast:runtime": "node scripts/runtime-architecture.mjs",
+    "test:sast": "node --test scripts/runtime-architecture*.test.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "10.1.6",
@@ -69,7 +71,8 @@
     "eslint-plugin-security": "4.2.0",
     "globals": "17.13.0",
     "@stryker-mutator/vitest-runner": "10.1.1",
-    "yaml": "2.9.1"
+    "yaml": "2.9.1",
+    "@eslint-community/eslint-utils": "4.10.1"
   },
   "overrides": {
     "typed-rest-client": {

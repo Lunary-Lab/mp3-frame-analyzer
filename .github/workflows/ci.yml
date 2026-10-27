@@ -43,9 +43,6 @@ env:
   NODE_DISABLE_COMPILE_CACHE: '1'
   NPM_CONFIG_UPDATE_NOTIFIER: 'false'
   PIP_DISABLE_PIP_VERSION_CHECK: '1'
-  SEMGREP_SEND_METRICS: 'off'
-  SEMGREP_ENABLE_VERSION_CHECK: '0'
-  SEMGREP_SUPPRESS_ERRORS: 'false'
   OTEL_SDK_DISABLED: 'true'
 
 # Scheduled/full-manual runs use unique groups: cancel=false alone still replaces pending runs.
@@ -333,8 +330,8 @@ jobs:
       - name: Scan entire Git history for secrets
         run: betterleaks git . --no-banner
 
-  semgrep:
-    name: Semgrep focused SAST
+  architecture:
+    name: Runtime architecture SAST (ESLint)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -342,20 +339,11 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
-      - name: Install pinned Semgrep CE in an isolated environment
-        run: |
-          python3 -I -c 'import platform, sys; sys.exit(0 if sys.implementation.name == "cpython" and sys.version_info[:2] == (3, 12) and sys.platform == "linux" and platform.machine() == "x86_64" else "Semgrep lock requires CPython 3.12 on Linux x86_64")'
-          python3 -I -m venv "${RUNNER_TEMP}/semgrep-venv"
-          python="${RUNNER_TEMP}/semgrep-venv/bin/python"
-          wheels="${RUNNER_TEMP}/semgrep-wheels"
-          lock=.github/security/semgrep-requirements.txt
-          export PIP_CONFIG_FILE=/dev/null
-          "$python" -I -m pip --isolated --disable-pip-version-check download --index-url https://pypi.org/simple --require-hashes --only-binary=:all: --no-cache-dir --dest "$wheels" --requirement "$lock"
-          "$python" -I -m pip --isolated --disable-pip-version-check install --no-index --find-links "$wheels" --require-hashes --only-binary=:all: --no-cache-dir --requirement "$lock"
-          "$python" -I -m pip --isolated --disable-pip-version-check --no-cache-dir check
-          "$python" -I scripts/test-semgrep-lock.py "$wheels"
-      - name: Application architecture rules without optional reporting
-        run: '"${RUNNER_TEMP}/semgrep-venv/bin/semgrep" scan --config .semgrep.yml --strict --error --metrics=off --disable-version-check --no-trace src'
+      - uses: ./.github/actions/setup-project
+      - name: Prove native architecture findings, coverage and suppression resistance
+        run: npm run test:sast
+      - name: Enforce fixed runtime architecture policy without project configuration or ignores
+        run: npm run sast:runtime
 
   fuzz:
     name: Fuzz regression and bounded resources
@@ -448,7 +436,7 @@ jobs:
         trivy,
         trivy-release,
         secrets,
-        semgrep,
+        architecture,
         fuzz,
         package,
         governance,
@@ -464,7 +452,7 @@ jobs:
           import assert from 'node:assert/strict';
           const expected = [
             'format', 'lint', 'types', 'unit', 'compatibility', 'tooling', 'mutation-cache',
-            'mutation', 'mutation-pure', 'encoder', 'npm-audit', 'trivy', 'trivy-release', 'secrets', 'semgrep', 'fuzz', 'package', 'governance',
+            'mutation', 'mutation-pure', 'encoder', 'npm-audit', 'trivy', 'trivy-release', 'secrets', 'architecture', 'fuzz', 'package', 'governance',
           ];
           const jobs = JSON.parse(process.env.RESULTS);
           assert.ok(jobs && typeof jobs === 'object' && !Array.isArray(jobs), 'Missing job evidence');

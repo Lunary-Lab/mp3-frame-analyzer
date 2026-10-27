@@ -196,7 +196,7 @@ The required `All checks` aggregate waits for every native validation job and
 rejects failures, cancellation, missing evidence and skipped jobs. Formatting,
 lint/workflow syntax, types, runtime coverage, compatibility, tooling, short native
 mutation-cache controls, parser mutation, encoder provenance, dependency CVEs,
-secrets, Semgrep, bounded fuzz/resource checks, packaged-runtime verification and
+secrets, runtime architecture SAST, bounded fuzz/resource checks, packaged-runtime verification and
 repository governance validation are visible separately. The cache controls are
 independent of parser mutation;
 both remain mandatory. Packaging keeps artifact verification and real runtime
@@ -216,8 +216,8 @@ authenticated compatible main/ancestor baseline or a separately scoped,
 lower-trust own-PR cache. Full scheduled/release/manual validation restores
 neither. These scheduling choices are not measured hosted speedup claims.
 
-Optional npm update notices, pip version checks, Go telemetry, Semgrep metrics,
-Semgrep version checks and tracing are disabled in this workflow. Required package
+Optional npm update notices, pip version checks, Go telemetry and tracing are
+disabled in this workflow. The fixed architecture scanner has no reporting client. Required package
 and advisory downloads are distinct from telemetry; GitHub service logs remain.
 New scanner policies and final-publication approval are separate changes.
 

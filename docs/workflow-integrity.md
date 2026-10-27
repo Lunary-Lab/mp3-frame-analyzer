@@ -60,7 +60,7 @@ with a verified archive preserves those guarantees.
 
 This is a **pinning gate**, not an assertion that every zizmor advisory is a
 blocking vulnerability. The summary separately counts its other findings.
-Existing actionlint, secrets, Semgrep, dependency scans, release gates and all
+Existing actionlint, secrets, runtime architecture SAST, dependency scans, release gates and all
 other required checks remain intact. In particular, metadata-only PR-title
 validation intentionally uses `pull_request_target` without checking out PR
 code; local `./` actions intentionally follow the exact checked-out CI source.
