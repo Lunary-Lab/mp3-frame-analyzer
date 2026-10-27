@@ -471,3 +471,11 @@ test('the parent mutation execution contract is fixed while unrelated CI jobs ma
     '.cache/mutation/native-baseline.json',
   );
 });
+
+test('independent encoder CI uses the verified source build without system package acquisition', () => {
+  const encoder = job('encoder');
+  assert.match(encoder, /uses: \.\/\.github\/actions\/setup-lame-verified\n\s+id: encoder/);
+  assert.match(encoder, /LAME_BINARY: \$\{\{ steps\.encoder\.outputs\.binary \}\}/);
+  assert.match(encoder, /run: node scripts\/encoder-fixtures\.mjs/);
+  assert.doesNotMatch(encoder, /apt-get|sudo|continue-on-error/);
+});

@@ -334,3 +334,36 @@ member inventory and regular-file validation before extraction. This change does
 not restore the removed custom mutation-baseline ZIP reader or change native
 mutation caching. No generic subprocess environment or npm/GitHub credential
 handling is changed.
+
+### Independent LAME encoder source integrity
+
+The required encoder-oracle job builds LAME 3.100 from two exact source archives
+rather than installing an unversioned system package. Native SHA-256 checks use
+`.github/security/lame-sources.sha256` before either archive is extracted or any
+patch/build command runs. Both filenames include their reviewed versions. Their
+hashes match the official [Ubuntu source publication for 3.100-6build1](https://launchpad.net/ubuntu/+source/lame/3.100-6build1).
+The archive endpoints are fixed HTTPS URLs under `archive.ubuntu.com`; redirects,
+missing/duplicate/weak/substituted pins and occupied destinations fail closed.
+This is repository-authoritative hash verification against official publisher
+metadata, not a claim of an independently verified historical DSC signature.
+
+The selected Linux x86-64 profile applies only
+`debian/patches/07-field-width-fix.patch`, a frontend version-print field-width
+correction, then builds from the shipped configure script. It does **not** claim to
+reproduce Ubuntu's full packaging patch series or regenerate its autotools files.
+The encoder uses the internal LAME file reader, static LAME libraries, no dynamic
+frontends/CPML and no terminal-library dependencies. Only host libc/libm dynamic
+NEEDED entries are accepted before probing the resulting executable. No compiled
+encoder cache, preexisting extraction, system install or privilege escalation is
+used; a deterministic, exclusive private root binds both complete source digests.
+
+Native tar/xz/gzip, patch, configure and make child environments exclude inherited
+archive options, CONFIG_SITE, compiler/linker flags and Make execution hooks.
+The reviewed build fixes its compiler commands and hardening flags, but the hosted
+C/C++ compiler, binutils, make, shell, curl, coreutils, libc/libm and runner remain
+explicit platform trust boundaries, not individually immutable dependencies or a
+bit-for-bit reproducibility claim. Hashes establish identity, not CVE safety; source
+upgrades need a fresh advisory review and unchanged five-case byte/decode/count
+fixture oracle. The encoder binary is CI-only and is not shipped in the application
+runtime artifact. Upstream LAME library licensing and the bundled decoder licensing
+remain in the downloaded source; no third-party source or binary is vendored here.
