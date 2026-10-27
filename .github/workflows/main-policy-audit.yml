@@ -9,6 +9,12 @@ permissions:
   pull-requests: read
   checks: read
 
+env:
+  NODE_OPTIONS: ''
+  NODE_PATH: ''
+  NODE_COMPILE_CACHE: ''
+  NODE_DISABLE_COMPILE_CACHE: '1'
+
 jobs:
   audit:
     name: Main policy audit
@@ -16,17 +22,18 @@ jobs:
     timeout-minutes: 5
     steps:
       # Detective metadata-only control, not branch enforcement. No PR code,
-      # dependencies, lifecycle scripts, write token or approval requirement.
+      # npm dependencies, lifecycle scripts, write token or approval requirement.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-          sparse-checkout: scripts/main-policy-audit*.mjs
+          sparse-checkout: |
+            scripts/main-policy-audit*.mjs
+            scripts/bootstrap-node.sh
+            .github/actions/setup-node-verified/action.yml
+            .github/security/node-archives.sha256
           sparse-checkout-cone-mode: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-          package-manager-cache: false
+      - uses: ./.github/actions/setup-node-verified
       - name: Audit squash checks as they stood before each merge
         env:
           GH_TOKEN: ${{ github.token }}

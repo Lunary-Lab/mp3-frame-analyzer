@@ -37,6 +37,10 @@ permissions:
   contents: read
 
 env:
+  NODE_OPTIONS: ''
+  NODE_PATH: ''
+  NODE_COMPILE_CACHE: ''
+  NODE_DISABLE_COMPILE_CACHE: '1'
   NPM_CONFIG_UPDATE_NOTIFIER: 'false'
   PIP_DISABLE_PIP_VERSION_CHECK: '1'
   SEMGREP_SEND_METRICS: 'off'
@@ -132,8 +136,10 @@ jobs:
       matrix:
         include:
           - node: '26'
+            version: '26.12.1'
             npm: '11.19.0'
           - node: '24'
+            version: '24.22.1'
             npm: '11.9.0'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -144,7 +150,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-project
         with:
-          node: ${{ matrix.node }}
+          node: ${{ matrix.version }}
           npm: ${{ matrix.npm }}
       - run: npm run check
         if: matrix.node == '26'
@@ -245,10 +251,7 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-          package-manager-cache: false
+      - uses: ./.github/actions/setup-node-verified
       - name: Install required independent encoder
         run: |
           sudo apt-get update -qq
@@ -288,10 +291,7 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-          package-manager-cache: false
+      - uses: ./.github/actions/setup-node-verified
       - uses: ./.github/actions/setup-trivy
       - run: node scripts/trivy-gate.mjs "${RUNNER_TEMP}/trivy-tool/trivy" full
 
@@ -305,10 +305,7 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-          package-manager-cache: false
+      - uses: ./.github/actions/setup-node-verified
       - name: Require the exact producer artifact identity before download
         env:
           ARTIFACT_ID: ${{ needs.package.outputs.release_artifact_id }}

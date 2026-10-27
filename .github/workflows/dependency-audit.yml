@@ -12,6 +12,12 @@ concurrency:
   group: scheduled-dependency-audit
   cancel-in-progress: false
 
+env:
+  NODE_OPTIONS: ''
+  NODE_PATH: ''
+  NODE_COMPILE_CACHE: ''
+  NODE_DISABLE_COMPILE_CACHE: '1'
+
 jobs:
   audit:
     runs-on: ubuntu-latest
@@ -20,10 +26,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          package-manager-cache: false
+      - uses: ./.github/actions/setup-node-verified
       - run: node scripts/bootstrap-npm.mjs 11.19.0
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run audit:production
