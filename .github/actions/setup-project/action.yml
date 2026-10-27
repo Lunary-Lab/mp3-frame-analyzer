@@ -33,4 +33,6 @@ runs:
       shell: bash
       env:
         NPM_CONFIG_UPDATE_NOTIFIER: 'false'
-      run: npm ci --ignore-scripts --no-audit --no-fund
+      run: |
+        node scripts/verify-npm-lock.mjs
+        npm ci --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org --replace-registry-host=never

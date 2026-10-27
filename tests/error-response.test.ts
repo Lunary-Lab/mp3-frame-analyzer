@@ -107,3 +107,24 @@ it.each<[string, unknown, UploadForm, ErrorResponse]>([
 ])('%s', (_, error, form, expected) => {
   expect(errorResponseFor(error, form)).toEqual(expected);
 });
+
+it.each([NaN, Infinity, -Infinity, 399, 400.5, 499.5, 500, '400', null, undefined])(
+  'treats an invalid framework client status %s as an unexpected internal failure',
+  (statusCode) => {
+    for (const form of ['raw', 'multipart'] as const) {
+      expect(errorResponseFor(failure('private diagnostic', { statusCode }), form)).toEqual(
+        internal,
+      );
+    }
+  },
+);
+
+it.each([400, 499])('preserves the valid framework client-status boundary %i', (statusCode) => {
+  for (const form of ['raw', 'multipart'] as const) {
+    expect(errorResponseFor(failure('private diagnostic', { statusCode }), form)).toEqual(
+      response(statusCode, 'invalid-request', 'Invalid HTTP request', {
+        closeConnection: form === 'raw',
+      }),
+    );
+  }
+});
