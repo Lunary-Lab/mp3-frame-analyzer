@@ -9,8 +9,9 @@ both Stryker and the auditor. This does not claim 100% mutation testing of the
 HTTP adapter or the entire application.
 
 Every generated mutant must have an audited result: freshly executed or explicitly
-reused with a validated unaffected killing-test witness from a trusted baseline. Forced-full mode executes all
-mutants. There are **no source-level Stryker ignores,
+reused by native Stryker from a validated same-input completed baseline. Native
+matching and current coverage own reuse; no custom killing-witness engine is used.
+Forced-full mode executes all mutants. There are **no source-level Stryker ignores,
 no excluded mutator families, and no native ignore plugin**. The raw JSON report
 is preserved unchanged. The adjusted score excludes only exact, reviewed,
 behaviorally equivalent mutants from its population. A reviewed equivalent that
@@ -48,8 +49,9 @@ and conservative invalidation rules. CI fails for:
   whose supposedly equivalent mutant now fails a test.
 
 A reviewed equivalent may finish as `Survived` with completed-test evidence or
-as `Timeout` with a finite positive execution duration. A timeout alone does not
-establish equivalence: the existing exact source-bound proof is still required.
+as `Timeout`. Fresh timeouts require a finite positive execution duration; an
+admitted same-input native replay may omit duration without claiming fresh
+execution. A timeout alone does not establish equivalence: the existing exact source-bound proof is still required.
 Timeouts for reviewed equivalents are listed separately in
 `audit.json` as `timedOutEquivalents`; they are included in the raw `timedOut`
 count but excluded from both `adjustedDetected` and `adjustedTotal`. The
@@ -69,8 +71,8 @@ uploaded beside them. The unmodified Stryker schema stays at 1.0 and the
 equivalence policy at 1; only the separate audit adds an `execution` object.
 A failed run cannot reuse a stale passing audit. Mutation jobs run for pull
 requests, pushes to `main`, manual dispatches, and a weekly forced-full run.
-Normal PRs can reuse validated unaffected kills from an exact-base trusted-main
-baseline. Releases and weekly verification always execute all mutants.
+Compatible PRs can reuse native outcomes from an authenticated exact-base or
+verified ancestor main baseline with the same declared inputs. Releases and weekly verification always execute all mutants.
 
 ## Evidence and compatibility
 

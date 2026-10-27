@@ -13,8 +13,6 @@ import {
   promoteCache,
   executionSummary,
 } from './mutation-cache.mjs';
-import { planReuse } from './mutation-impact.mjs';
-import { changedInputPaths, reuseContext } from './mutation-compatibility.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = join(root, 'reports/mutation');
@@ -116,10 +114,15 @@ try {
     log = createWriteStream(join(output, 'execution.log'));
   }
   const env = mutationEnvironment();
-  const inputs = await mutationInputs(root, env);
-  const inputsHash = fingerprint(inputs);
+  let inputCaptureError = null;
+  const inputs = await mutationInputs(root, env).catch((error) => {
+    inputCaptureError = error.code ?? 'unsupported-input';
+    console.warn(`Mutation input capture unavailable (${inputCaptureError}); running full.`);
+    return null;
+  });
+  const inputsHash = inputs && fingerprint(inputs);
   if (args.includes('--cache-key')) {
-    console.log(`mutation-v3-${inputsHash}`);
+    console.log(inputsHash ?? 'unavailable');
   } else {
     // Only the current invocation writes reports. Working/partial incremental
     // state is never restored or saved by GitHub Actions.
@@ -131,43 +134,16 @@ try {
         'Parser context changed: review equivalence proofs before rerunning mutations',
       );
     }
-    const audit = (report) => auditMutations(report, policy, sources);
-    // In CI, only a separately authenticated main artifact may seed reuse.
-    // The downloader validates GitHub metadata + archive digest, never a PR cache.
-    const provenance = process.env.GITHUB_ACTIONS
-      ? await readFile(join(root, '.cache/mutation/provenance.json'), 'utf8')
-          .then(JSON.parse)
-          .catch(() => null)
-      : null;
-    const force =
-      args.includes('--full') ||
-      Boolean(env.NODE_OPTIONS) ||
-      (process.env.GITHUB_ACTIONS && !provenance);
-    let cache = force
-      ? { report: null, reason: 'forced full verification or no authenticated main baseline' }
-      : await readCache(root, inputs, auditMutations, policy);
-    if (cache.report && provenance && cache.manifest.sourceCommit !== provenance.sourceCommit)
-      cache = {
-        report: null,
-        reason: 'Baseline source commit does not match authenticated artifact',
-      };
-    let prepared = null;
-    if (cache.report) {
-      const current = reuseContext(inputs);
-      const baseline = reuseContext(cache.manifest.inputs);
-      prepared = planReuse(cache.report, current.files, {
-        baselineFiles: baseline.files,
-        baselineTestFiles: baseline.testFiles,
-        testFiles: current.testFiles,
-        changedInputs: changedInputPaths(cache.manifest.inputs, inputs),
-      });
-      if (!prepared.report) cache = { report: null, reason: prepared.reason };
-      else cache.reason = prepared.reason;
-    }
+    const audit = (report, options) => auditMutations(report, policy, sources, options);
+    const sourceCommit =
+      process.env.GITHUB_ACTIONS === 'true' ? process.env.MUTATION_BASELINE_SHA : 'local';
+    const force = args.includes('--full') || Boolean(env.NODE_OPTIONS) || !inputsHash;
+    const cache = force
+      ? { report: null, reason: 'native-full-required' }
+      : await readCache(root, inputsHash, sourceCommit, audit);
     await mkdir(dirname(join(root, WORKING_REPORT)), { recursive: true });
-    if (prepared?.report)
-      await writeFile(join(root, WORKING_REPORT), JSON.stringify(prepared.report));
-    console.log(`Mutation cache: ${cache.reason}; eligible for reuse: ${prepared?.eligible ?? 0}.`);
+    if (cache.report) await writeFile(join(root, WORKING_REPORT), JSON.stringify(cache.report));
+    console.log(`Mutation cache: ${cache.reason}. Native Stryker owns result reuse.`);
     const started = performance.now();
     // A normal unmutated run is mandatory even for a 100% cache hit. Stryker
     // subsequently performs its own fresh discovery/coverage dry run as well.
@@ -182,17 +158,17 @@ try {
     );
     await run(stryker, ['run', ...(!cache.report ? ['--force'] : [])], env, log);
     const report = JSON.parse(await readFile(join(output, 'mutation.json'), 'utf8'));
-    const summary = audit(report);
+    const summary = audit(report, { nativeReuse: Boolean(cache.report) });
     for (const [file, record] of Object.entries(report.testFiles)) {
       if (record.source !== (await readFile(join(root, file), 'utf8')))
         throw new Error(`Stale test source in report: ${file}`);
     }
-    const execution = executionSummary(report, prepared?.report, cache.report);
+    const execution = executionSummary(report, Boolean(cache.report));
     // Do not bless a run whose inputs changed while it was executing.
-    const finalInputs = await mutationInputs(root, env);
+    const finalInputs = await mutationInputs(root, env).catch(() => null);
     await writeFile(join(output, 'inputs-before.json'), JSON.stringify(inputs, null, 2) + '\n');
     await writeFile(join(output, 'inputs-after.json'), JSON.stringify(finalInputs, null, 2) + '\n');
-    if (fingerprint(finalInputs) !== inputsHash)
+    if (inputsHash && (!finalInputs || fingerprint(finalInputs) !== inputsHash))
       throw new Error('Mutation inputs changed during execution');
     const runSummary = {
       ...summary,
@@ -200,11 +176,10 @@ try {
         ...execution,
         mode: cache.report ? 'incremental' : 'full',
         cacheReason: cache.reason,
-        affectedTests: prepared?.affectedTests ?? [],
-        changedFiles: prepared?.changedFiles ?? [],
-        baselineCommit: cache.manifest?.sourceCommit ?? null,
+        baselineCommit: cache.report ? sourceCommit : null,
         elapsedMs: Math.round(performance.now() - started),
         inputsHash,
+        inputCaptureError,
       },
     };
     await writeFile(join(output, 'audit.json'), JSON.stringify(runSummary, null, 2) + '\n');
@@ -212,10 +187,17 @@ try {
     // Promotion is last, after clean process exits, complete scope/equivalence
     // audit, freshness, and execution accounting. Failed/partial runs cannot win.
     if (
-      !process.env.GITHUB_ACTIONS ||
-      (process.env.GITHUB_EVENT_NAME === 'push' && process.env.GITHUB_REF === 'refs/heads/main')
+      inputsHash &&
+      !env.NODE_OPTIONS &&
+      (process.env.GITHUB_ACTIONS !== 'true' ||
+        (process.env.GITHUB_EVENT_NAME === 'push' && process.env.GITHUB_REF === 'refs/heads/main'))
     )
-      await promoteCache(root, report, inputs, summary, policy);
+      await promoteCache(
+        root,
+        report,
+        inputsHash,
+        process.env.GITHUB_ACTIONS === 'true' ? process.env.GITHUB_SHA : 'local',
+      );
     console.log(
       `Mutants executed this invocation: ${execution.executed}; reused validated results: ${execution.reused}.`,
     );

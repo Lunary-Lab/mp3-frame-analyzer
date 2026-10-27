@@ -1,15 +1,27 @@
-import { execFileSync, spawnSync } from 'node:child_process';
-import { constants } from 'node:fs';
-import { access, readFile, readdir, readlink, realpath, lstat } from 'node:fs/promises';
-import { delimiter, isAbsolute, join, relative, win32 } from 'node:path';
-import { arch, platform, release, version } from 'node:os';
+import { execFileSync } from 'node:child_process';
+import { lstat, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { sha256 } from './mutation-policy.mjs';
-import { compatibilityInputs, sourceInput } from './mutation-compatibility.mjs';
 
-export const CACHE_SCHEMA = 3;
+export const fingerprint = (value) => sha256(JSON.stringify(value));
+const passive = /^(README|AGENTS|GLOSSARY|CHANGELOG|CLAUDE|TODO)\.md$/;
+export function isMutationInput(path) {
+  if (path === 'docs/mutation-review.md') return true;
+  return !(
+    path === 'node_modules' ||
+    passive.test(path) ||
+    /^docs\/.*\.md$/.test(path) ||
+    path.startsWith('governance/') ||
+    path.startsWith('tests/semgrep/') ||
+    path === '.semgrep.yml' ||
+    path === '.github/workflows/ci.yml' ||
+    path === '.github/copilot-instructions.md'
+  );
+}
 
-// No arbitrary inherited variables (including credentials) reach test code.
-// New supported inputs must be added here AND to the invalidation tests.
+// This is a declared deterministic-input contract, not JavaScript purity analysis.
+// CI installs the exact lockfile with npm ci --ignore-scripts; installed-package
+// edits and undeclared external reads are unsupported for result caching.
 export function mutationEnvironment(env = process.env) {
   const names = [
     'PATH',
@@ -39,146 +51,43 @@ export function mutationEnvironment(env = process.env) {
   };
 }
 
-const generated = new Set([
-  '.git',
-  'node_modules',
-  '.cache',
-  '.stryker-tmp',
-  'reports',
-  'coverage',
-  'dist',
-  'release',
-  '.tmp',
-  '.fuzz-corpus',
-]);
-export function isMutationInput(path) {
-  if (generated.has(path.split('/')[0])) return false;
-  if (/^fuzz\/(crashes|tmp)(\/|$)/.test(path)) return false;
-  // Preserve every project byte for forensic evidence and the end-of-run
-  // immutability check. Cross-run compatibility is a separate guarded decision.
-  return true;
-}
-
-export function isContainedRelativePath(path) {
-  const normalized = path.replaceAll('\\', '/');
-  return (
-    !isAbsolute(path) &&
-    !win32.isAbsolute(path) &&
-    normalized !== '..' &&
-    !normalized.startsWith('../')
-  );
-}
-
-async function fileInventory(root, { dependencies = false } = {}) {
-  const result = [];
-  const realRoot = await realpath(root);
-  const runtimeCaches = new Set(['.cache', '.vite', '.vite-temp', '.vitest', '.vitest-cache']);
-  async function visit(directory) {
-    for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    )) {
-      const path = join(directory, entry.name);
-      const name = relative(root, path).replaceAll('\\', '/');
-      if (dependencies ? runtimeCaches.has(name.split('/')[0]) : !isMutationInput(name)) continue;
-      if (entry.isDirectory()) await visit(path);
-      else if (entry.isSymbolicLink()) {
-        if (!dependencies) throw new Error(`Mutation input must not be a symlink: ${name}`);
-        const target = relative(realRoot, await realpath(path)).replaceAll('\\', '/');
-        if (!isContainedRelativePath(target) || runtimeCaches.has(target.split('/')[0])) {
-          throw new Error(`Dependency symlink leaves fingerprinted inputs: ${name}`);
-        }
-        result.push([name, 'link', await readlink(path)]);
-      } else if (entry.isFile())
-        result.push([name, (await lstat(path)).mode & 0o777, sha256(await readFile(path))]);
-      else throw new Error(`Unsupported mutation input: ${name}`);
-    }
+export async function mutationInputs(
+  root,
+  env,
+  runtime = {
+    versions: process.versions,
+    platform: process.platform,
+    arch: process.arch,
+    runnerImage: [process.env.ImageOS ?? null, process.env.ImageVersion ?? null],
+  },
+) {
+  // Git supplies the tracked and nonignored untracked inventory; no custom graph,
+  // dependency resolver, historical source snapshots or node_modules traversal.
+  const paths = execFileSync('git', ['ls-files', '-cz', '--others', '--exclude-standard'], {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 4 * 1024 * 1024,
+  })
+    .split('\0')
+    .filter(Boolean);
+  paths.push('.env', '.env.local', '.env.test', '.env.test.local');
+  const files = [];
+  for (const path of [...new Set(paths)].filter(isMutationInput).sort()) {
+    const full = join(root, path);
+    const stat = await lstat(full).catch((error) => {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    });
+    if (!stat) continue;
+    if (!stat.isFile()) throw new Error('Unsupported nonregular mutation input');
+    files.push([path, stat.mode & 0o777, sha256(await readFile(full))]);
   }
-  await visit(root);
-  return result;
-}
-
-async function fingerprintEncoder(path, env, available) {
-  // POSIX PATH lookup skips non-executable shadows. Hash exactly the
-  // executable selected by the same search, not the first readable file.
-  await access(path, constants.X_OK);
-  if (!(await lstat(path)).isFile() && !(await lstat(path)).isSymbolicLink()) return null;
-  const bytes = await readFile(path);
-  const resolved = spawnSync(path, ['--version'], { env, encoding: 'utf8', timeout: 10_000 });
-  if (
-    resolved.status !== 0 ||
-    resolved.stdout !== available.stdout ||
-    resolved.stderr !== available.stderr
-  )
-    throw new Error('LAME resolution changed during fingerprinting');
-  return { available: true, sha256: sha256(bytes), version: resolved.stdout + resolved.stderr };
-}
-
-async function encoderIdentity(env) {
-  const available = spawnSync('lame', ['--version'], { env, encoding: 'utf8', timeout: 10_000 });
-  if (available.error?.code === 'ENOENT') return { available: false };
-  if (available.status !== 0) throw new Error('Cannot establish LAME tool identity');
-  for (const directory of (env.PATH ?? '').split(delimiter)) {
-    const path = join(directory, process.platform === 'win32' ? 'lame.exe' : 'lame');
-    try {
-      const identity = await fingerprintEncoder(path, env, available);
-      if (identity) return identity;
-    } catch (error) {
-      if (!['ENOENT', 'EISDIR', 'EACCES'].includes(error.code)) throw error;
-    }
-  }
-  throw new Error('Cannot locate the LAME executable used by tests');
-}
-
-export function fingerprint(inputs) {
-  return sha256(JSON.stringify(inputs));
-}
-
-export async function mutationInputs(root, env = mutationEnvironment()) {
-  // Actual installed bytes, not just declared versions: local dependency edits
-  // cannot silently reuse a lockfile-matching result. Runtime caches are excluded.
-  const dependencies = await fileInventory(join(root, 'node_modules'), { dependencies: true });
-  const sample = env.ASSESSMENT_SAMPLE_PATH;
-  const files = await fileInventory(root);
-  const sources = Object.fromEntries(
-    await Promise.all(
-      files
-        .filter(([path]) => sourceInput(path))
-        .map(async ([path, , hash]) => {
-          const source = await readFile(join(root, path), 'utf8');
-          if (sha256(source) !== hash) throw new Error(`Input changed during capture: ${path}`);
-          return [path, source];
-        }),
-    ),
-  );
   return {
-    schemaVersion: CACHE_SCHEMA,
     files,
-    sources,
-    dependenciesSha256: fingerprint(dependencies),
-    dependencyRootLink: (await lstat(join(root, 'node_modules'))).isSymbolicLink()
-      ? await readlink(join(root, 'node_modules'))
+    runtime,
+    environmentSha256: fingerprint(env),
+    externalSampleSha256: env.ASSESSMENT_SAMPLE_PATH
+      ? sha256(await readFile(env.ASSESSMENT_SAMPLE_PATH))
       : null,
-    environmentSha256: fingerprint(Object.entries(env).sort(([a], [b]) => a.localeCompare(b))),
-    externalSampleSha256: sample ? sha256(await readFile(sample)) : null,
-    runtime: {
-      node: process.version,
-      versions: process.versions,
-      nodeBinarySha256: sha256(await readFile(process.execPath)),
-      npm: execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['--version'], {
-        encoding: 'utf8',
-        env,
-      }).trim(),
-      os: { platform: platform(), arch: arch(), release: release(), version: version() },
-      runnerImage: process.env.ImageOS ?? null,
-      runnerImageVersion: process.env.ImageVersion ?? null,
-      libc: process.report.getReport().header.glibcVersionRuntime ?? null,
-      encoder: await encoderIdentity(env),
-    },
   };
-}
-
-export { mutableInput } from './mutation-compatibility.mjs';
-
-export function globalFingerprint(inputs) {
-  return fingerprint(compatibilityInputs(inputs));
 }
