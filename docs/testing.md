@@ -183,14 +183,21 @@ and explicit `false` return 6089 in both upload modes, while `true` returns 6090
 expectations. See
 [the frame-count contract](frame-count-contract.md).
 
+## Pure runtime mutation stage
+
+The separate [pure nonparser mutation gate](nonparser-mutation.md) covers client
+errors, error-response classification and deployment configuration with native
+Stryker/Vitest and a strict 100% threshold. Other runtime/tooling modules remain
+explicitly deferred; this is not full-repository mutation coverage.
+
 ## Native CI jobs and scheduling
 
 The required `All checks` aggregate waits for every native validation job and
 rejects failures, cancellation, missing evidence and skipped jobs. Formatting,
-lint/workflow syntax, types, runtime coverage, compatibility, tooling, the complete
-mutation-cache campaign, parser mutation, encoder provenance, dependency CVEs,
+lint/workflow syntax, types, runtime coverage, compatibility, tooling, short native
+mutation-cache controls, parser mutation, encoder provenance, dependency CVEs,
 secrets, Semgrep, bounded fuzz/resource checks, packaged-runtime verification and
-repository governance validation are visible separately. The cache campaign is
+repository governance validation are visible separately. The cache controls are
 independent of parser mutation;
 both remain mandatory. Packaging keeps artifact verification and real runtime
 smoke together so the existing publisher receives only the same tested bytes.
@@ -202,10 +209,12 @@ older validation for the same branch. Fork PRs have separate identities. Schedul
 runs and explicitly full manual runs use unique run groups: `cancel-in-progress:
 false` alone does not prevent GitHub from replacing a pending run. Release-tag
 validation uses its own noncanceling group, and publication keeps its independent
-lock. Release Please explicitly dispatches non-full PR validation; the normal
-baseline, fresh discovery, exact-main cache authentication and fail-closed reuse
-policy still apply. Full scheduled/release/manual validation never restores a
-result baseline. These are scheduling changes, not measured hosted speedup claims.
+lock. Release Please supplies a read-only summary and the supported
+[native-event recovery path](releasing.md), rather than dispatching ineligible PR
+checks. Mutation validation retains fresh discovery: ordinary PRs may reuse an
+authenticated compatible main/ancestor baseline or a separately scoped,
+lower-trust own-PR cache. Full scheduled/release/manual validation restores
+neither. These scheduling choices are not measured hosted speedup claims.
 
 Optional npm update notices, pip version checks, Go telemetry, Semgrep metrics,
 Semgrep version checks and tracing are disabled in this workflow. Required package

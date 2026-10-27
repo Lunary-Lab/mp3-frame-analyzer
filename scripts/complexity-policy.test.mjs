@@ -11,7 +11,7 @@ test('complexity above ten is an error across maintained production TS and JS', 
     'src/runtime.js',
     'scripts/mutation-policy.mjs',
     'scripts/package-release.mjs',
-    'scripts/restore-mutation-baseline.mjs',
+    'scripts/mutation-cache.mjs',
     'fuzz/create-structured.mjs',
     'bench/parser.bench.ts',
     'bench/upload.k6.js',
@@ -41,7 +41,7 @@ test('test code retains the separately reviewed advisory limit', async () => {
     'tests/count-frames.test.ts',
     'tests/helpers/mp3-fixtures.ts',
     'scripts/mutation-policy.test.mjs',
-    'scripts/restore-mutation-baseline.characterization.test.mjs',
+    'scripts/mutation-cache.test.mjs',
   ]) {
     const config = await eslint.calculateConfigForFile(path);
     assert.deepEqual(config.rules.complexity, [1, { max: 16 }], path);

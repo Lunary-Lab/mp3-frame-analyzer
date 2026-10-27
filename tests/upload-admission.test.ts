@@ -1,10 +1,10 @@
 import { once } from 'node:events';
+import type { IncomingMessage } from 'node:http';
 import { afterEach, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { frame, multipartBody } from './helpers/mp3-fixtures.js';
 import { openUpload } from './helpers/upload-socket.js';
-import { maxActiveUploadsFromEnvironment } from '../src/server-config.js';
 
 const apps: FastifyInstance[] = [];
 afterEach(async () => {
@@ -108,44 +108,61 @@ it('returns its slot after successful raw and multipart requests and every early
 });
 
 it('releases a stalled upload after the transport timeout', async () => {
-  const { app, address } = await server();
+  const app = await buildApp({ maxActiveUploads: 1 });
+  apps.push(app);
+  const received = Promise.withResolvers<void>();
+  app.addHook('preHandler', async () => {
+    received.resolve();
+  });
   app.server.setTimeout(100);
+  const address = await app.listen({ host: '127.0.0.1', port: 0 });
   const hold = openUpload(address, 'audio/mpeg', 417);
+  let clientTimedOut = false;
+  hold.client.once('timeout', () => {
+    clientTimedOut = true;
+  });
   hold.client.write(frame().subarray(0, 4));
+  await received.promise;
   await hold.closed;
   await expect(hold.response).rejects.toThrow();
+  // The helper's safety watchdog must not masquerade as the server's idle timeout.
+  expect(clientTimedOut).toBe(false);
   await recover(app);
 });
 
 it('shuts down while uploads are active without retaining their work after abort', async () => {
-  const { app, address } = await server(2);
+  const app = await buildApp({ maxActiveUploads: 2 });
+  apps.push(app);
+  const received = Promise.withResolvers<IncomingMessage>();
+  const closing = Promise.withResolvers<void>();
+  app.addHook('preHandler', async (request) => {
+    received.resolve(request.raw);
+  });
+  app.addHook('preClose', async () => {
+    closing.resolve();
+  });
+  const address = await app.listen({ host: '127.0.0.1', port: 0 });
   const hold = openUpload(address, 'audio/mpeg', 417);
   hold.client.write(frame().subarray(0, 4));
-  await expect.poll(async () => (await probe(app)).statusCode).toBe(200);
-  const closed = app.close();
+  const raw = await received.promise;
+  expect(raw.complete).toBe(false);
+  let finished = false;
+  const closed = app.close().then(() => {
+    finished = true;
+  });
+  await closing.promise;
+  await expect.poll(() => app.server.listening).toBe(false);
+  expect(finished).toBe(false);
+  expect(raw.destroyed).toBe(false);
+  expect(raw.readableEnded).toBe(false);
   hold.client.destroy();
+  await hold.closed;
   await closed;
+  expect(raw.aborted).toBe(true);
   expect(app.server.listening).toBe(false);
 });
 
-it('validates deployment and app admission limits without coercions or unlimited mode', async () => {
-  expect(maxActiveUploadsFromEnvironment(undefined)).toBe(8);
-  for (const value of ['1', '8', '1024', '0002'])
-    expect(maxActiveUploadsFromEnvironment(value)).toBe(Number(value));
-  for (const value of [
-    '',
-    '0',
-    '-1',
-    '+1',
-    '1.5',
-    ' 1',
-    '1e2',
-    'Infinity',
-    '1025',
-    '9'.repeat(400),
-  ]) {
-    expect(() => maxActiveUploadsFromEnvironment(value)).toThrow('MAX_ACTIVE_UPLOADS');
-  }
+it('validates app admission limits without coercions or unlimited mode', async () => {
   for (const maximum of [0, -1, 0.5, 1025, Infinity, NaN]) {
     await expect(buildApp({ maxActiveUploads: maximum })).rejects.toThrow('maxActiveUploads');
   }
@@ -154,19 +171,35 @@ it('validates deployment and app admission limits without coercions or unlimited
 it('releases exactly one slot while another admitted upload remains active', async () => {
   const app = await buildApp({ maxActiveUploads: 2 });
   apps.push(app);
-  let requests = 0;
-  app.addHook('preHandler', (_request, _reply, done) => {
-    requests++;
+  const admitted = new Map<string, IncomingMessage>();
+  app.addHook('preHandler', (request, _reply, done) => {
+    const label = request.headers['x-admission-test'];
+    if (typeof label === 'string') admitted.set(label, request.raw);
     done();
   });
   const address = await app.listen({ host: '127.0.0.1', port: 0 });
   const holds = [openUpload(address, 'audio/mpeg', 417), openUpload(address, 'audio/mpeg', 417)];
-  for (const hold of holds) hold.client.write(frame().subarray(0, 4));
-  await expect.poll(() => requests).toBe(2);
+  for (const [index, hold] of holds.entries()) {
+    hold.client.setHeader('x-admission-test', String(index));
+    hold.client.write(frame().subarray(0, 4));
+  }
+  await expect.poll(() => admitted.size).toBe(2);
   expect((await probe(app)).statusCode).toBe(503);
   holds[0]!.client.end(frame().subarray(4));
   expect((await holds[0]!.response).status).toBe(200);
   await recover(app);
+  const replacement = openUpload(address, 'audio/mpeg', 417);
+  replacement.client.setHeader('x-admission-test', 'replacement');
+  replacement.client.write(frame().subarray(0, 4));
+  await expect.poll(() => admitted.has('replacement')).toBe(true);
+  for (const label of ['1', 'replacement']) {
+    expect(admitted.get(label)?.complete).toBe(false);
+    expect(admitted.get(label)?.destroyed).toBe(false);
+  }
+  // Refill the one released slot: the still-active original must retain the other.
+  expect((await probe(app)).statusCode).toBe(503);
+  replacement.client.destroy();
+  await replacement.closed;
   holds[1]!.client.destroy();
   await holds[1]!.closed;
   await recover(app);

@@ -203,44 +203,32 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-project
-      - name: Restore only an authenticated successful exact-base main artifact
-        if: github.event_name != 'schedule' && inputs.ref == '' && inputs.release_tag == '' && inputs.full_mutation != true
-        env:
-          GH_TOKEN: ${{ github.token }}
-          MUTATION_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
-        run: node scripts/restore-mutation-baseline.mjs
-      - name: Audit all parser mutants with explicit fresh/reused accounting
-        env:
-          FORCE_FULL: ${{ github.event_name == 'schedule' || inputs.ref != '' || inputs.release_tag != '' || inputs.full_mutation == true }}
-        run: |
-          if [ "$FORCE_FULL" = true ]; then
-            node scripts/run-mutations.mjs --full
-          else
-            node scripts/run-mutations.mjs
-          fi
-      - name: Require active genuine encoder mutation coverage
-        run: node scripts/verify-encoder-discovery.mjs reports/mutation/mutation.json
-      # A consumer additionally requires the entire producing CI run to have
-      # completed successfully. PR artifacts are never eligible baselines.
-      - name: Publish audited default-branch baseline
-        if: success() && github.ref == 'refs/heads/main' && github.event_name == 'push' && inputs.ref == '' && inputs.release_tag == ''
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: ./.github/actions/test-mutations
         with:
-          name: validated-mutation-baseline
-          path: |
-            .cache/mutation/validated/manifest.json
-            .cache/mutation/validated/report.json
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 30
-      - name: Upload mutation report
+          base: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+          full: ${{ github.event_name == 'schedule' || inputs.ref != '' || inputs.release_tag != '' || inputs.full_mutation == true }}
+          publish: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && inputs.ref == '' && inputs.release_tag == '' }}
+
+  mutation-pure:
+    name: Pure runtime mutation (100%)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - name: Mutate pure runtime policies freshly within two minutes
+        run: timeout --signal=TERM --kill-after=5s 115s npm run mutation:pure
+      - name: Retain pure-runtime-mutation-report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: full-parser-mutation-report
-          path: reports/mutation/
+          name: pure-runtime-mutation-report
+          path: reports/mutation-pure/
+          if-no-files-found: error
           retention-days: 14
-          if-no-files-found: ignore
 
   encoder:
     name: Genuine encoder provenance (LAME 3.100)
@@ -463,6 +451,7 @@ jobs:
         tooling,
         mutation-cache,
         mutation,
+        mutation-pure,
         encoder,
         npm-audit,
         trivy,
@@ -484,7 +473,7 @@ jobs:
           import assert from 'node:assert/strict';
           const expected = [
             'format', 'lint', 'types', 'unit', 'compatibility', 'tooling', 'mutation-cache',
-            'mutation', 'encoder', 'npm-audit', 'trivy', 'trivy-release', 'secrets', 'semgrep', 'fuzz', 'package', 'governance',
+            'mutation', 'mutation-pure', 'encoder', 'npm-audit', 'trivy', 'trivy-release', 'secrets', 'semgrep', 'fuzz', 'package', 'governance',
           ];
           const jobs = JSON.parse(process.env.RESULTS);
           assert.ok(jobs && typeof jobs === 'object' && !Array.isArray(jobs), 'Missing job evidence');

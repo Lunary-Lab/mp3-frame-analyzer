@@ -176,3 +176,47 @@ it('does not stringify untrusted non-string log messages', () => {
   expect(message).toBeTypeOf('function');
   expect(message?.({ toString: () => sentinel })).toBe('Application event');
 });
+
+it('keeps only the exact cleanup-failure category without exposing error or request details', async () => {
+  const logs = captureProductionLogs();
+  const app = await buildApp();
+  const failure = Object.assign(new Error(sentinel, { cause: new Error(sentinel) }), {
+    name: sentinel,
+    code: sentinel,
+    stack: sentinel,
+    body: sentinel,
+    headers: { authorization: sentinel },
+  });
+  try {
+    const category = 'Upload iterator cleanup failed';
+    app.log.error(
+      {
+        err: failure,
+        req: { url: sentinel, headers: { authorization: sentinel } },
+        payload: sentinel,
+        headers: { cookie: sentinel },
+      },
+      category,
+    );
+    app.log.error({ err: failure }, `${category}: ${sentinel}`);
+    app.log.error({ err: failure }, `${category}\n${sentinel}`);
+    expect(logs.text()).not.toContain(sentinel);
+    const events = logs.events();
+    expect(events).toHaveLength(3);
+    expect(events.map(({ msg }) => msg)).toEqual([
+      category,
+      'Application event',
+      'Application event',
+    ]);
+    expect(events[0]?.req).toEqual({});
+    for (const event of events) {
+      expect(event.level).toBe(50);
+      expect(event.err).toEqual({ type: 'Error', message: 'Details omitted', stack: '' });
+      expect(Object.keys(event).sort()).toEqual(
+        ['level', 'time', 'pid', 'hostname', 'msg', 'err', ...(event.req ? ['req'] : [])].sort(),
+      );
+    }
+  } finally {
+    await app.close();
+  }
+});

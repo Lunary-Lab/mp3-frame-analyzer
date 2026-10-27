@@ -154,7 +154,7 @@ npm run fuzz:extended      # 120 seconds per target, on-demand
 npm run test:memory        # distinct chunks, independent 8/32/128 MiB processes
 npm run test:performance   # two local 32 MiB uploads plus small-upload probes
 npm run bench              # Vitest Bench microbenchmark
-npm run mutation           # Full parser; reuse validated unaffected mutant kills
+npm run mutation           # Full parser; native same-input result reuse
 npm run mutation:full      # Force every mutant to execute; 100% adjusted gate
 ```
 
@@ -271,9 +271,9 @@ behaviorally equivalent mutations**. Exceptions match source hashes, exact
 expressions, mutation operators and replacements in
 [`mutation-equivalents.json`](mutation-equivalents.json), never whole source
 lines or mutation families. Native Vitest per-test coverage avoids repeatedly running
-unrelated tests. Normal PRs can reuse validated unaffected kills from an authenticated successful
-main baseline; changed/impacted mutants rerun. Missing baselines, global input
-changes or uncertain impact fall back to full; releases and weekly verification
+unrelated tests. Compatible PRs can reuse native results from an authenticated successful
+main baseline. Changed declared source/test/helper/resource/config inputs or a
+missing compatible baseline fall back to full; releases and weekly verification
 always run full.
 Fresh and reused results are counted separately. [Audit design](docs/mutation-review.md)
 and [cache safety/verification](docs/mutation-cache.md).

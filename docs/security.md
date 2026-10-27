@@ -32,6 +32,17 @@ When a consumer rejects multipart input early, its error can respond before the 
 
 The runtime observes shutdown failures and allows up to 10 seconds for requests and close hooks to drain. A failed close or expired deadline is logged and ends the process with a failure status. Connection-level failures and aborted requests cannot always receive JSON.
 
+The HTTP route gives its actual parser consumer an `AbortSignal`. An incomplete
+request closing, the response closing, or an early response finishing cancels
+still-running cooperative parser work. Normal request EOF is not cancellation,
+including Node's normal completed-request `close` event. Listeners remain attached
+to the consumer after an aggregate multipart-budget response wins its race, and
+are removed when that consumer settles. Cancellation does not replace an already
+chosen 413 response; a disconnected client cannot receive a new error response.
+Graceful shutdown does not preempt accepted work before transport teardown. This
+is cooperative cancellation at parser checkpoints, not a promise to interrupt
+arbitrary synchronous code or detached custom-consumer tasks.
+
 ## Application logging boundary
 
 `src/logging.ts` limits application logs to server-generated request correlation IDs,

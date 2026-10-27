@@ -14,6 +14,7 @@ export default tseslint.config(
       'release/**',
       'reports/**',
       '.stryker-tmp/**',
+      '.stryker-pure-tmp/**',
       '.fuzz-corpus/**',
       'fuzz/crashes/**',
       'fuzz/tmp/**',

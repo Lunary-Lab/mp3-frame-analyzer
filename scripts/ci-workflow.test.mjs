@@ -3,10 +3,15 @@ import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
+import { parse } from 'yaml';
 
 const ci = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
 const release = await readFile(
   new URL('../.github/workflows/release-please.yml', import.meta.url),
+  'utf8',
+);
+const mutationAction = await readFile(
+  new URL('../.github/actions/test-mutations/action.yml', import.meta.url),
   'utf8',
 );
 const required = [
@@ -18,6 +23,7 @@ const required = [
   'tooling',
   'mutation-cache',
   'mutation',
+  'mutation-pure',
   'encoder',
   'npm-audit',
   'trivy',
@@ -184,16 +190,42 @@ test('the complete cache campaign is required and parallel to parser mutation', 
   assert.match(job('mutation-cache'), /npm run test:mutation-cache:integration/);
   assert.doesNotMatch(job('mutation-cache'), /needs:|--impact-only/);
   assert.match(job('mutation'), /needs: \[types, unit, tooling\]/);
-  assert.match(job('mutation'), /verify-encoder-discovery\.mjs reports\/mutation\/mutation\.json/);
+  assert.match(mutationAction, /verify-encoder-discovery\.mjs reports\/mutation\/mutation\.json/);
   assert.match(job('mutation'), /inputs\.full_mutation == true/);
-  assert.match(job('mutation'), /node scripts\/run-mutations\.mjs --full/);
-  assert.match(job('mutation'), /restore-mutation-baseline\.mjs/);
+  assert.match(mutationAction, /node scripts\/run-mutations\.mjs --full/);
+  assert.match(job('mutation'), /uses: \.\/\.github\/actions\/test-mutations/);
+});
+
+test('the pure runtime campaign is native, fresh, bounded, and preserves its own report', async () => {
+  const pure = parse(ci).jobs['mutation-pure'];
+  assert.equal(pure.name, 'Pure runtime mutation (100%)');
+  assert.equal(pure['timeout-minutes'], 10);
+  assert.equal(pure.needs, undefined);
+  assert.equal(pure.if, undefined);
+  assert.equal(pure.permissions, undefined); // Inherits the workflow's contents: read only.
+  assert.ok(pure.steps.some((step) => step.uses === './.github/actions/setup-project'));
+  assert.deepEqual(
+    pure.steps.filter((step) => step.run).map((step) => step.run),
+    ['timeout --signal=TERM --kill-after=5s 115s npm run mutation:pure'],
+  );
+  const report = pure.steps.find((step) => step.name === 'Retain pure-runtime-mutation-report');
+  assert.equal(report.if, 'always()');
+  assert.equal(report.with.path, 'reports/mutation-pure/');
+  assert.equal(report.with['if-no-files-found'], 'error');
+  assert.doesNotMatch(job('mutation-pure'), /test-mutations|restore|incremental|cache@|: write/);
+  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(
+    pkg.scripts['mutation:pure'],
+    "node -e \"require('node:fs').rmSync('reports/mutation-pure', { recursive: true, force: true })\"" +
+      ' && stryker run stryker.nonparser-pure.config.mjs' +
+      ' && node scripts/nonparser-pure-scope.mjs reports/mutation-pure/mutation.json',
+  );
 });
 
 test('only ordinary validation can restore results; every protected validation forces full', () => {
   const mutation = job('mutation');
-  const restore = mutation.match(/- name: Restore[^\n]+\n\s+if: ([^\n]+)/)?.[1];
-  const full = mutation.match(/FORCE_FULL: \$\{\{ (.+) \}\}/)?.[1];
+  const full = mutation.match(/full: \$\{\{ (.+) \}\}/)?.[1];
+  const restore = `!(${full})`;
   assert.ok(restore && full);
   for (const values of [
     context(),
@@ -227,7 +259,8 @@ test('existing scans, production-only archive smoke and release dispatch remain 
   assert.match(job('package'), /npm run test:artifact/);
   assert.match(job('package'), /name: release-assets/);
   assert.match(job('package'), /SOURCE_COMMIT: \$\{\{ inputs\.ref \|\| github\.sha \}\}/);
-  assert.match(release, /'ci\.yml'[^\n]+ '-f', 'full_mutation=false'/);
+  assert.doesNotMatch(release, /'ci\.yml'|'pr-title\.yml'/);
+  assert.match(release, /'publish-release\.yml'[^\n]+ '--ref', tag/);
 });
 
 test('reusable release outputs bind the verified upload and its exact workflow attempt', () => {
@@ -408,4 +441,26 @@ test('Trivy refuses empty, multiple or malformed producer IDs before artifact do
     { ARTIFACT_ATTEMPT: '3' },
   ])
     assert.notEqual(run(changes), 0);
+});
+
+test('the parent mutation execution contract is fixed while unrelated CI jobs may change', async () => {
+  const contract = JSON.parse(
+    await readFile(new URL('./mutation-job-contract.json', import.meta.url), 'utf8'),
+  );
+  // This small explicit snapshot is an input to the cache key. Changing checkout,
+  // setup, runner, permissions, force/publish expressions or command ordering must
+  // update it and therefore invalidate results; no semantic YAML cache interpreter.
+  assert.deepEqual(parse(ci).jobs.mutation, contract);
+  const steps = parse(mutationAction).runs.steps;
+  const download = steps.find((step) => step.id === 'download');
+  assert.equal(download.with['digest-mismatch'], 'error');
+  assert.equal(download['continue-on-error'], true);
+  assert.match(
+    steps.find((step) => step.run?.includes('run-mutations.mjs --full')).env.MUTATION_BASELINE_SHA,
+    /steps.download.outcome == 'success'/,
+  );
+  assert.equal(
+    steps.find((step) => step.with?.archive === false).with.path,
+    '.cache/mutation/native-baseline.json',
+  );
 });
