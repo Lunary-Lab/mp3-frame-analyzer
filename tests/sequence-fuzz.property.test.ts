@@ -43,17 +43,31 @@ async function checkSequenceCase(data: Uint8Array, partition: number[]) {
   }
 }
 
-it('property: generated successive configurations retain exact anchored counts or explicit uncertainty', async () => {
-  await fc.assert(
-    fc.asyncProperty(
-      fc.uint8Array({ minLength: 0, maxLength: 160 }),
-      fc.array(fc.integer({ min: 1, max: 8192 }), { minLength: 1, maxLength: 8 }),
-      async (data, partition) => {
-        await checkSequenceCase(data, partition);
-      },
-    ),
-    { numRuns: 250, seed: 260126 },
-  );
+const sequenceProperty = fc.asyncProperty(
+  fc.uint8Array({ minLength: 0, maxLength: 160 }),
+  fc.array(fc.integer({ min: 1, max: 8192 }), { minLength: 1, maxLength: 8 }),
+  checkSequenceCase,
+);
+// Native per-test coverage adds enough work to exceed one test's deadline.
+// Replay offsets preserve all 250 original cases and their shrinking behavior.
+const sequenceBatches = Array.from({ length: 10 }, (_, index) => ({
+  numRuns: 25,
+  seed: 260126,
+  path: String(index * 25),
+}));
+
+it.each(sequenceBatches)(
+  'property: successive configurations retain exact counts or uncertainty from seeded case $path',
+  async (options) => {
+    await fc.assert(sequenceProperty, options);
+  },
+);
+
+it('retains every original seeded sequence case across the bounded batches', () => {
+  const original = fc.sample(sequenceProperty, { numRuns: 250, seed: 260126 });
+  const batched = sequenceBatches.flatMap((options) => fc.sample(sequenceProperty, options));
+  expect(batched).toHaveLength(250);
+  expect(batched).toEqual(original);
 });
 
 it.each(['Xing', 'Info', 'VBRI'])(
