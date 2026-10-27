@@ -7,7 +7,7 @@ runs:
       shell: bash
       run: |
         directory="${RUNNER_TEMP}/trivy-tool"
-        mkdir -p "$directory"
-        curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 180 --max-filesize 67108864 https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-64bit.tar.gz --output "$directory/trivy.tar.gz"
+        mkdir -m 700 "$directory"
+        curl --disable --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 180 --max-filesize 67108864 https://github.com/aquasecurity/trivy/releases/download/v0.76.1/trivy_0.76.1_Linux-64bit.tar.gz --output "$directory/trivy.tar.gz"
         echo "c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0  $directory/trivy.tar.gz" | sha256sum --check --strict
-        tar -xzf "$directory/trivy.tar.gz" -C "$directory" --no-same-owner --no-same-permissions trivy
+        env -i PATH=/usr/bin:/bin tar -xzf "$directory/trivy.tar.gz" -C "$directory" --no-same-owner --no-same-permissions trivy

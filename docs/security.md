@@ -101,6 +101,14 @@ never replace a failed digest with the observed bytes merely to make CI pass.
 Hash identity does not establish package benignness, CVE safety, or an immutable
 hosted runner/Node/tar. See [npm registry signatures](https://docs.npmjs.com/about-registry-signatures/).
 
+Extraction passes only the selected host PATH to GNU tar, preventing inherited
+`TAR_OPTIONS` checkpoint commands and gzip options. The npm version probe runs
+through the active Node executable with a private working directory/HOME and a
+minimal environment, not another Node selected by PATH or inherited preload/cache
+options. These child-process controls do not sanitize an already running parent
+Node process or establish trust in the host PATH/tools. Published npm paths and
+mutation-cache environment identity are unchanged.
+
 ## Semgrep installation integrity
 
 The Semgrep CE install uses the complete reviewed version/SHA-256 wheel lock in

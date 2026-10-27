@@ -102,17 +102,27 @@ export async function bootstrapNpm(version, { archive, ...directoryOptions } = {
     await execute(
       'tar',
       ['-xzf', tarball, '-C', directory, '--no-same-owner', '--no-same-permissions'],
-      { timeout: 30_000, maxBuffer: 1024 * 1024 },
+      {
+        timeout: 30_000,
+        maxBuffer: 1024 * 1024,
+        // Keep the selected host GNU tar, not ambient tar/gzip command hooks.
+        env: { PATH: process.env.PATH },
+      },
     );
     const bin = join(directory, 'bin');
     await mkdir(bin);
     for (const name of ['npm', 'npx'])
       await symlink(join('..', 'package', 'bin', `${name}-cli.js`), join(bin, name));
-    const result = await execute(join(bin, 'npm'), ['--version'], {
-      timeout: 30_000,
-      maxBuffer: 1024 * 1024,
-      env: { ...process.env, NPM_CONFIG_UPDATE_NOTIFIER: 'false' },
-    });
+    const result = await execute(
+      process.execPath,
+      [join(directory, 'package', 'bin', 'npm-cli.js'), '--version'],
+      {
+        timeout: 30_000,
+        maxBuffer: 1024 * 1024,
+        cwd: directory,
+        env: { HOME: directory, NPM_CONFIG_UPDATE_NOTIFIER: 'false' },
+      },
+    );
     assert.equal(result.stdout.trim(), version, 'Verified npm bundle reports a different version');
     await rm(tarball);
     return bin;
