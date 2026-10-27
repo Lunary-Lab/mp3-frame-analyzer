@@ -209,10 +209,59 @@ expectations. See
 
 ## Pure runtime mutation stage
 
-The separate [pure nonparser mutation gate](nonparser-mutation.md) covers client
-errors, error-response classification and deployment configuration with native
-Stryker/Vitest and a strict 100% threshold. Other runtime/tooling modules remain
-explicitly deferred; this is not full-repository mutation coverage.
+`npm run mutation:pure` uses the maintained Stryker 10.1.1 Vitest runner against
+exactly three nonparser modules:
+
+| Module                  | Verified fresh mutants killed |
+| ----------------------- | ----------------------------: |
+| `src/client-error.ts`   |                         3 / 3 |
+| `src/error-response.ts` |                     163 / 163 |
+| `src/server-config.ts`  |                       49 / 49 |
+| **Total**               |                 **215 / 215** |
+
+The local Node 24.22.1 / Vitest 5.0.5 verification on 2026-10-27 took 21 seconds,
+ran 101 native tests, and had zero survivors, timeouts, uncovered mutants, runtime
+errors, ignored mutants or reused results. This is a measured small campaign, not
+a whole-repository score or a timing guarantee. No mutation operators are ignored
+and the native breaking threshold remains 100%. A direct JSON assertion also
+requires the exact nonempty three-source inventory and every mutant to be `Killed`: native
+scoring excludes some error statuses and treats timeouts as detected. Missing or
+malformed reports and any other status fail; there are no equivalence exemptions.
+
+The visible **Pure runtime mutation (100%)** CI job runs independently with the
+existing locked-project setup. It is required by `All checks`, keeps its own JSON
+report under `reports/mutation-pure/`, and sends TERM after 115 seconds
+with a process-group KILL five seconds later. It uses read-only repository access.
+The command first clears only its own `reports/mutation-pure/` output; its temporary
+workspace is the independent `.stryker-pure-tmp/`. Neither directory is nested under
+the parser campaign's output or temporary directory. The parser campaign, parser
+proof policy and native parser cache remain separate.
+
+### Why fresh and small
+
+This campaign uses native per-test coverage, two mutation workers and mirrored
+unit-test filenames. The source inventory in `scripts/nonparser-pure-scope.mjs`
+requires a deliberate active/deferred assignment for new nonparser modules.
+
+The measured campaign is inexpensive enough to run freshly. A direct incremental
+experiment on this pinned Stryker version retained 61 stale static survivors after
+new tests; the fresh verification killed all 61. That was a stale failure report,
+not a false pass. This stage therefore has no mutation-result reuse or custom cache
+engine. Dependency installation still uses the existing project setup/cache.
+
+### What the tests establish
+
+Tests assert sanitized response/status/connection-close behavior, framework-code
+precedence, exact multipart protocol classifications, non-Error rejection, deliberate
+error identity, and strict deployment-limit parsing. Error inputs construct inside
+tests, so a broken constructor is observed as a test failure rather than an import
+failure. The mapper uses native noncoercing Map lookup and integer validation;
+redundant type-only checks were simplified without removing invalid-input rejection.
+
+Upload, admission, multipart budgets, asynchronous lifecycle, logging/bootstrap,
+and release/cache-policy mutation expansion remain separate stages. Their ordinary
+coverage and integration tests still run; they are **not** claimed as mutation-enforced
+by this gate. No live Terraform settings or required-check names change.
 
 ## Native CI jobs and scheduling
 
@@ -268,11 +317,14 @@ At that time, the focused two-decoder mutation score was **98.27%** (164 kills, 
 
 ## Full-parser mutation analysis
 
-The current wrapper bounds each validation child, including the complete native
-parser campaign, at 90 minutes; the enclosing parser-mutation CI job has a
-100-minute limit for setup, cleanup and evidence upload. On interruption or the
-child deadline, the wrapper kills the process group and fails closed. A failed
-or incomplete campaign never supplies reusable audited results.
+On the local and ordinary CI path, the wrapper bounds each validation child,
+including the complete native parser campaign, at 90 minutes; the enclosing
+ordinary parser-mutation CI job has a 100-minute limit for setup, cleanup and
+evidence upload. On interruption or the child deadline, the wrapper kills the
+process group and fails closed. The separate
+[fresh full CI matrix](mutation-cache.md#what-runs) produces a collected audit and
+preserves separate raw shard reports. A failed or incomplete campaign never supplies
+reusable audited results.
 
 This finite budget follows PR #2's exact-head run
 [40261796553](https://github.com/Lunary-Lab/mp3-frame-analyzer/actions/runs/40261796553):
@@ -292,61 +344,13 @@ on every unexplained survivor or stale exact equivalence approval; documentation
 is in [the audit](mutation-review.md). See [cache safety](mutation-cache.md) for
 exact invalidation rules, forced-full verification and measured results.
 
-The preceding full campaign on the parser before the queue cursor change
-(October 24, 2026, Stryker 10.1.1,
-`PROPERTY_SEED=20261024`) generated **694 mutants** across all seven modules.
-It produced **632 kills and 34 timeouts**. The **raw score is 95.97%**. The
-**adjusted score is 100%**, after excluding 28 reviewed equivalents. It ran
-in 5 minutes 41 seconds locally. Running the whole suite per mutant took 14
-minutes 49 seconds locally and exceeded the 20-minute CI wall-clock limit, so
-the mutation command switched to parser tests with `timeoutMS: 2000` as an
-additional timeout allowance. The first run on the combined tree scored 89.77% raw. Its 46
-non-equivalent survivors, in the free-format inference, the Xing/VBRI detector
-and the traversal error messages, were all killed with focused boundary tests
-rather than exempted.
-
-The queue cursor and independent free-format validation followup produced
-**704 mutants: 560 killed, 112 timed out, and 32 reviewed equivalents**, for
-**95.45% raw and 100% adjusted**. That completed campaign used PR #9 at
-`7e676dcb29327fa2673a422d274b87584c0b6ea6` with its full-suite runner,
-`timeoutMS: 5000` and four local workers. Three new mutations that
-retained queue slots without a bound were killed by memory regressions; four
-exact compaction-timing variants were separately proved equivalent.
-
-At the PR #20 stage, the parser-only runner used `timeoutMS: 2000`.
-Stryker also included 1.5 times the measured baseline duration and its measured
-overhead when setting each mutant's timeout. The command stopped after the first
-failing test for a killed mutant; baseline and surviving mutants ran all
-selected parser tests. The wrapper was extended to 60 minutes, with a
-65-minute CI job limit, following the measured timeout in the
-[mutation review](mutation-review.md). At that stage, the seven parser source
-files matched the completed 704-mutant campaign, so its raw report could be
-audited against those exact sources. The HTTP default change was outside the
-parser. This was reuse of completed source evidence, not a new mutation run.
-Later parser refactors changed those sources and their inventory; that report
-does not validate the current checkout. The subsequent campaigns are recorded
-below. Current source, configuration, and fresh CI results remain authoritative.
-
-The subsequent [parser-only CI campaign](https://github.com/Lunary-Lab/mp3-frame-analyzer/actions/runs/40145577143)
-completed all 704 mutants in 29 minutes 9 seconds: 638 killed, 36 timed out and
-30 survived (95.74% raw). All survivors are reviewed equivalents; two additional
-reviewed equivalents timed out. The original auditor rejected those changed
-statuses. The corrected audit retains the raw outcomes, names the reviewed
-equivalent timeouts, and excludes all 32 reviewed equivalents from the adjusted
-population, yielding 672/672 (100%). An equivalent that fails a test still
-requires re-review; incomplete or invalid outcomes still fail. The correction
-requires a fresh passing CI campaign before merge.
-
-The ID3 placement refactor then generated 683 mutants: 627 killed, 27 timed out
-and 29 reviewed equivalents (95.75% raw, 654/654 adjusted), three fewer
-equivalents than before; see the [mutation review](mutation-review.md).
-
-The frame-span refactor generated 655 mutants: 604 killed, 24 timed out and
-27 reviewed equivalents (95.88% raw, 628/628 adjusted); see the
-[mutation review](mutation-review.md).
-
-The free-format header precedence fix then generated 644 mutants: 593 killed,
-24 timed out and 27 reviewed equivalents (95.81% raw, 617/617 adjusted).
+Historical campaign totals, queue-retention regressions, refactor evidence and
+timeout accounting are retained in the
+[mutation review](mutation-review.md#evidence-and-compatibility). Those reports
+describe their recorded source contexts; they do not validate the current
+checkout. Current source, configuration and exact-head CI results remain
+authoritative. A test-killed equivalent requires re-review, and incomplete or
+invalid outcomes still fail the gate.
 
 ## Free-format, raw upload and metadata-header policy
 

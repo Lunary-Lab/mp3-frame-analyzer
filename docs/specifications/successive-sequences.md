@@ -1,7 +1,8 @@
-# Successive configurations: proposed bounded inference policy
+# Successive configurations: bounded inference policy
 
-This branch proposes compatibility for successive **MPEG-1 Layer III configurations
-inside one uploaded file**. Multiple multipart files remain rejected.
+The parser supports successive **MPEG-1 Layer III configurations inside one
+uploaded file** under this bounded inference policy. Multiple multipart files
+remain rejected.
 
 ## Authority and scope
 

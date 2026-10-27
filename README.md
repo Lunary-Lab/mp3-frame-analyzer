@@ -114,7 +114,7 @@ The response uses `Content-Type: application/json`. For multipart uploads, the `
 | Upload admission exhausted                                        | 503         | `server-busy`, `Retry-After: 1`, connection closes                                               |
 | Unexpected application failure                                    | 500         | `internal-error` (sanitized)                                                                     |
 
-Reserved MPEG version/layer identifiers and forbidden ID3 version/revision `0xff` are malformed (422), not an identified unsupported format (415). Unknown ID3 major versions remain unsupported. See the [source-backed input/error matrix](docs/specifications/input-classification.md) for exact messages, precedence and the distinction between declared unsupported MIME types and mislabeled unknown bytes.
+Reserved MPEG version/layer identifiers and forbidden ID3 version/revision `0xff` are malformed (422), not an identified unsupported format (415). Unknown ID3 major versions remain unsupported. See the [source-backed input/error matrix](docs/specifications/http-api.md#supported-unsupported-and-malformed-input) for classification, precedence and the distinction between declared unsupported MIME types and mislabeled unknown bytes.
 
 All application-generated error bodies use JSON with `error` and `message` strings. Limits apply to both raw and multipart uploads. Error classification follows the **first observable failure**: a malformed MPEG header can be rejected before a later size-limit violation or incomplete multipart ending is observable. An explicit oversized raw `Content-Length` is rejected early. Thus a later 413 or multipart 400 does not replace an already reported 422.
 
@@ -207,7 +207,7 @@ See [Releasing and repository settings](docs/releasing.md) for the enforced GitH
 
 ## Authoritative format specifications and AI agent context
 
-- [Assessment-only requirements and count-policy decision](docs/specifications/assessment-scope.md)
+- [Assessment-only requirements and count-policy decision](docs/assessment-brief.md#appendix-project-interpretation-not-assignment-text)
 - [AI-agent entry point](AGENTS.md) (also discoverable by [Claude Code](CLAUDE.md) and [GitHub Copilot](.github/copilot-instructions.md))
 - [Verified standards and primary-source registry](docs/specifications/README.md)
 - [MPEG-1 Layer III header, bitrate table and free-format](docs/specifications/mpeg-1-layer-iii.md)

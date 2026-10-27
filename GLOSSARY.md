@@ -31,7 +31,7 @@ A physical frame's length in bytes: from the bitrate table for an indexed frame,
 _Avoid_: frame size, frame length (in prose)
 
 **Encoder frame**:
-An initial physical frame whose payload carries Xing/Info or VBRI encoder metadata instead of audio; the HTTP default count excludes it.
+An initial physical frame with a structurally recognized Xing/Info or VBRI encoder header; the HTTP default count excludes it. Recognition does not establish whether its payload contains decodable audio. See the [counting contract](docs/frame-count-contract.md).
 _Avoid_: VBR header, Xing header, metadata frame
 
 ## Metadata

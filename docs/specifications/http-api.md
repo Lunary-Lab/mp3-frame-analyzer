@@ -6,7 +6,7 @@
 
 ## Assessment-required interface
 
-For a concise mandatory-versus-optional classification, see [assessment-only scope](assessment-scope.md).
+For a concise mandatory-versus-optional classification, see the [project interpretation appendix](../assessment-brief.md#appendix-project-interpretation-not-assignment-text).
 
 - `POST /file-upload` must accept an MP3, parse **MPEG-1 Layer III** frames in TypeScript without a third-party MP3 frame parser package and reply `Content-Type: application/json` with exactly an integer count in a success object: `{"frameCount": N}`.
 - Framework/multipart utility packages are allowed; generic media parsers for the implementation are **not**.
@@ -53,9 +53,75 @@ Current application-generated errors: `{"error": string, "message": string}`, JS
 
 These are **project mappings** compatible with RFC 9110 statuses, not exact error bodies mandated by the RFC. Admission rejects directly before body parsing; for errors raised while handling accepted requests, one pure function, `errorResponseFor` in [`src/error-response.ts`](../../src/error-response.ts), maps every failure the route raises to its status and body, and says whether the connection must close. The upload module also closes raw uploads it rejects, and a client that disconnected gets no response at all. An abandoned TCP connection or low-level timeout cannot always deliver a JSON reply.
 
-The [input classification matrix](input-classification.md) records exact messages,
-precedence and tests. A 415 scope rejection does not certify the other codec;
-mislabeled arbitrary bytes are not automatically called an unsupported format.
+### Supported, unsupported and malformed input
+
+These are structural classifications, not an ISO conformance certificate or
+proof of decoded-audio or CRC integrity. Both upload forms use the same parser;
+direct calls report `Mp3ParseError` with `kind`, `message` and byte `offset`,
+without an HTTP status.
+
+| Observed input                                                                                                                    | Direct-parser classification / HTTP result                                                                                                                                                     |
+| --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Complete MPEG-1 Layer III indexed frames, or free-format with sufficient unambiguous bounded evidence                             | Count physical frames; HTTP 200 applies the selected initial-encoder-frame policy. Insufficient/ambiguous free-format inference is `unsupported-format` / 415, not proof of ISO-invalid audio. |
+| Supported ID3v2.2/.3/.4 envelopes and placement                                                                                   | Skip metadata; ID3 records do not count as MPEG frames. Revisions 0-254 are accepted and tag content remains opaque.                                                                           |
+| Nonreserved out-of-scope MPEG version/layer identifiers, or unknown ID3 major version without forbidden bytes                     | `unsupported-format` / 415.                                                                                                                                                                    |
+| Bad sync, reserved MPEG version `01` or layer `00`, or forbidden bitrate/reserved rate or emphasis in MPEG-1 Layer III            | `invalid-mp3` / 422.                                                                                                                                                                           |
+| ID3 major or revision byte `0xff`, reserved flags in a supported version, non-synchsafe size, or a complete mismatched footer     | `invalid-mp3` / 422.                                                                                                                                                                           |
+| Incomplete recognized ID3 header/required footer, supported frame/tag body past EOF, or one to three bytes after a complete frame | `truncated-mp3` / 422, subject to the boundary precedence below.                                                                                                                               |
+| Fewer than four initial MPEG bytes or only supported leading metadata                                                             | `invalid-mp3` / 422: no frames found. Empty HTTP uploads are rejected first as `empty-file` / 400.                                                                                             |
+| Declared unsupported media type, including AAC/MP4                                                                                | Parser not invoked; `unsupported-media-type` / 415. Mislabeled AAC/MP4 fixtures with accepted MIME instead fail MPEG validation / 422.                                                         |
+
+`unsupported-format` does **not** certify the rejected family. The parser stops
+at nonreserved out-of-scope identifiers without validating that family's other
+fields, frame geometry or payload; not every identifier combination is asserted
+to be a defined codec. Unknown ID3 versions likewise are not asserted valid.
+Unknown junk is not relabeled as a known codec, and APE/Lyrics3 remain unrecognized
+optional tag families. There is no universal codec/container sniffer.
+
+The [MPEG header reference](mpeg-1-layer-iii.md) describes the normative header
+fields and the implementation's eleven-bit sync/two-bit version view. The
+[ID3 author specifications](tags-and-encoder-headers.md#2-id3v2-header-sizes-and-version-differences)
+forbid `0xff` in either version byte; that rule is distinct from an unknown major
+version. Accepted MIME, filename or sync alone never establishes supported audio.
+
+### First-observable-failure precedence and chunk invariance
+
+Classification follows validated boundaries and the failure observable at that
+point; it does not scan ahead to rank every possible error in the upload.
+
+1. A complete four-byte MPEG header is required before classification. After a
+   complete frame, one to three remaining bytes (even `ID3`) are a truncated
+   trailing frame header before metadata dispatch. Bad sync and reserved
+   version/layer identifiers are invalid before the other-family scope gate;
+   other fields are validated only for MPEG-1 Layer III.
+2. At a known ID3 boundary, fewer than ten header bytes are truncated even if an
+   available byte is forbidden. Complete headers check forbidden version bytes
+   first, then unknown major version, then supported-version flags and size.
+   Unknown-major flags and body layouts are not interpreted.
+3. Required header errors after indexed or locked free-format frames precede
+   bitrate-mode mixing errors. Header-error offsets identify the header start;
+   invalid synchsafe sizes identify the offending byte.
+4. Bounded free-format candidate probes are not known frame boundaries. Their
+   conservative inference/ambiguity policy can fail before a later candidate's
+   metadata diagnostic; see the [inference profile](mpeg-1-layer-iii.md#4-free-format-layer-iii-bitrate-index-zero).
+5. Transport errors, empty-upload checks and size-limit observation retain their
+   precedence. A later upload-limit violation need not replace an already
+   observed malformed-header error. Chunk partitioning does not alter parser
+   classification or counting.
+
+Exact diagnostics live with their implementations in
+[`frame-header.ts`](../../src/mp3/frame-header.ts),
+[`frame-spans.ts`](../../src/mp3/frame-spans.ts),
+[`id3.ts`](../../src/mp3/id3.ts), [`count-frames.ts`](../../src/mp3/count-frames.ts)
+and [`error-response.ts`](../../src/error-response.ts).
+The [parser classification tests](../../tests/mp3/format-classification.test.ts)
+and [HTTP classification tests](../../tests/mp3/format-classification-http.test.ts)
+cover kinds, messages, offsets, raw/multipart status and chunk invariance.
+[Unsupported-format tests](../../tests/mp3/unsupported-formats.test.ts) and their
+[fixture manifest](../../tests/fixtures/unsupported-formats.json) distinguish
+complete generated encodings from header-only rejection cases. Header-only
+fixtures are not decoder-certified; decoded fixture counts establish provenance,
+not a physical-count oracle.
 
 ## Resource/security policy (project, not MPEG/HTTP normative limits)
 
