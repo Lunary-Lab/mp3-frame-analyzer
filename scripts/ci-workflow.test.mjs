@@ -268,10 +268,37 @@ test('native scanner and setup commands retain pinned versions and explicit repo
     "OTEL_SDK_DISABLED: 'true'",
   ])
     assert.ok(ci.includes(setting), setting);
-  for (const name of ['lint', 'secrets']) {
-    assert.match(job(name), /go telemetry off/);
-    assert.match(job(name), /test "\$\(go env GOTELEMETRY\)" = off/);
+  const goSetup = await readFile(
+    new URL('../.github/actions/setup-go-tool/action.yml', import.meta.url),
+    'utf8',
+  );
+  for (const [name, tool] of [
+    ['lint', 'actionlint'],
+    ['secrets', 'betterleaks'],
+  ]) {
+    assert.match(job(name), /uses: \.\/\.github\/actions\/setup-go-tool/);
+    assert.ok(job(name).includes(`tool: ${tool}`));
   }
+  assert.match(goSetup, /uses: \.\/\.github\/actions\/setup-go-verified/);
+  assert.match(goSetup, /GOROOT: \$\{\{ steps\.compiler\.outputs\.root \}\}/);
+  assert.match(goSetup, /env -i PATH="\$GOROOT\/bin:\/usr\/bin:\/bin"/);
+  assert.match(goSetup, /GOTOOLCHAIN=local/);
+  assert.match(goSetup, /GOCACHEPROG= GOAUTH=off/);
+  assert.match(goSetup, /cache_program="\$\(go env GOCACHEPROG\)"/);
+  assert.match(goSetup, /test -z "\$cache_program"/);
+  assert.match(goSetup, /test "\$authentication" = off/);
+  assert.match(goSetup, /XDG_CONFIG_HOME="\$directory\/config"/);
+  assert.match(goSetup, /go telemetry off/);
+  assert.match(goSetup, /test "\$telemetry" = off/);
+  assert.match(goSetup, /mkdir -m 700 "\$directory"/);
+  assert.match(goSetup, /python3 -I -B scripts\/test-go-module-policy\.py/);
+  assert.match(goSetup, /python3 -I -B scripts\/verify-go-module\.py "\$module"/);
+  assert.ok(goSetup.indexOf('test-go-module-policy.py') < goSetup.indexOf('install -mod=readonly'));
+  assert.ok(goSetup.indexOf('verify-go-module.py') < goSetup.indexOf('install -mod=readonly'));
+  assert.match(goSetup, /go -C "\$module" install -mod=readonly -trimpath -p=2 tool/);
+  assert.match(goSetup, /go -C "\$module" mod verify/);
+  assert.match(goSetup, /python3 -I -B scripts\/test-go-tool-locks\.py "\$GO_TOOL"/);
+  assert.ok(goSetup.indexOf('test-go-tool-locks.py') < goSetup.indexOf('>> "$GITHUB_PATH"'));
   const scannerLock = await readFile(
     new URL('../.github/security/semgrep-requirements.txt', import.meta.url),
     'utf8',
@@ -309,13 +336,16 @@ test('modularization retains the existing external action pins and read-only tok
     new URL('../.github/actions/setup-project/action.yml', import.meta.url),
     'utf8',
   );
-  const actions = [...`${ci}\n${setup}`.matchAll(/uses: ([^\s]+)/g)]
+  const goSetup = await readFile(
+    new URL('../.github/actions/setup-go-tool/action.yml', import.meta.url),
+    'utf8',
+  );
+  const actions = [...`${ci}\n${setup}\n${goSetup}`.matchAll(/uses: ([^\s]+)/g)]
     .map((match) => match[1])
     .filter((name) => !name.startsWith('./'));
   assert.deepEqual([...new Set(actions)].sort(), [
     'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
     'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333',
-    'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e',
     'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1',
     'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9',
   ]);

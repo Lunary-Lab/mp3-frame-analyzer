@@ -1,0 +1,52 @@
+name: Locked Go helper setup
+description: Build a reviewed tool graph with the current Go compiler and native checksums
+inputs:
+  tool:
+    description: Reviewed helper name (actionlint or betterleaks)
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup-go-verified
+      id: compiler
+    - name: Build only the committed tool module and prove native rejection controls
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        GO_TOOL: ${{ inputs.tool }}
+        GOROOT: ${{ steps.compiler.outputs.root }}
+      run: |
+        case "$GO_TOOL" in actionlint|betterleaks) ;; *) echo 'Unsupported Go helper' >&2; exit 1 ;; esac
+        directory="${RUNNER_TEMP}/go-tool-${GO_TOOL}"
+        mkdir -m 700 "$directory"
+        mkdir "$directory/tmp" "$directory/home"
+        env -i PATH="$GOROOT/bin:/usr/bin:/bin" HOME="$directory/home" \
+          HTTP_PROXY="${HTTP_PROXY-}" HTTPS_PROXY="${HTTPS_PROXY-}" NO_PROXY="${NO_PROXY-}" \
+          http_proxy="${http_proxy-}" https_proxy="${https_proxy-}" no_proxy="${no_proxy-}" \
+          SSL_CERT_FILE="${SSL_CERT_FILE-}" SSL_CERT_DIR="${SSL_CERT_DIR-}" \
+          GO_TOOL="$GO_TOOL" GOROOT="$GOROOT" GOPATH="$directory/gopath" GOTMPDIR="$directory/tmp" \
+          XDG_CONFIG_HOME="$directory/config" GOBIN="$directory/bin" \
+          GOCACHE="$directory/build" GOMODCACHE="$directory/modules" \
+          GOTOOLCHAIN=local GOENV=off GOWORK=off GOFLAGS= GOCACHEPROG= GOAUTH=off \
+          GOEXPERIMENT= GOFIPS140=off GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+          GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GONOSUMDB= GONOPROXY= GOPRIVATE= \
+          bash -euo pipefail <<'BUILD'
+        go telemetry off
+        version="$(go env GOVERSION)"
+        test "$version" = go1.27.3
+        root="$(go env GOROOT)"
+        test "$root" = "$GOROOT"
+        telemetry="$(go env GOTELEMETRY)"
+        test "$telemetry" = off
+        cache_program="$(go env GOCACHEPROG)"
+        test -z "$cache_program"
+        authentication="$(go env GOAUTH)"
+        test "$authentication" = off
+        module=".github/tools/$GO_TOOL"
+        python3 -I -B scripts/test-go-module-policy.py
+        python3 -I -B scripts/verify-go-module.py "$module"
+        go -C "$module" install -mod=readonly -trimpath -p=2 tool
+        go -C "$module" mod verify
+        python3 -I -B scripts/test-go-tool-locks.py "$GO_TOOL"
+        BUILD
+        printf '%s\n' "$directory/bin" >> "$GITHUB_PATH"

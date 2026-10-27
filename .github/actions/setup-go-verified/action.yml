@@ -1,0 +1,17 @@
+name: Verified Go compiler setup
+description: Verify the reviewed Linux x86-64 Go archive before extraction or execution
+outputs:
+  root:
+    description: Exact verified compiler root
+    value: ${{ steps.compiler.outputs.root }}
+runs:
+  using: composite
+  steps:
+    - name: Acquire the reviewed Go compiler with native SHA-256 verification
+      id: compiler
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        root="$(bash scripts/bootstrap-go.sh)"
+        printf '%s\n' "$root/bin" >> "$GITHUB_PATH"
+        printf 'root=%s\n' "$root" >> "$GITHUB_OUTPUT"
