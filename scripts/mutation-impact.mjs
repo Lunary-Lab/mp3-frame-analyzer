@@ -2,6 +2,7 @@ import ts from 'typescript';
 import { posix } from 'node:path';
 import { opaqueCapability } from './mutation-module-capabilities.mjs';
 import { reviewedDataAccess } from './mutation-reviewed-data-access.mjs';
+import { reviewedResourceInputs } from './mutation-resource-inputs.mjs';
 import { supportedExternalImport } from './mutation-import-capabilities.mjs';
 
 // Deliberately bounded to this project's static ESM layout. Unknown resolution
@@ -122,7 +123,7 @@ function imports(file, source, files) {
   return result;
 }
 
-export function testClosures(files, tests) {
+export function testClosures(files, tests, inventory = []) {
   const modules = new Map();
   function module(file) {
     if (!modules.has(file))
@@ -145,6 +146,11 @@ export function testClosures(files, tests) {
         for (const dependency of item.dependencies) visit(dependency);
       }
       visit(test);
+      const resources = reviewedResourceInputs(test, files, closure, inventory);
+      if (resources) {
+        closure.reads = false;
+        for (const resource of resources) closure.files.add(resource);
+      }
       return [test, closure];
     }),
   );
@@ -203,11 +209,43 @@ function previousFiles(report, currentFiles, baselineFiles) {
   return oldFiles;
 }
 
+function retainKilledWitnesses(report, currentFiles, affected) {
+  const witnesses = testWitnesses(report);
+  const copy = structuredClone(report);
+  let eligible = 0;
+  let rerun = 0;
+  for (const [file, record] of Object.entries(copy.files)) {
+    record.mutants = record.mutants.filter((mutant) => {
+      const killers = (mutant.killedBy ?? []).filter(
+        (id) => witnesses.has(id) && !affected.has(witnesses.get(id).file),
+      );
+      const reuse =
+        currentFiles.get(file) === record.source &&
+        mutant.status === 'Killed' &&
+        (mutant.static === undefined || mutant.static === false) &&
+        killers.length > 0;
+      if (reuse) {
+        mutant.killedBy = killers;
+        eligible++;
+      } else rerun++;
+      return reuse;
+    });
+  }
+  return { report: copy, eligible, rerun };
+}
+
 /** Keep only an unchanged killed mutant with an unaffected source-backed killer. */
 export function planReuse(
   report,
   currentFiles,
-  { baselineFiles, testFiles, baselineTestFiles = [], changedInputs = [] } = {},
+  {
+    baselineFiles,
+    testFiles,
+    baselineTestFiles = [],
+    changedInputs = [],
+    baselineInputs = [],
+    currentInputs = [],
+  } = {},
 ) {
   const oldFiles = previousFiles(report, currentFiles, baselineFiles);
   const changed = new Set(
@@ -221,39 +259,18 @@ export function planReuse(
   const before = testClosures(
     oldFiles,
     tests.filter((test) => oldFiles.has(test)),
+    baselineInputs,
   );
   const after = testClosures(
     currentFiles,
     tests.filter((test) => currentFiles.has(test)),
+    currentInputs,
   );
   const reason = unsupportedImpact(tests, before, after, changed);
   if (reason) return { report: null, reason };
   const affected = affectedTests(tests, before, after, changed);
-  const witnesses = testWitnesses(report);
-  const copy = structuredClone(report);
-  let eligible = 0;
-  let rerun = 0;
-  for (const [file, record] of Object.entries(copy.files)) {
-    record.mutants = record.mutants.filter((mutant) => {
-      const killers = (mutant.killedBy ?? []).filter(
-        (id) => witnesses.has(id) && !affected.has(witnesses.get(id).file),
-      );
-      const reuse =
-        currentFiles.get(file) === record.source &&
-        mutant.status === 'Killed' &&
-        mutant.static !== true &&
-        killers.length > 0;
-      if (reuse) {
-        mutant.killedBy = killers;
-        eligible++;
-      } else rerun++;
-      return reuse;
-    });
-  }
   return {
-    report: copy,
-    eligible,
-    rerun,
+    ...retainKilledWitnesses(report, currentFiles, affected),
     affectedTests: [...affected].sort(),
     changedFiles: [...changed].sort(),
     reason: changed.size

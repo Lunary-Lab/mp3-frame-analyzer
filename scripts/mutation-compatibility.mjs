@@ -3,11 +3,13 @@ import { posix } from 'node:path';
 import { executionIsolation } from './mutation-execution-guard.mjs';
 import { runtimeDependencyPaths } from './mutation-runtime-inputs.mjs';
 import { assertReviewedRuntime } from './mutation-runtime-witness.mjs';
+import { CI_WORKFLOW, mutationWorkflowInput } from './mutation-workflow-inputs.mjs';
 
 export const sourceInput = (path) =>
   /\.[cm]?[jt]sx?$/.test(path) ||
   /(^|\/)(?:tsconfig[^/]*|package)\.json$/.test(path) ||
-  path === 'stryker.config.json';
+  path === 'stryker.config.json' ||
+  path === CI_WORKFLOW;
 export const parserInput = (path) => /^src\/mp3\/.*\.ts$/.test(path) && !path.endsWith('.d.ts');
 export const mutableInput = (path) => /^(src|tests)\/.*\.ts$/.test(path) && !path.endsWith('.d.ts');
 const passiveDocument = (path) =>
@@ -22,9 +24,27 @@ const passiveDocument = (path) =>
     '.github/copilot-instructions.md',
   ].includes(path);
 const unrelatedTooling = (path) =>
-  ['scripts/release-smoke-process.mjs', 'scripts/release-smoke-process.test.mjs'].includes(path);
+  path === 'scripts/release-smoke-process.mjs' || /^scripts\/[^/]+\.test\.mjs$/.test(path);
+const passiveSastInput = (path) =>
+  path === '.semgrep.yml' || /^tests\/semgrep\/[^/]+\.fixture$/.test(path);
 const variablePathInput = (path) =>
-  passiveDocument(path) || unrelatedTooling(path) || (mutableInput(path) && !parserInput(path));
+  passiveDocument(path) ||
+  unrelatedTooling(path) ||
+  passiveSastInput(path) ||
+  (mutableInput(path) && !parserInput(path));
+
+function compatibleFile(entry, inputs, runtime) {
+  const [path] = entry;
+  if (path === CI_WORKFLOW) {
+    const source = inputs.sources?.[path];
+    if (typeof source !== 'string' || sha256(source) !== entry.at(-1))
+      throw new Error('Unauthenticated mutation workflow source');
+    return [...entry.slice(0, -1), sha256(JSON.stringify(mutationWorkflowInput(source)))];
+  }
+  return !runtime.has(path) && (mutableInput(path) || path === 'mutation-equivalents.json')
+    ? [...entry.slice(0, -1), null]
+    : entry;
+}
 
 // This is only a comparison key, never an authorization to reuse. Callers must
 // authenticate both source inventories and establish execution isolation first.
@@ -36,12 +56,7 @@ export function compatibilityInputs(inputs) {
     ...rest,
     files: inputs.files
       .filter(([path]) => runtime.has(path) || !variablePathInput(path))
-      .map((entry) =>
-        !runtime.has(entry[0]) &&
-        (mutableInput(entry[0]) || entry[0] === 'mutation-equivalents.json')
-          ? [...entry.slice(0, -1), null]
-          : entry,
-      ),
+      .map((entry) => compatibleFile(entry, inputs, runtime)),
   };
 }
 

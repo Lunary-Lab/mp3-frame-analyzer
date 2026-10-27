@@ -5,6 +5,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { auditMutations, sourceContext } from './mutation-policy.mjs';
 import {
+  CACHE_SCHEMA,
   WORKING_REPORT,
   mutationEnvironment,
   mutationInputs,
@@ -119,7 +120,7 @@ try {
   const inputs = await mutationInputs(root, env);
   const inputsHash = fingerprint(inputs);
   if (args.includes('--cache-key')) {
-    console.log(`mutation-v3-${inputsHash}`);
+    console.log(`mutation-v${CACHE_SCHEMA}-${inputsHash}`);
   } else {
     // Only the current invocation writes reports. Working/partial incremental
     // state is never restored or saved by GitHub Actions.
@@ -144,12 +145,17 @@ try {
       Boolean(env.NODE_OPTIONS) ||
       (process.env.GITHUB_ACTIONS && !provenance);
     let cache = force
-      ? { report: null, reason: 'forced full verification or no authenticated main baseline' }
+      ? {
+          report: null,
+          reason: 'forced full verification or no authenticated main baseline',
+          reasonCode: 'forced-full-or-unauthenticated-baseline',
+        }
       : await readCache(root, inputs, auditMutations, policy);
     if (cache.report && provenance && cache.manifest.sourceCommit !== provenance.sourceCommit)
       cache = {
         report: null,
         reason: 'Baseline source commit does not match authenticated artifact',
+        reasonCode: 'provenance-source-mismatch',
       };
     let prepared = null;
     if (cache.report) {
@@ -157,17 +163,26 @@ try {
       const baseline = reuseContext(cache.manifest.inputs);
       prepared = planReuse(cache.report, current.files, {
         baselineFiles: baseline.files,
+        baselineInputs: cache.manifest.inputs.files,
+        currentInputs: inputs.files,
         baselineTestFiles: baseline.testFiles,
         testFiles: current.testFiles,
         changedInputs: changedInputPaths(cache.manifest.inputs, inputs),
       });
-      if (!prepared.report) cache = { report: null, reason: prepared.reason };
-      else cache.reason = prepared.reason;
+      if (!prepared.report)
+        cache = { report: null, reason: prepared.reason, reasonCode: 'unsupported-impact' };
+      else {
+        cache.reason = prepared.reason;
+        cache.reasonCode = 'validated-killing-witnesses';
+      }
     }
     await mkdir(dirname(join(root, WORKING_REPORT)), { recursive: true });
     if (prepared?.report)
       await writeFile(join(root, WORKING_REPORT), JSON.stringify(prepared.report));
     console.log(`Mutation cache: ${cache.reason}; eligible for reuse: ${prepared?.eligible ?? 0}.`);
+    console.log(
+      `Mutation cache reason: ${cache.reasonCode}; details: ${JSON.stringify(cache.details ?? null)}.`,
+    );
     const started = performance.now();
     // A normal unmutated run is mandatory even for a 100% cache hit. Stryker
     // subsequently performs its own fresh discovery/coverage dry run as well.
@@ -200,6 +215,8 @@ try {
         ...execution,
         mode: cache.report ? 'incremental' : 'full',
         cacheReason: cache.reason,
+        cacheReasonCode: cache.reasonCode,
+        cacheDetails: cache.details ?? null,
         affectedTests: prepared?.affectedTests ?? [],
         changedFiles: prepared?.changedFiles ?? [],
         baselineCommit: cache.manifest?.sourceCommit ?? null,

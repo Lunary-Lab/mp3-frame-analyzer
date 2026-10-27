@@ -8,7 +8,7 @@ Pinned Stryker/core/Vitest-runner **10.1.1** uses **Vitest 5.0.5**, per-test cov
 and the explicit parser-test selection in `vitest.mutation.config.ts`.
 
 - **Normal PR:** rerun changed/impacted mutants and their relevant tests; reuse
-  only validated unaffected kills from a successful exact-base main baseline.
+  only validated unaffected kills from a compatible authenticated main ancestor baseline.
 - **Missing/stale baseline, global input changes, or uncertain impact:** full run.
 - **Release, weekly verification, or `npm run mutation:full`:** execute all mutants.
 
@@ -25,7 +25,7 @@ tracks source/test changes but does not establish arbitrary cross-module impact.
 Our additional boundary deliberately supports this project's static ESM layout:
 
 1. Authenticate complete old and current source snapshots against their full
-   file inventories. Schema 3 stores prior transitive helper sources; current
+   file inventories. Schema 4 stores prior transitive helper and CI workflow sources; current
    bytes are never substituted for missing old dependency evidence.
 2. Recognize the bounded **data-only** Stryker/Vitest configuration without
    executing it. Only the pinned Vitest runner plugin is loaded, with isolated
@@ -40,11 +40,15 @@ Our additional boundary deliberately supports this project's static ESM layout:
 3. Allow content and path changes to unrelated `src/**/*.ts`, `tests/**/*.ts`,
    `docs/**/*.md` and named root documents (`README`, `AGENTS`, `GLOSSARY`,
    `CHANGELOG`, `CLAUDE`, `TODO`) and the exact `.github/copilot-instructions.md`
-   instruction document. Other `.github` paths remain global. Declaration files and `docs/mutation-review.md` stay global.
-   The two release-smoke process modules may change independently too, but the
-   wrapper/auditor's entire static import closure always stays global, including
-   a normally mutable file if it becomes a runtime dependency. All other tooling
-   remains global. Parser additions/removals/renames and existing file-mode
+   instruction document. Declaration files and `docs/mutation-review.md` stay global.
+   The two release-smoke process modules, tooling test files, and explicitly named
+   SAST inputs may change independently. CI workflow comparison retains every
+   top-level field and the complete mutation job plus transitive prerequisite
+   jobs; unrelated job edits do not invalidate kills. Unsupported YAML or job
+   dependencies fail closed. Setup actions, acquisition/restore/encoder-gate
+   production scripts and unknown tooling remain global. The wrapper/auditor's
+   entire static import closure always stays global, including a normally
+   mutable file if it becomes a runtime dependency. Parser additions/removals/renames and existing file-mode
    changes still force full execution; new eligible files require mode 0644.
 4. Compute selected test closures in **both authenticated old and current**
    sources, including helpers, re-exports, cycles and literal module imports.
@@ -53,11 +57,18 @@ Our additional boundary deliberately supports this project's static ESM layout:
    shared-state writers force full. Baseline-selected roots are retained in this
    analysis even if skipped/unreported or removed from the current inventory. Unselected nonparser tests still execute in
    the mandatory normal suite, but are not mutation-test execution roots.
-5. Mark changed or import-affected tests as affected. A filesystem-reading closure
-   is **never a reusable killing witness**, even on unchanged inputs. Resource
-   paths may be computed, external or generated; fresh normal tests alone do not
-   prove that an old mutant remains killed. Changed reader tests force full;
-   other reader-dependent witnesses rerun while independent pure kills may remain.
+5. Mark changed or import-affected tests as affected. Arbitrary filesystem readers
+   remain affected even on unchanged inputs. Six reviewed fixture-reading test
+   roots have a narrower contract in `mutation-resource-inputs.mjs`: the **entire
+   selected test's transitive source closure** must match its committed SHA-256,
+   and every enumerated resource must be present as a mode-0644 regular file in
+   both authenticated inventories. The caller, parser, helpers, callback and
+   encoding code are bound, not only a filename or read expression. Fixture
+   bytes/modes remain global and are also included in each reader's impact set.
+   Missing resources, edited/renamed code, unreviewed closures and external sample
+   readers never acquire this exemption. No baseline or runtime observation can
+   refresh a reviewed digest. Changed arbitrary reader tests force full; other
+   reader-dependent witnesses rerun while independent validated kills may remain.
 6. Retain only an **unchanged mutant source file's `Killed` result** with an
    unaffected prior killing witness. Witnesses bind source text, file, exact test
    name and location, not unstable IDs. Always rerun equivalents, static mutants
@@ -121,7 +132,8 @@ The SHA-256 manifest binds:
   snapshots, generators and configuration. This full forensic inventory is not
   the cross-run compatibility key. The guarded classes above can differ between
   runs, but remain present in before/after evidence and the final immutability
-  check. Fixtures, proof review, workflows, lockfile and unknown paths stay global.
+  check. Fixtures, proof review, the mutation execution workflow envelope, lockfile
+  and unknown paths stay global.
   Known generated/build/runtime directories are excluded.
 - Installed dependency bytes, modes and symlink destinations, not just the
   lockfile. Dependency links must remain inside the fingerprinted tree and out of
@@ -149,29 +161,51 @@ not broad `actions/cache` restore keys or PR-scoped result caches.
 
 `restore-mutation-baseline.mjs` queries GitHub's read-only API and requires:
 
-- The exact PR base SHA (previous SHA for a main push), in the same repository.
+- The PR base SHA (previous SHA for a main push) is the event anchor. Exact-anchor
+  successful runs are tried first, including another same-SHA run if an artifact
+  is unavailable. Bounded older successful main runs may then be considered.
+- Authenticated GitHub comparisons prove **candidate ≤ anchor ≤ tested
+  `GITHUB_SHA`**. Timestamps, branch labels and shallow local history are not
+  ancestry evidence. A force-push with a nonancestor previous SHA falls back cold.
 - A **completed successful main `push`** run of `.github/workflows/ci.yml`, including
   success of the whole producing workflow—not just its mutation job.
 - Matching repository IDs, main branch, workflow/source/run/artifact identities,
   unexpired bounded artifact size, and a matching **SHA-256 archive digest**.
 - Exactly `manifest.json` and `report.json` in the ZIP. Only those fixed entries
   are read; no archive-provided path is extracted or executed.
-- A completed manifest naming that source commit and matching the report digest;
-  the wrapper then independently validates schema, input/policy compatibility,
-  baseline source hashes, full inventory and successful audit.
+- A completed manifest naming that source commit and matching the report digest.
+  Before installation, the actual cache validator checks schema, input/policy
+  compatibility, baseline sources, full inventory, successful audit and at least
+  one eligible killing witness. Incompatible candidates are skipped, not accepted
+  merely because they are ancestors. The observed successful run attempt is
+  rechecked before provenance is installed; the wrapper independently captures
+  and validates current inputs again before execution.
 
-Missing/expired artifacts, API permission failures, corrupt data or any mismatch
-clear restored state and fall back to full. There is no fallback to an older or
-PR-produced baseline. The first rollout necessarily runs full until successful
-main artifacts exist; a PR whose exact base has no finished successful CI also
-runs full. Artifact availability is evaluated once at restore time: a baseline
-finishing later does not retroactively seed the running campaign. No wait,
-restart, older-ancestor fallback or provenance relaxation is added here.
+Baseline provenance records `observedRunAttempt`, not an artifact-producing job
+attempt: GitHub's [artifact metadata](https://docs.github.com/en/rest/actions/artifacts)
+does not identify the latter. A successful rerun of failed jobs can retain a valid
+earlier-attempt baseline artifact. Its exact artifact ID, digest, run, source and
+compatibility still bind admission; no producing attempt is inferred. This is
+distinct from the explicitly same-attempt regression-campaign aggregate below.
 
-Schema 3 and explicit plugin isolation intentionally require a **one-time cold
-bootstrap**. Schema 2 artifacts are not silently upgraded: a successful new main
-run must establish the authenticated dependency/isolation evidence first. Actual
-hosted transport must be verified after that first main run.
+Missing/expired artifacts, permission failures, corrupt data or any mismatch
+produce a safe miss, never an exception solely because a cache is unavailable.
+The search is bounded to eight trusted candidate runs, four downloads, 32 API
+requests and 32 MiB per archive. A cumulative 60-second transport budget supplies
+remaining-time deadlines to API/native archive calls and is checked between
+phases. Synchronous input capture/validation cannot be preempted by this budget;
+it may exceed the window before the next safe-miss check. The additional current
+snapshot is captured once for all candidates, not once per download.
+
+No wait for running CI, PR-baseline promotion, blind latest-artifact lookup or
+provenance relaxation is used. If a suitable artifact is absent at restore time,
+the current campaign runs cold. The restore step takes the same workspace lock
+as mutation execution and never clears another invocation's state. Native unzip
+receives only PATH and a fixed locale, not inherited archive-option variables.
+
+Schema 4 requires a **one-time cold bootstrap** after this implementation lands.
+Schema 2/3 artifacts are not silently upgraded; a successful schema-4 main run
+must establish the authenticated source/resource/workflow evidence first.
 
 Only successful main-push mutation jobs promote and publish the two validated JSON files;
 PR invocations do not promote a local reusable baseline. Consumers additionally
@@ -195,11 +229,31 @@ exits, full audit, witness accounting and input recheck, with atomic manifest-la
 writes. Missing/corrupt/wrong-version/incomplete state safely misses.
 
 Fresh evidence lives in `reports/mutation/`: raw report, execution log, before/after
-inputs and `audit.json.execution` with executed/reused/total, mode, reason,
+inputs and `audit.json.execution` with executed/reused/total, mode, reason/code,
+changed global field/path diagnostics (never environment values),
 affected tests, changed files, baseline commit, elapsed time and input hash.
 Failed runs preserve diagnostics but no passing current audit. A directory lock
 prevents concurrent invocations sharing state; after an uncatchable kill, confirm
 no process remains before manually removing `.cache/mutation/run.lock`.
+
+## Complete cache regression campaign
+
+The default integration command still runs all 70 native Stryker/Vitest cases.
+CI executes four independent groups (24 invalidation, 16 impact, 24 compatibility,
+6 document scenarios) with `fail-fast: false`. Each leg retains its expected
+rejections and successful reports. The stable **Mutation cache regression
+(complete campaign)** job requires matrix success and exactly one complete
+summary for every group from the same repository, checked-out commit, run and
+attempt. Missing, duplicate, incomplete, skipped/cancelled or wrong-outcome
+scenarios cannot pass. `All checks` depends on the matrix and its aggregate;
+existing required-check names and repository settings do not change.
+
+Artifacts are attempt-qualified and immutable. Rerunning only failed jobs cannot
+borrow successful group artifacts from an earlier attempt: rerun the entire
+campaign. Four setups and a small aggregate increase runner overhead in exchange
+for less wall-clock serialization. Historical 70-case scenario durations totalled
+13m08s, with a largest proposed group of 4m29s before setup/queue/aggregate time;
+these are a scheduling projection, **not a measured new PR speedup**.
 
 ## Upstream limitations and mitigations
 
@@ -218,6 +272,20 @@ no process remains before manually removing `.cache/mutation/run.lock`.
   limitation, not a false passing gate. Hook errors may produce runtime errors or
   zero-duration kills; invalid outcomes fail closed and legitimate zero-ms kills
   are covered by an accounting regression.
+
+The known immutable-fixture reader penalty and exact-base availability race are
+fixable project policies, not inherent Stryker limitations. The residual boundary
+is complete dependency discovery for arbitrary JavaScript/external state.
+Vitest 5.0.5 has maintained
+[`experimental.recordDependencies`](https://vitest.dev/config/experimental#experimental-recorddependencies)
+for executed per-test-file module imports, including dynamic imports. It explicitly
+excludes arbitrary filesystem reads and externalized-module imports. Its internal
+dependency cache is not authenticated content evidence, and an unmutated dry-run
+graph can miss imports reached only by an active mutant. It may inform a later
+resolver redesign, but cannot alone replace the resource/provenance/opaque-code
+checks here. Alternatives are explicit reviewed immutable resource contracts,
+refactoring fixture loads into tracked data modules, or fresh execution; unknown
+behavior is not declared pure to obtain a cache hit.
 
 The installed release contains the Vitest 5 nested-test-name separator and cold
 shared-Vite-cache startup fixes. Pinned versions and our regressions reduce risk;

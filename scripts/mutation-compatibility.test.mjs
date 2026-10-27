@@ -129,7 +129,6 @@ for (const path of [
   'package-lock.json',
   'tests/fixture.json',
   'scripts/runner.mjs',
-  '.github/workflows/ci.yml',
   '.github/unreviewed-instructions.md',
   'docs/mutation-review.md',
   'tests/types.d.ts',
@@ -138,6 +137,46 @@ for (const path of [
     const f = fixture();
     f.files.set(path, 'changed');
     assert.throws(() => f.plan(), /Global mutation inputs changed/);
+  });
+}
+
+test('an unsupported mutation workflow is a full miss, not a compatibility exemption', () => {
+  const f = fixture();
+  f.files.set('.github/workflows/ci.yml', 'changed');
+  assert.throws(() => f.plan(), /Unsupported mutation workflow/);
+});
+
+test('a changed selected script dependency invalidates its killing witnesses', () => {
+  const f = fixture([
+    ['tests/helper.ts', "export { a } from '../scripts/check.test.mjs';"],
+    ['scripts/check.test.mjs', 'export const a = 1;'],
+  ]);
+  f.files.set('scripts/check.test.mjs', 'export const a = 2;');
+  assert.equal(f.plan().eligible, 1);
+  assert.deepEqual(f.plan().affectedTests, ['tests/a.test.ts']);
+  f.files.delete('scripts/check.test.mjs');
+  assert.equal(f.plan().report, null);
+});
+
+for (const path of ['.semgrep.yml', 'tests/semgrep/runtime-execution.ts.fixture']) {
+  test(`SAST input readers remain affected: ${path}`, () => {
+    const f = fixture([
+      [path, 'old fixture'],
+      ['tests/helper.ts', `import { readFileSync } from 'node:fs'; readFileSync('${path}');`],
+    ]);
+    f.files.set(path, 'changed fixture');
+    assert.equal(f.plan().eligible, 1);
+    assert.deepEqual(f.plan().affectedTests, ['tests/a.test.ts']);
+  });
+}
+
+for (const path of ['scripts/check.test.mjs', '.semgrep.yml', 'tests/semgrep/check.ts.fixture']) {
+  test(`new compatibility classes still require ordinary file modes: ${path}`, () => {
+    const f = fixture();
+    f.files.set(path, 'source');
+    const inputs = f.inputs();
+    inputs.files.find(([name]) => name === path)[1] = 0o755;
+    assert.throws(() => f.plan(f.files, inputs), /mode changed or unsupported/);
   });
 }
 
@@ -174,11 +213,13 @@ test('missing or corrupt old dependency source cannot be supplied from current b
   }
 });
 
-test('old manifests without the new source/isolation obligation fail closed', () => {
-  const f = fixture();
-  f.cache.manifest.schemaVersion = 2;
-  assert.throws(() => f.plan(), /Invalid or incomplete/);
-});
+for (const version of [2, 3]) {
+  test(`old schema ${version} cannot acquire newer source/resource/workflow obligations`, () => {
+    const f = fixture();
+    f.cache.manifest.schemaVersion = version;
+    assert.throws(() => f.plan(), /Invalid or incomplete/);
+  });
+}
 
 test('reviewed unrelated release-smoke scripts are compatible, not mutation execution roots', () => {
   const f = fixture();
@@ -200,6 +241,15 @@ test('every transitive runtime dependency stays global even at a normally mutabl
   }
   f.cache.manifest.inputsHash = fingerprint(f.old);
   f.files.set('scripts/release-smoke-process.mjs', 'export const version = 2;');
+  assert.throws(() => f.plan(), /Global mutation inputs changed/);
+});
+
+test('test-shaped scripts are global if the mutation runtime imports them', () => {
+  const f = fixture([
+    ['scripts/run-mutations.mjs', "import './runtime.test.mjs';"],
+    ['scripts/runtime.test.mjs', 'export const value = 1;'],
+  ]);
+  f.files.set('scripts/runtime.test.mjs', 'export const value = 2;');
   assert.throws(() => f.plan(), /Global mutation inputs changed/);
 });
 

@@ -176,3 +176,12 @@ test('changed unreported tests and any equivalence proof changes invalidate base
     /policy changed/,
   );
 });
+
+test('malformed static flags cannot schedule reuse and fail only at final accounting', () => {
+  for (const value of ['yes', 1, 0, null, '', {}, []]) {
+    const f = fixture();
+    for (const record of Object.values(f.report.files))
+      for (const mutant of record.mutants) mutant.static = value;
+    assert.equal(planReuse(f.report, f.files).eligible, 0, JSON.stringify(value));
+  }
+});

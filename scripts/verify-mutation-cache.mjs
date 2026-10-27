@@ -12,10 +12,16 @@ import {
   runCompatibilityScenarios,
   runInstructionDocumentScenarios,
 } from './mutation-compatibility-scenarios.mjs';
+import { parseCampaignArguments, validateCampaignSummary } from './mutation-cache-campaigns.mjs';
+import { campaignProvenance } from './mutation-cache-campaign-provenance.mjs';
 
 const project = fileURLToPath(new URL('../', import.meta.url));
-const evidence = resolve(process.argv[2] ?? 'reports/mutation-cache-validation');
+const selection = parseCampaignArguments(process.argv.slice(2));
+const evidence = resolve(selection.evidence);
+const provenance = campaignProvenance(project);
 await mkdir(evidence, { recursive: true });
+for (const name of ['summary.json', 'completion.json'])
+  await rm(join(evidence, name), { force: true });
 const root = await mkdtemp(join(tmpdir(), 'mutation-functional-'));
 const results = [];
 const source = 'export function add(a: number, b: number) { return a + b; }\n';
@@ -102,6 +108,8 @@ async function prepareProject() {
     'mutation-runtime-witness.mjs',
     'mutation-module-capabilities.mjs',
     'mutation-reviewed-data-access.mjs',
+    'mutation-resource-inputs.mjs',
+    'mutation-workflow-inputs.mjs',
   ])
     await cp(join(project, 'scripts', name), join(root, 'scripts', name));
   await symlink(join(project, 'node_modules'), join(root, 'node_modules'), 'dir');
@@ -124,13 +132,23 @@ async function prepareProject() {
 try {
   await prepareProject();
   const campaign = { root, evidence, put, policy, run, source, strongTest, strongHelper };
-  if (!process.argv.includes('--documents-only')) {
-    if (!process.argv.includes('--impact-only')) await runInvalidationScenarios(campaign);
-    await runImpactScenarios(campaign);
-    await runCompatibilityScenarios(campaign);
-  }
-  await runInstructionDocumentScenarios(campaign);
+  const groups = {
+    invalidation: runInvalidationScenarios,
+    impact: runImpactScenarios,
+    compatibility: runCompatibilityScenarios,
+    documents: runInstructionDocumentScenarios,
+  };
+  for (const name of selection.campaigns) await groups[name](campaign);
+  const completion = {
+    schemaVersion: 1,
+    completed: true,
+    campaigns: selection.campaigns,
+    provenance,
+    results,
+  };
+  validateCampaignSummary(completion, selection.campaigns, provenance);
   await writeFile(join(evidence, 'summary.json'), JSON.stringify(results, null, 2) + '\n');
+  await writeFile(join(evidence, 'completion.json'), JSON.stringify(completion, null, 2) + '\n');
   console.log(`Verified ${results.length} actual Stryker/Vitest scenarios. Evidence: ${evidence}`);
 } finally {
   await rm(root, { recursive: true, force: true });

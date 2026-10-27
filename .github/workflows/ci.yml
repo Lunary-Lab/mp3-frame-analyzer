@@ -163,8 +163,12 @@ jobs:
       - uses: ./.github/actions/setup-project
       - run: npm run test:mutation-policy && npm run test:tooling
 
-  mutation-cache:
-    name: Mutation cache regression (complete campaign)
+  mutation-cache-scenarios:
+    name: Mutation cache scenarios (${{ matrix.campaign }})
+    strategy:
+      fail-fast: false
+      matrix:
+        campaign: [invalidation, impact, compatibility, documents]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -173,15 +177,47 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-project
-      - run: npm run test:mutation-cache:integration
-      - name: Retain mutation-cache-verification
+      - run: npm run test:mutation-cache:integration -- --campaign=${{ matrix.campaign }}
+        env:
+          CACHE_CAMPAIGN_COMMIT: ${{ inputs.ref || github.sha }}
+      - name: Retain native campaign evidence, including expected rejections
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: mutation-cache-verification
+          name: mutation-cache-verification-${{ matrix.campaign }}-${{ github.run_attempt }}
           path: reports/mutation-cache-validation/
           if-no-files-found: error
           retention-days: 14
+
+  mutation-cache:
+    name: Mutation cache regression (complete campaign)
+    if: always()
+    needs: [mutation-cache-scenarios]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - name: Require every native campaign job to succeed
+        env:
+          RESULT: ${{ needs.mutation-cache-scenarios.result }}
+        run: test "$RESULT" = success
+      - uses: ./.github/actions/setup-project
+        with:
+          install: 'false'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: mutation-cache-verification-*-${{ github.run_attempt }}
+          path: reports/mutation-cache-campaigns/
+          merge-multiple: false
+          digest-mismatch: error
+      - name: Require the complete scenario inventory from this exact source and run attempt
+        run: node scripts/verify-mutation-cache-campaign.mjs reports/mutation-cache-campaigns
+        env:
+          CACHE_CAMPAIGN_RESULT: ${{ needs.mutation-cache-scenarios.result }}
+          CACHE_CAMPAIGN_COMMIT: ${{ inputs.ref || github.sha }}
 
   mutation:
     name: Full parser mutation gate (100% adjusted)
@@ -197,7 +233,7 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-project
-      - name: Restore only an authenticated successful exact-base main artifact
+      - name: Restore a compatible authenticated main ancestor artifact
         if: github.event_name != 'schedule' && inputs.ref == '' && inputs.release_tag == '' && inputs.full_mutation != true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -465,6 +501,7 @@ jobs:
         compatibility,
         tooling,
         mutation-cache,
+        mutation-cache-scenarios,
         mutation,
         encoder,
         npm-audit,
@@ -486,7 +523,7 @@ jobs:
           node --input-type=module <<'JS'
           import assert from 'node:assert/strict';
           const expected = [
-            'format', 'lint', 'types', 'unit', 'compatibility', 'tooling', 'mutation-cache',
+            'format', 'lint', 'types', 'unit', 'compatibility', 'tooling', 'mutation-cache', 'mutation-cache-scenarios',
             'mutation', 'encoder', 'npm-audit', 'trivy', 'trivy-release', 'secrets', 'semgrep', 'fuzz', 'package', 'governance',
           ];
           const jobs = JSON.parse(process.env.RESULTS);

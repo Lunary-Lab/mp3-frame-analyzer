@@ -5,7 +5,12 @@ import { sha256 } from './mutation-policy.mjs';
 import { testWitnesses } from './mutation-impact.mjs';
 import { CACHE_SCHEMA, fingerprint, globalFingerprint } from './mutation-cache-inputs.mjs';
 
-import { assertCompatibleModes, reuseContext } from './mutation-compatibility.mjs';
+import {
+  assertCompatibleModes,
+  reuseContext,
+  compatibilityInputs,
+  changedInputPaths,
+} from './mutation-compatibility.mjs';
 
 export {
   CACHE_SCHEMA,
@@ -62,18 +67,40 @@ export function createCache(report, inputs, summary, policy = null, sourceCommit
   };
 }
 
+function rejection(message, code, details) {
+  return Object.assign(new Error(message), { code, ...(details ? { details } : {}) });
+}
+
+function globalChanges(before, after) {
+  const old = compatibilityInputs(before);
+  const current = compatibilityInputs(after);
+  return {
+    changedFields: [...new Set([...Object.keys(old), ...Object.keys(current)])]
+      .filter((key) => key !== 'files' && JSON.stringify(old[key]) !== JSON.stringify(current[key]))
+      .sort(),
+    changedFiles: changedInputPaths(old, current),
+  };
+}
+
 function validateManifest(manifest, inputs, policy) {
   if (manifest?.schemaVersion !== CACHE_SCHEMA || manifest.completed !== true)
-    throw new Error('Invalid or incomplete cache manifest');
+    throw rejection('Invalid or incomplete cache manifest', 'invalid-manifest');
   if (manifest.inputsHash !== fingerprint(manifest.inputs))
-    throw new Error('Corrupt cached input manifest');
+    throw rejection('Corrupt cached input manifest', 'corrupt-input-manifest');
   if (globalFingerprint(manifest.inputs) !== globalFingerprint(inputs))
-    throw new Error('Global mutation inputs changed');
+    throw rejection(
+      'Global mutation inputs changed',
+      'global-inputs-changed',
+      globalChanges(manifest.inputs, inputs),
+    );
   assertCompatibleModes(manifest.inputs, inputs);
   reuseContext(manifest.inputs);
   reuseContext(inputs);
   if (policy && !samePolicyExceptContext(manifest.policy, policy))
-    throw new Error('Equivalence policy changed beyond parser context');
+    throw rejection(
+      'Equivalence policy changed beyond parser context',
+      'equivalence-policy-changed',
+    );
 }
 
 function authenticatedBaselineSources(report, baselineFiles) {
@@ -83,14 +110,15 @@ function authenticatedBaselineSources(report, baselineFiles) {
   const baselineHashes = new Map(baselineFiles.map((entry) => [entry[0], entry.at(-1)]));
   for (const [file, record] of Object.entries({ ...report.files, ...report.testFiles })) {
     if (baselineHashes.get(file) !== sha256(record.source))
-      throw new Error('Cached report/input source mismatch');
+      throw rejection('Cached report/input source mismatch', 'report-source-mismatch');
   }
   return baselineSources;
 }
 
 export function validateCache(manifest, reportText, inputs, audit, policy) {
   validateManifest(manifest, inputs, policy);
-  if (manifest.reportSha256 !== sha256(reportText)) throw new Error('Corrupt cached report');
+  if (manifest.reportSha256 !== sha256(reportText))
+    throw rejection('Corrupt cached report', 'corrupt-report');
   const report = JSON.parse(reportText);
   const baselineSources = authenticatedBaselineSources(report, manifest.inputs.files);
   const summary = audit(report, manifest.policy, baselineSources);
@@ -99,7 +127,7 @@ export function validateCache(manifest, reportText, inputs, audit, policy) {
     summary.total !== manifest.total ||
     JSON.stringify(summary) !== JSON.stringify(manifest.audit)
   )
-    throw new Error('Cached inventory or audit mismatch');
+    throw rejection('Cached inventory or audit mismatch', 'inventory-audit-mismatch');
   return report;
 }
 
@@ -116,9 +144,15 @@ export async function readCache(root, inputs, audit, policy) {
       report: validateCache(manifest, reportText, inputs, audit, policy),
       manifest,
       reason: 'validated baseline',
+      reasonCode: 'validated-baseline',
     };
   } catch (error) {
-    return { report: null, reason: error.code === 'ENOENT' ? 'cache missing' : error.message };
+    return {
+      report: null,
+      reason: error.code === 'ENOENT' ? 'cache missing' : error.message,
+      reasonCode: error.code === 'ENOENT' ? 'cache-missing' : (error.code ?? 'invalid-baseline'),
+      details: error.details ?? null,
+    };
   }
 }
 

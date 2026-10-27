@@ -10,14 +10,18 @@ const trustRoots = new Set([
 // Source-bound reviewed execution shapes, not automatic capture-time approval.
 // A runtime edit requires independent review before this committed map changes.
 const reviewed = {
+  'scripts/mutation-workflow-inputs.mjs':
+    '19313a5a20011332f837148283071b0782fb0efe1c580068c3254dc9700a3d44',
+  'scripts/mutation-resource-inputs.mjs':
+    'be23f4edfcbf748f02cc8b6ece65c3a1950b2ca1e210cbb60cba641706c8cdca',
   'scripts/mutation-cache-inputs.mjs':
-    'eb5547c212871cbe3a4b3032947f23e8b3d6c0f74d33979e781d4d65c683f8bf',
-  'scripts/mutation-cache.mjs': 'd26eb4023fc1b42b4ebdc19959f3b41ae477c5e9cb8d727dc13182516fd2cdd2',
+    '2859b7fd18a7bf1604ceb76b48ca49e06e05145b4077c129d5f5ab6ea130c9b2',
+  'scripts/mutation-cache.mjs': 'f3bf889267ebfcef6bac817264033ee45cbee5125f397a36aa294c4809217185',
   'scripts/mutation-compatibility.mjs':
-    '4283cee186f7805b47939604314f5e8ec7f9a4e51856e09f58a7220733a76082',
+    '95a61b2734ee03e0153f0aa4db564a25721b0f0d83847f26dfc3b53b9d6ded82',
   'scripts/mutation-execution-guard.mjs':
     '9eda4229e3d3839f62de030d2ff70ae5ad7cf8ec126e9246442c093f78c2657e',
-  'scripts/mutation-impact.mjs': 'd1094c0261a0cd3910e457493aa1590abc49a6905dba0029ed95bbbad54fb15f',
+  'scripts/mutation-impact.mjs': 'f62c672ae4488e29f22c35c4d76e0a02ae95b3a7f61463d372323fc56e50fc77',
   'scripts/mutation-import-capabilities.mjs':
     'f1776f1783b6d02f912c9a036324619722224e4af9b1713b0c653b7bfc2c6d87',
   'scripts/mutation-loader-inputs.mjs':
@@ -27,7 +31,7 @@ const reviewed = {
   'scripts/mutation-policy.mjs': '6fa5c5fccb37e6857d41e77002be6e89e792e696c81b64cc1dfeb3cd5c3c5ed8',
   'scripts/mutation-reviewed-data-access.mjs':
     '9affbe356bdf1a3b957bd57e6b1055cbaafed38f8ff0dd450d76b2e5c33505d2',
-  'scripts/run-mutations.mjs': 'e9cde4ef508118c5e086bd7b2f40048144514979c1d4b95ff31f34d59d916f8e',
+  'scripts/run-mutations.mjs': 'b6104bede4eb97d7c3893df5c6b4cb212f6b1944e002483d9e069edf63615206',
 };
 
 export function assertReviewedRuntime(files) {

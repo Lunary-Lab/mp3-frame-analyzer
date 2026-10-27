@@ -5,17 +5,25 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  restoreBaseline,
+  restoreBaseline as restoreVerifiedBaseline,
   trustedRun,
   trustedArtifact,
   verifyArchive,
   verifyEntries,
 } from './restore-mutation-baseline.mjs';
 import { sha256 } from './mutation-policy.mjs';
+// These fixtures isolate authenticated transport; production defaults validate full cache inputs.
+const restoreBaseline = (root, repo, sha, api, options = {}) =>
+  restoreVerifiedBaseline(root, repo, sha, api, {
+    currentHead: sha,
+    validateCandidate: () => true,
+    ...options,
+  });
 const repo = 'owner/project';
 const commit = 'a'.repeat(40);
 const run = {
   id: 12,
+  run_attempt: 1,
   repository: { id: 1, full_name: repo },
   head_repository: { id: 1, full_name: repo },
   head_sha: commit,
@@ -102,11 +110,13 @@ test('real zip transport validates digest and fixed JSON entries; failures remov
       digest: 'sha256:' + sha256(bytes),
     };
     const api = (path) =>
-      path.includes('/workflows/')
-        ? JSON.stringify({ workflow_runs: [run] })
-        : path.endsWith('/zip')
-          ? bytes
-          : JSON.stringify({ artifacts: [realArtifact] });
+      path.endsWith('/runs/12')
+        ? JSON.stringify(run)
+        : path.includes('/workflows/')
+          ? JSON.stringify({ workflow_runs: [run] })
+          : path.endsWith('/zip')
+            ? bytes
+            : JSON.stringify({ artifacts: [realArtifact] });
     const result = await restoreBaseline(root, repo, commit, api);
     assert.equal(result.restored, true);
     assert.equal(result.artifactId, artifact.id);

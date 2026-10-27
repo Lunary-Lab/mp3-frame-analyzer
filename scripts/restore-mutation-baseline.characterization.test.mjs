@@ -4,13 +4,25 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { restoreBaseline, trustedArtifact, trustedRun } from './restore-mutation-baseline.mjs';
+import {
+  restoreBaseline as restoreVerifiedBaseline,
+  trustedArtifact,
+  trustedRun,
+} from './restore-mutation-baseline.mjs';
 import { sha256 } from './mutation-policy.mjs';
+// These fixtures isolate authenticated transport; production defaults validate full cache inputs.
+const restoreBaseline = (root, repo, sha, api, options = {}) =>
+  restoreVerifiedBaseline(root, repo, sha, api, {
+    currentHead: sha,
+    validateCandidate: () => true,
+    ...options,
+  });
 
 const repository = 'owner/project';
 const commit = 'a'.repeat(40);
 const run = {
   id: 12,
+  run_attempt: 1,
   repository: { id: 1, full_name: repository },
   head_repository: { id: 1, full_name: repository },
   head_sha: commit,
@@ -34,10 +46,11 @@ const artifact = {
     head_repository_id: 1,
   },
 };
-const miss = {
-  restored: false,
-  reason: 'No authenticated compatible baseline; full run required',
-};
+function assertMiss(result, reasonCode) {
+  assert.equal(result.restored, false);
+  assert.equal(result.reason, 'No authenticated compatible baseline; full run required');
+  assert.ok(result.reasonCodes.includes(reasonCode));
+}
 
 test('run identity gates reject missing, nonpositive, fractional and unsafe repository IDs', () => {
   for (const value of [undefined, null, 0, -1, 0.5, Number.MAX_SAFE_INTEGER + 1, '1']) {
@@ -99,7 +112,7 @@ test('invalid baseline coordinates clear stale state before any API call', async
         calls++;
         throw new Error('must not request');
       };
-      assert.deepEqual(await restoreBaseline(root, repo, sha, api), miss);
+      assertMiss(await restoreBaseline(root, repo, sha, api), 'invalid-baseline-coordinates');
       assert.equal(calls, 0);
       await assertCleared(root);
     }
@@ -135,6 +148,7 @@ function transport(fixture, runs = [run], artifacts = [fixture.artifact]) {
       calls.push([path, binary]);
       if (path.includes('/workflows/')) return JSON.stringify({ workflow_runs: runs });
       if (path.endsWith('/zip')) return fixture.bytes;
+      if (path.endsWith('/runs/12')) return JSON.stringify(run);
       return JSON.stringify({ artifacts });
     },
   };
@@ -151,13 +165,17 @@ test('restore selects the first trusted run and exactly one trusted artifact in 
     );
     const provenance = {
       sourceCommit: commit,
+      anchorCommit: commit,
+      testedCommit: commit,
       runId: run.id,
+      observedRunAttempt: run.run_attempt,
       artifactId: artifact.id,
       archiveDigest: fixture.artifact.digest,
     };
     assert.deepEqual(await restoreBaseline(root, repository, commit, api), {
       restored: true,
       ...provenance,
+      reasonCodes: ['run-provenance-rejected'],
     });
     assert.deepEqual(calls, [
       [
@@ -166,6 +184,7 @@ test('restore selects the first trusted run and exactly one trusted artifact in 
       ],
       [`repos/${repository}/actions/runs/${run.id}/artifacts?per_page=100`, undefined],
       [`repos/${repository}/actions/artifacts/${artifact.id}/zip`, true],
+      [`repos/${repository}/actions/runs/${run.id}`, undefined],
     ]);
     assert.equal(
       await readFile(join(root, '.cache/mutation/validated/manifest.json'), 'utf8'),
@@ -176,8 +195,11 @@ test('restore selects the first trusted run and exactly one trusted artifact in 
       provenance,
     );
     const duplicate = transport(fixture, [run], [fixture.artifact, fixture.artifact]);
-    assert.deepEqual(await restoreBaseline(root, repository, commit, duplicate.api), miss);
-    assert.equal(duplicate.calls.length, 2);
+    assertMiss(
+      await restoreBaseline(root, repository, commit, duplicate.api),
+      'artifact-provenance-rejected',
+    );
+    assert.equal(duplicate.calls.length, 3);
     await assertCleared(root);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -197,8 +219,8 @@ test('manifest provenance, report digest and report JSON fail closed after authe
       const fixture = await archive(root, report, patch);
       await seedStaleState(root);
       const { api, calls } = transport(fixture);
-      assert.deepEqual(await restoreBaseline(root, repository, commit, api), miss);
-      assert.equal(calls.length, 3);
+      assertMiss(await restoreBaseline(root, repository, commit, api), 'source-rejected');
+      assert.equal(calls.length, 4);
       await assertCleared(root);
     }
   } finally {

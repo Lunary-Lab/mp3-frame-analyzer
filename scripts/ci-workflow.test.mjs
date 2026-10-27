@@ -17,6 +17,7 @@ const required = [
   'compatibility',
   'tooling',
   'mutation-cache',
+  'mutation-cache-scenarios',
   'mutation',
   'encoder',
   'npm-audit',
@@ -181,8 +182,10 @@ test('the actual aggregate program rejects every failure, cancellation, missing 
 });
 
 test('the complete cache campaign is required and parallel to parser mutation', () => {
-  assert.match(job('mutation-cache'), /npm run test:mutation-cache:integration/);
-  assert.doesNotMatch(job('mutation-cache'), /needs:|--impact-only/);
+  assert.match(job('mutation-cache-scenarios'), /npm run test:mutation-cache:integration/);
+  assert.doesNotMatch(job('mutation-cache-scenarios'), /needs:|--impact-only/);
+  assert.match(job('mutation-cache'), /if: always\(\)/);
+  assert.match(job('mutation-cache'), /needs: \[mutation-cache-scenarios\]/);
   assert.match(job('mutation'), /needs: \[types, unit, tooling\]/);
   assert.match(job('mutation'), /verify-encoder-discovery\.mjs reports\/mutation\/mutation\.json/);
   assert.match(job('mutation'), /inputs\.full_mutation == true/);

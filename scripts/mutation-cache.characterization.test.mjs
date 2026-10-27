@@ -353,3 +353,22 @@ test(
     }
   },
 );
+
+test('global cache rejection exposes stable field and path diagnostics without values', () => {
+  const f = fixture();
+  const changed = structuredClone(f.inputs);
+  changed.environmentSha256 = 'private-value-must-not-appear';
+  changed.files.push(['tests/fixture.json', 0o644, sha256('private fixture data')]);
+  assert.throws(
+    () => validateCache(f.manifest, f.reportText, changed, () => f.summary, f.policy),
+    (error) => {
+      assert.equal(error.code, 'global-inputs-changed');
+      assert.deepEqual(error.details, {
+        changedFields: ['environmentSha256'],
+        changedFiles: ['tests/fixture.json'],
+      });
+      assert.doesNotMatch(JSON.stringify(error.details), /private/);
+      return true;
+    },
+  );
+});

@@ -203,7 +203,7 @@ runs and explicitly full manual runs use unique run groups: `cancel-in-progress:
 false` alone does not prevent GitHub from replacing a pending run. Release-tag
 validation uses its own noncanceling group, and publication keeps its independent
 lock. Release Please explicitly dispatches non-full PR validation; the normal
-baseline, fresh discovery, exact-main cache authentication and fail-closed reuse
+baseline, fresh discovery, authenticated compatible-main-ancestor cache selection and fail-closed reuse
 policy still apply. Full scheduled/release/manual validation never restores a
 result baseline. These are scheduling changes, not measured hosted speedup claims.
 

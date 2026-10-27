@@ -40,7 +40,7 @@ function inspectImport(node, path, files, visit) {
   if (!ts.isStringLiteral(node.moduleSpecifier)) throw new Error('Opaque mutation runtime import');
   const specifier = node.moduleSpecifier.text;
   if (specifier.startsWith('.')) visit(resolve(path, specifier, files));
-  else if (!builtins.has(specifier) && specifier !== 'typescript')
+  else if (!builtins.has(specifier) && !['typescript', 'yaml'].includes(specifier))
     throw new Error(`Unreviewed mutation runtime package: ${specifier}`);
 }
 

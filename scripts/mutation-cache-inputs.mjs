@@ -6,7 +6,7 @@ import { arch, platform, release, version } from 'node:os';
 import { sha256 } from './mutation-policy.mjs';
 import { compatibilityInputs, sourceInput } from './mutation-compatibility.mjs';
 
-export const CACHE_SCHEMA = 3;
+export const CACHE_SCHEMA = 4;
 
 // No arbitrary inherited variables (including credentials) reach test code.
 // New supported inputs must be added here AND to the invalidation tests.

@@ -47,6 +47,7 @@ for (const source of [
   "import.meta.resolve('./release-smoke-process.mjs');",
   "import.meta['resolve']('vitest/package.json');",
   "import 'unknown-package';",
+  "import 'yaml/util';",
 ]) {
   test(`runtime loader aliases and unsupported roots fail closed: ${source}`, () => {
     assert.throws(() => runtimeDependencyPaths(new Map([[root, source]])), /mutation runtime/);
@@ -57,4 +58,17 @@ test('only the two reviewed literal package resolutions are accepted', () => {
   const source =
     "import.meta.resolve('vitest/package.json'); import.meta.resolve('@stryker-mutator/core/package.json');";
   assert.deepEqual(runtimeDependencyPaths(new Map([[root, source]])), new Set([root]));
+});
+
+test('the reviewed YAML parser is allowed without treating workflow data as executable source', () => {
+  const source = "import { parseDocument } from 'yaml';";
+  assert.deepEqual(
+    runtimeDependencyPaths(
+      new Map([
+        [root, source],
+        ['.github/workflows/ci.yml', 'on: [push]'],
+      ]),
+    ),
+    new Set([root]),
+  );
 });
