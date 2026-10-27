@@ -11,10 +11,10 @@ import {
   readJson,
   releaseNames,
   repositoryRoot,
-  runFile,
+  runTar,
   runNpm,
   sha256,
-  validateArchiveEntries,
+  validateRuntimeArchive,
 } from './release-utils.mjs';
 
 async function verifyReleaseMetadata(output, names, expected) {
@@ -56,27 +56,15 @@ export async function verifyArtifact() {
   const output = join(repositoryRoot, 'release');
   const metadata = await verifyReleaseMetadata(output, names, expected);
   const archive = join(output, names.archive);
-  const listing = await runFile('tar', ['-tzf', archive]);
-  validateArchiveEntries(listing.stdout.trimEnd().split('\n'), names.base);
-  const verbose = await runFile('tar', ['-tvzf', archive]);
-  assert.ok(
-    verbose.stdout
-      .trimEnd()
-      .split('\n')
-      .every((line) => /^[d-]/.test(line)),
+  await validateRuntimeArchive(
+    archive,
+    names.base,
     'Archive must contain only regular files and directories',
   );
 
   const temporary = await mkdtemp(join(tmpdir(), 'mp3-release-smoke-'));
   try {
-    await runFile('tar', [
-      '-xzf',
-      archive,
-      '-C',
-      temporary,
-      '--no-same-owner',
-      '--no-same-permissions',
-    ]);
+    await runTar(['-xzf', archive, '-C', temporary, '--no-same-owner', '--no-same-permissions']);
     const runtime = join(temporary, names.base);
     assert.deepEqual(await readJson(join(runtime, 'release-metadata.json')), metadata);
     const pkg = await readJson(join(runtime, 'package.json'));

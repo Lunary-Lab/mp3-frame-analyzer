@@ -55,11 +55,21 @@ test('release packaging works when the checkout directory differs from the packa
     // Build-tool dependencies belong to the producer, never the runtime archive.
     await symlink(join(repositoryRoot, 'node_modules'), join(root, 'node_modules'), 'dir');
     const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+    const marker = join(root, 'tar-hook-ran');
+    const hook = join(root, 'tar-hook');
+    await writeFile(hook, `#!/bin/sh\nprintf observed > '${marker}'\n`, { mode: 0o700 });
     await run(process.execPath, ['scripts/package-release.mjs'], {
       cwd: root,
-      env: { ...process.env, SOURCE_COMMIT: head, RELEASE_TAG: 'v' + pkg.version },
+      env: {
+        ...process.env,
+        SOURCE_COMMIT: head,
+        RELEASE_TAG: 'v' + pkg.version,
+        TAR_OPTIONS: `--checkpoint=1 --checkpoint-action=exec=${hook}`,
+        GZIP: '--not-a-supported-gzip-option',
+      },
       timeout: 30_000,
     });
+    await assert.rejects(readFile(marker), { code: 'ENOENT' });
     const sbom = JSON.parse(
       await readFile(join(root, 'release', pkg.name + '-' + pkg.version + '.cdx.json'), 'utf8'),
     );

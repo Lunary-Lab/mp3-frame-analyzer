@@ -318,3 +318,19 @@ The limit is not identity fairness, a request-rate limiter, a universal memory
 ceiling or a distributed quota. Slow clients can occupy all slots until the
 existing transport timeouts; rejected new requests receive no priority. Configure
 connection/rate limits at ingress, and tune concurrency using measured workloads.
+
+### Native release archive environments
+
+Release archive creation, shared member/type preflight, runtime smoke extraction and
+fixed packaged-lock reads run native tar with only the selected host `PATH` and a
+fixed C locale. Ambient `TAR_OPTIONS` and `GZIP` are not inherited.
+The host executables and selected PATH remain trusted infrastructure; this is not
+a portable executable resolver or a claim that all operating-system tools are immutable.
+
+Archive checksums establish byte identity, not safety from caller-supplied native
+configuration. Checkpoint commands can run even while listing an otherwise valid
+tar archive. Each artifact consumer retains its existing checksum, source identity,
+member inventory and regular-file validation before extraction. This change does
+not restore the removed custom mutation-baseline ZIP reader or change native
+mutation caching. No generic subprocess environment or npm/GitHub credential
+handling is changed.

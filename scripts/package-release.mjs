@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadVersionMetadata } from './verify-version.mjs';
 import { productionSbom } from './production-sbom.mjs';
-import { isMain, releaseNames, repositoryRoot, runFile, runNpm, sha256 } from './release-utils.mjs';
+import { isMain, releaseNames, repositoryRoot, runTar, runNpm, sha256 } from './release-utils.mjs';
 
 async function checkCompiledFiles(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -73,7 +73,7 @@ export async function packageRelease() {
     // Replace only generated release output. The source and build output stay intact.
     await rm(output, { recursive: true, force: true });
     await mkdir(output);
-    await runFile('tar', [
+    await runTar([
       '--sort=name',
       '--mtime=@0',
       '--owner=0',
