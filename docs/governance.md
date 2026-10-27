@@ -55,6 +55,43 @@ The repository cannot be deleted through this configuration:
 
 [`.terraform.lock.hcl`](../governance/.terraform.lock.hcl) records the provider's checksums for Linux, macOS and Windows; CI installs it with `-lockfile=readonly`. The Terraform archive CI downloads is checked against a SHA-256 taken from `terraform_1.16.7_SHA256SUMS`, whose signature by HashiCorp's key `C874 011F 0AB4 0511 0D02 1055 3436 5D94 72D7 468F` was verified when it was pinned.
 
+CI extracts the verified archive into an exclusive temporary directory, ignoring
+curl configuration and inherited unzip options. Terraform uses fresh job-local
+data, an empty CLI configuration and no inherited CLI arguments, plugin-cache
+bypass or reattached provider. This isolates the verification lane, not the
+operator's separate live-state procedure below.
+
+This configuration has no child modules. Native `init -get=false` prevents module
+downloads; adding modules requires reviewing that decision rather than silently
+fetching a new dependency graph. Provider installation still uses the committed
+lock and native checksum verification. However, readonly init can **succeed with
+a warning when an existing provider entry has no hashes**. CI therefore consumes
+native `init -json` output and rejects diagnostics, empty/malformed/incomplete
+output and a nonzero exit before `validate` or `test` can execute providers.
+Warnings fail closed, including legitimate lock updates requiring review.
+
+This is a **post-download/pre-provider-execution** gate, **not a pre-acquisition
+hash-presence guarantee**: native init may download a provider before warning or
+rejecting a missing lock. Hashes bind bytes to reviewed pins; they do not establish
+that those bytes, the runner, or the initial upstream release are trustworthy or
+vulnerability-free. No custom HCL scanner, extra compiler or module resolver is
+used. See the native [init flags](https://developer.hashicorp.com/terraform/cli/commands/init)
+and [JSON interface](https://developer.hashicorp.com/terraform/internals/machine-readable-ui).
+
+The focused `scripts/terraform-integrity.test.mjs` tests use harmless ZIP fixtures
+and a stubbed init with the actual native jq gate. Governance CI also runs the
+short stdlib-only `scripts/check-terraform-init.py` regression after verified
+bootstrap. Native init generates a lock for a locally generated harmless marker
+ZIP in an explicit filesystem-only mirror, then checks valid, wrong and hashless
+locks in fresh directories. Both paths use [`init-integrity.jq`](../governance/init-integrity.jq).
+The regression checks native/gate exits, diagnostic causes, unchanged readonly
+locks and absent marker, with no real provider or provider-executing commands.
+It is **untraced**: absent marker is not proof of zero network/syscall activity.
+Local syscall tracing was denied (`PTRACE_TRACEME`); it was not retried or
+emulated. Real-provider validation also remains locally unverified because its
+Unix-socket operation was denied; neither denial is bypassed by this init-only
+synthetic test.
+
 ## State
 
 The state lives on the operator's machine at `~/.local/state/mp3-frame-analyzer-governance/terraform.tfstate`: the directory is mode 700 and the file 600. The local backend locks the file during operations.

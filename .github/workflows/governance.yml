@@ -18,28 +18,55 @@ jobs:
     timeout-minutes: 5
     env:
       TERRAFORM_VERSION: 1.16.7
+      TF_WORKSPACE: default
+      TF_CLI_ARGS: ''
+      TF_CLI_ARGS_init: ''
+      TF_CLI_ARGS_validate: ''
+      TF_CLI_ARGS_test: ''
+      TF_CLI_ARGS_fmt: ''
+      TF_PLUGIN_CACHE_DIR: ''
+      TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE: ''
+      TF_REATTACH_PROVIDERS: ''
+      CHECKPOINT_DISABLE: '1'
       # From terraform_1.16.7_SHA256SUMS, whose HashiCorp signature (primary key
       # C874011F0AB405110D02105534365D9472D7468F) was verified when pinned.
       TERRAFORM_SHA256: 5454efcf7fc87f0c2113111b9a5c7182f0ca1c6f0f23a1e110a50770a8fe473b
     defaults:
       run:
+        shell: bash
         working-directory: governance
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
+      - name: Isolate Terraform configuration and data
+        run: |
+          directory="$RUNNER_TEMP/terraform-context"
+          mkdir -m 700 "$directory"
+          mkdir -m 700 "$directory/data"
+          printf '\n' > "$directory/terraform.rc"
+          printf 'TF_DATA_DIR=%s/data\nTF_CLI_CONFIG_FILE=%s/terraform.rc\n' "$directory" "$directory" >> "$GITHUB_ENV"
       - name: Install the pinned Terraform release
         run: |
-          archive="$RUNNER_TEMP/terraform.zip"
-          curl -fsSLo "$archive" "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
-          echo "${TERRAFORM_SHA256}  ${archive}" | sha256sum --check
-          unzip -q "$archive" -d "$RUNNER_TEMP/terraform"
-          echo "$RUNNER_TEMP/terraform" >> "$GITHUB_PATH"
+          directory="$RUNNER_TEMP/terraform"
+          mkdir -m 700 "$directory"
+          archive="$directory/terraform.zip"
+          curl -q --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 180 --max-filesize 134217728 --output "$archive" "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
+          echo "${TERRAFORM_SHA256}  ${archive}" | sha256sum --check --strict
+          env -i PATH=/usr/bin:/bin unzip -q "$archive" -d "$directory/bin"
+          echo "$directory/bin" >> "$GITHUB_PATH"
+      - name: Test native init integrity with a harmless local mirror
+        run: python3 -I ../scripts/check-terraform-init.py "$(command -v terraform)" init-integrity.jq
       - run: terraform fmt -check -recursive -diff
       # The provider is verified against the committed lock file. No GitHub
       # credential is passed to Terraform; tests use a mocked provider.
-      - run: terraform init -backend=false -input=false -lockfile=readonly
+      - name: Initialize without module downloads and reject incomplete locks
+        run: |
+          terraform init -backend=false -input=false -lockfile=readonly -get=false -json | tee "$TF_DATA_DIR/init.jsonl"
+          # Readonly init can warn, not fail, when a locked provider has no hashes.
+          # Gate native diagnostics after download, before validate/test execute providers.
+          jq -e -s -f init-integrity.jq "$TF_DATA_DIR/init.jsonl"
       - run: terraform validate
       - name: Test policy and the required-check contract against fixtures
         run: terraform test
