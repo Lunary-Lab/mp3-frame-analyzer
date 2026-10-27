@@ -26,3 +26,4 @@ crash.log
 .release-notes/
 .release-notes-input/
 .release-notes-native/
+reports/mutation-cache-validation/

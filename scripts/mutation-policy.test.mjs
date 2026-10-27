@@ -75,6 +75,24 @@ function fixture() {
 
 const run = ({ report, policy, sources }) => auditMutations(report, policy, sources);
 
+test('only admitted native same-input reuse permits an omitted timeout duration', () => {
+  const f = fixture();
+  f.killed.status = 'Timeout';
+  delete f.killed.duration;
+  assert.throws(() => run(f), /Invalid timeout evidence/);
+  assert.equal(
+    auditMutations(f.report, f.policy, f.sources, { nativeReuse: true }).adjustedScore,
+    100,
+  );
+  for (const duration of [0, -1, null, '1', NaN, Infinity]) {
+    f.killed.duration = duration;
+    assert.throws(
+      () => auditMutations(f.report, f.policy, f.sources, { nativeReuse: true }),
+      /Invalid timeout evidence/,
+    );
+  }
+});
+
 test('keeps the raw score separate and never rewrites the raw report', () => {
   const f = fixture();
   const before = structuredClone(f.report);

@@ -187,10 +187,10 @@ expectations. See
 
 The required `All checks` aggregate waits for every native validation job and
 rejects failures, cancellation, missing evidence and skipped jobs. Formatting,
-lint/workflow syntax, types, runtime coverage, compatibility, tooling, the complete
-mutation-cache campaign, parser mutation, encoder provenance, dependency CVEs,
+lint/workflow syntax, types, runtime coverage, compatibility, tooling, short native
+mutation-cache controls, parser mutation, encoder provenance, dependency CVEs,
 secrets, Semgrep, bounded fuzz/resource checks, packaged-runtime verification and
-repository governance validation are visible separately. The cache campaign is
+repository governance validation are visible separately. The cache controls are
 independent of parser mutation;
 both remain mandatory. Packaging keeps artifact verification and real runtime
 smoke together so the existing publisher receives only the same tested bytes.
@@ -203,7 +203,7 @@ runs and explicitly full manual runs use unique run groups: `cancel-in-progress:
 false` alone does not prevent GitHub from replacing a pending run. Release-tag
 validation uses its own noncanceling group, and publication keeps its independent
 lock. Release Please explicitly dispatches non-full PR validation; the normal
-baseline, fresh discovery, exact-main cache authentication and fail-closed reuse
+baseline, fresh discovery, authenticated compatible main/ancestor baselines and fail-closed reuse
 policy still apply. Full scheduled/release/manual validation never restores a
 result baseline. These are scheduling changes, not measured hosted speedup claims.
 

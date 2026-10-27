@@ -1,0 +1,95 @@
+name: Native parser mutation gate
+description: Full-scope Stryker incremental results from compatible successful main runs
+inputs:
+  base:
+    description: Commit whose trusted main ancestry may supply a baseline
+    required: true
+  full:
+    description: Force native execution for every mutant
+    required: true
+  publish:
+    description: Publish only audited ordinary main-push results
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Discard unauthenticated working-directory results
+      shell: bash
+      run: rm -f .cache/mutation/native-baseline.json .cache/mutation/working.json
+    - name: Select a successful main baseline, never a PR artifact
+      id: baseline
+      if: inputs.full != 'true'
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      env:
+        MUTATION_BASE_SHA: ${{ inputs.base }}
+      with:
+        script: |
+          try {
+            const repo = context.repo;
+            const base = process.env.MUTATION_BASE_SHA;
+            if (!/^[a-f0-9]{40}$/.test(base)) return;
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              ...repo, workflow_id: 'ci.yml', branch: 'main', event: 'push',
+              status: 'success', per_page: 20,
+            });
+            const run = data.workflow_runs.find(r => r.head_sha === base) ?? data.workflow_runs[0];
+            if (!run || run.status !== 'completed' || run.conclusion !== 'success' ||
+                run.event !== 'push' || run.head_branch !== 'main' ||
+                run.head_repository?.full_name !== `${repo.owner}/${repo.repo}`) return;
+            const comparison = await github.rest.repos.compareCommits({
+              ...repo, base: run.head_sha, head: base,
+            });
+            if (!['ahead', 'identical'].includes(comparison.data.status)) return;
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts,
+              { ...repo, run_id: run.id, per_page: 100 });
+            const matches = artifacts.filter(a => a.name === 'native-baseline.json' && !a.expired);
+            if (matches.length !== 1 || !/^sha256:[a-f0-9]{64}$/.test(matches[0].digest ?? '')) return;
+            core.setOutput('artifact', matches[0].id);
+            core.setOutput('run', run.id);
+            core.setOutput('commit', run.head_sha);
+          } catch {
+            core.notice('Mutation baseline unavailable; native full execution will run.');
+          }
+    - name: Download the selected immutable file with native digest verification
+      id: download
+      if: steps.baseline.outputs.artifact != ''
+      continue-on-error: true # Cache transport failure must fall back to full execution.
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+      with:
+        artifact-ids: ${{ steps.baseline.outputs.artifact }}
+        path: .cache/mutation
+        github-token: ${{ github.token }}
+        repository: ${{ github.repository }}
+        run-id: ${{ steps.baseline.outputs.run }}
+        digest-mismatch: error
+    - name: Run ordinary tests, full discovery and the adjusted mutation audit
+      shell: bash
+      env:
+        FORCE_FULL: ${{ inputs.full }}
+        MUTATION_BASELINE_SHA: ${{ steps.download.outcome == 'success' && steps.baseline.outputs.commit || '' }}
+      run: |
+        if [ "$FORCE_FULL" = true ]; then
+          node scripts/run-mutations.mjs --full
+        else
+          node scripts/run-mutations.mjs
+        fi
+    - name: Require active genuine encoder mutation coverage
+      shell: bash
+      run: node scripts/verify-encoder-discovery.mjs reports/mutation/mutation.json
+    - name: Publish audited main results; consumers require the whole CI run to succeed
+      if: success() && inputs.publish == 'true' && hashFiles('.cache/mutation/native-baseline.json') != ''
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        path: .cache/mutation/native-baseline.json
+        archive: false
+        include-hidden-files: true
+        if-no-files-found: error
+        retention-days: 30
+    - name: Upload mutation report
+      if: always()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: full-parser-mutation-report
+        path: reports/mutation/
+        retention-days: 14
+        if-no-files-found: ignore

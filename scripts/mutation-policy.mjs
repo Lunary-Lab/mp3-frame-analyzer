@@ -196,6 +196,13 @@ function validateMutantIdentity(file, source, mutant, mutantIds, seenFingerprint
   return key;
 }
 
+function validTimeoutEvidence(mutant, nativeReuse) {
+  return (
+    (Number.isFinite(mutant.duration) && mutant.duration > 0) ||
+    (nativeReuse && !Object.hasOwn(mutant, 'duration'))
+  );
+}
+
 function auditMutationOutcome(file, mutant, equivalent, counts, context) {
   if (equivalent && mutant.status === 'Survived') {
     requireThat(mutant.testsCompleted > 0, `${equivalent.id} was not tested`);
@@ -211,7 +218,7 @@ function auditMutationOutcome(file, mutant, equivalent, counts, context) {
   } else if (mutant.status === 'Timeout') {
     // Stryker counts timeouts as detected, not killed. Keep both visible.
     requireThat(
-      Number.isFinite(mutant.duration) && mutant.duration > 0,
+      validTimeoutEvidence(mutant, context.nativeReuse),
       `Invalid timeout evidence for mutant ${mutant.id}`,
     );
     counts.timedOut++;
@@ -253,16 +260,18 @@ function auditSourceMutants(file, source, record, context) {
  * Audit the unmodified raw report. No source mutation is skipped: exceptions
  * affect only the separately reported adjusted score, after every mutant has a
  * validated result. Reused results are identified separately by the wrapper;
- * a timeout always requires fresh positive duration evidence.
+ * native same-input reuse may omit duration; fresh timeouts require positive
+ * finite duration. Only an admitted native baseline may enable this option.
  * `sources` must contain every current runtime TypeScript file under src/mp3.
  */
-export function auditMutations(report, policy, sources) {
+export function auditMutations(report, policy, sources, { nativeReuse = false } = {}) {
   validateSchemas(report, policy);
   validateMutationConfiguration(report.config);
   const paths = validateSourceInventory(report, policy, sources);
   const exceptions = reviewedExceptions(policy, sources);
   const testIds = nativeTestIds(report.testFiles);
   const context = {
+    nativeReuse: nativeReuse === true,
     exceptions,
     testIds,
     seen: new Set(),
