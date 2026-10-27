@@ -5,6 +5,7 @@ const messages = new Set([
   'request completed',
   'request errored',
   'Unexpected upload failure',
+  'Upload iterator cleanup failed',
   'Upload connection was closed by the client',
   'Server startup failed',
   'Server shutdown failed',

@@ -43,7 +43,7 @@ The pinned multipart plugin reads `request.raw`, so a Fastify `preParsing` paylo
 
 The route hands the module a consumer, the frame counter, and never touches request bodies itself ([ADR 0001](adr/0001-upload-module-owns-the-upload-lifecycle.md)).
 
-Ordinary reader traversal now yields at bounded work intervals, including for immediately ready in-memory sources (see Cooperative traversal below). Free-format candidate inference remains synchronous within its bounded probe; cooperative inference scheduling and HTTP transport-to-parser cancellation remain separate follow-ups. These scheduling points improve opportunities for I/O and timers to run, but do not preempt arbitrary synchronous work or establish a latency guarantee.
+Ordinary reader traversal now yields at bounded work intervals, including for immediately ready in-memory sources (see Cooperative traversal below). Free-format candidate inference remains synchronous within its bounded probe; cooperative inference scheduling remains a separate follow-up. The HTTP adapter supplies cancellation for unfinished parser work after transport termination or an early completed response. These scheduling points improve opportunities for I/O and timers to run, but do not preempt arbitrary synchronous work or establish a latency guarantee.
 
 ## Why no MPEG parser package or FFmpeg dependency?
 
@@ -72,8 +72,8 @@ Embedded parser callers may supply an `AbortSignal`. Cancellation is checked at
 reader checkpoints and before/after scheduled turns; its reason is preserved
 through iterator cleanup. Already observed EOF does not cause a redundant
 iterator return. Arbitrary pending custom iterator calls cannot be forcibly
-interrupted. HTTP transport-to-parser cancellation is a separate adapter change;
-this slice does not add it or change the existing free-format inference rules.
+interrupted. The HTTP adapter supplies this signal while its parser consumer is
+running, so transport termination can stop obsolete work at these checkpoints.
 These deterministic work intervals improve responsiveness but are not a
 wall-clock latency SLA or a replacement for admission and deployment resource
 limits.

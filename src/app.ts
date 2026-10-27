@@ -5,6 +5,7 @@ import { ClientError } from './client-error.js';
 import { errorResponseFor } from './error-response.js';
 import { stopAfterResponse } from './multipart-budget.js';
 import { loggerOptions } from './logging.js';
+import { withUploadCancellation } from './upload-cancellation.js';
 import { closeIdleConnectionsAfterDrain } from './shutdown.js';
 import {
   defaultMaxMultipartBytes,
@@ -90,7 +91,9 @@ export async function buildApp({
       const include = includeVbrHeaderFrame(request.query);
       const frameCount = await admission.run(request, () =>
         uploads.consume(request, reply, (upload) =>
-          countMp3Frames(upload, { includeVbrHeaderFrame: include }),
+          withUploadCancellation(request.raw, reply.raw, (signal) =>
+            countMp3Frames(upload, { includeVbrHeaderFrame: include, signal }),
+          ),
         ),
       );
       return { frameCount };
