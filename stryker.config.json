@@ -5,7 +5,7 @@
   "coverageAnalysis": "perTest",
   "mutate": ["src/mp3/**/*.ts"],
   "reporters": ["clear-text", "progress", "json"],
-  "concurrency": 4,
+  "concurrency": 2,
   "timeoutMS": 2000,
   "thresholds": {
     "high": 100,

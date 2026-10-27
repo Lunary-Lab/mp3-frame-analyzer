@@ -112,20 +112,30 @@ exact-main baseline. A changed declared input still requires a cold run.
 
 ## Bounded native parallelism
 
-The parser uses four native Stryker test runners, while each Vitest runner keeps
+The parser uses two native Stryker test runners, while each Vitest runner keeps
 one worker. `timeoutMS` additional allowance (`2000ms`), parser scope and acceptance rules
 are unchanged. GitHub documents four CPUs and 16GB RAM for the public
 [`ubuntu-24.04` runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories).
 The mutation composite logs `os.availableParallelism()` and total memory so the
-actual hosted allocation is observable rather than assumed. Four is also an
+actual hosted allocation is observable rather than assumed. Two is also an
 explicit local bound; Stryker's automatic CPU-based default is not used.
 
-This is a bounded native concurrency choice, not a custom scheduler or a promise
-of twice the speed. Worker-budget changes are reviewed against the previous
+The worker budget is a measured native configuration choice, not a custom scheduler
+or a guarantee that more workers are faster. Worker-budget changes are reviewed against the previous
 report for elapsed time, raw timeouts, RuntimeErrors and mutant outcomes—not
 merely whether the adjusted score is green. Contention can
 change timeout behavior; revert the setting if the measured tradeoff is worse.
 See the [native concurrency option](https://stryker-mutator.io/docs/stryker-js/configuration/#concurrency-number--string).
+
+Mutation runs also use Vitest's supported
+[`BaseSequencer` extension](https://vitest.dev/config/sequence.html#sequence-sequencer)
+to try files with shorter native
+[cached durations](https://vitest.dev/api/advanced/vitest.html#cache-gettestspecificationresult)
+first. Stryker can stop after a killing test, so this may avoid expensive tests
+that cannot change an already detected result. The sorter retains every selected
+test specification and inherited native sharding; unknown durations sort last.
+It adds no profiler or timing store, changes no ordinary-test configuration, and
+makes no whole-parser speedup claim. Survivors still require all selected tests.
 
 ## Verification and limits
 
