@@ -23,6 +23,7 @@ const required = [
   'tooling',
   'mutation-cache',
   'mutation',
+  'mutation-pure',
   'encoder',
   'npm-audit',
   'trivy',
@@ -193,6 +194,32 @@ test('the complete cache campaign is required and parallel to parser mutation', 
   assert.match(job('mutation'), /inputs\.full_mutation == true/);
   assert.match(mutationAction, /node scripts\/run-mutations\.mjs --full/);
   assert.match(job('mutation'), /uses: \.\/\.github\/actions\/test-mutations/);
+});
+
+test('the pure runtime campaign is native, fresh, bounded, and preserves its own report', async () => {
+  const pure = parse(ci).jobs['mutation-pure'];
+  assert.equal(pure.name, 'Pure runtime mutation (100%)');
+  assert.equal(pure['timeout-minutes'], 10);
+  assert.equal(pure.needs, undefined);
+  assert.equal(pure.if, undefined);
+  assert.equal(pure.permissions, undefined); // Inherits the workflow's contents: read only.
+  assert.ok(pure.steps.some((step) => step.uses === './.github/actions/setup-project'));
+  assert.deepEqual(
+    pure.steps.filter((step) => step.run).map((step) => step.run),
+    ['timeout --signal=TERM --kill-after=5s 115s npm run mutation:pure'],
+  );
+  const report = pure.steps.find((step) => step.name === 'Retain pure-runtime-mutation-report');
+  assert.equal(report.if, 'always()');
+  assert.equal(report.with.path, 'reports/mutation-pure/');
+  assert.equal(report.with['if-no-files-found'], 'error');
+  assert.doesNotMatch(job('mutation-pure'), /test-mutations|restore|incremental|cache@|: write/);
+  const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(
+    pkg.scripts['mutation:pure'],
+    "node -e \"require('node:fs').rmSync('reports/mutation-pure', { recursive: true, force: true })\"" +
+      ' && stryker run stryker.nonparser-pure.config.mjs' +
+      ' && node scripts/nonparser-pure-scope.mjs reports/mutation-pure/mutation.json',
+  );
 });
 
 test('only ordinary validation can restore results; every protected validation forces full', () => {

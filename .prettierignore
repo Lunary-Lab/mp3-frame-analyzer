@@ -16,3 +16,5 @@ CHANGELOG.md
 .cache/
 governance/.terraform/
 governance/snapshots/
+
+.stryker-pure-tmp/

@@ -20,7 +20,10 @@ export interface ErrorResponse {
  * their numeric HTTP status. These four multipart limit errors use 413, but only one
  * actually means that the uploaded file's bytes exceeded the size limit.
  */
-const frameworkClientErrors = new Map<string, readonly [number, string, string]>([
+const frameworkClientErrors: ReadonlyMap<unknown, readonly [number, string, string]> = new Map<
+  string,
+  readonly [number, string, string]
+>([
   ['FST_REQ_FILE_TOO_LARGE', [413, 'file-too-large', 'MP3 file exceeds the upload limit']],
   ['FST_FILES_LIMIT', [413, 'too-many-files', 'Only one file part is allowed']],
   ['FST_FIELDS_LIMIT', [413, 'unexpected-fields', 'Multipart text fields are not allowed']],
@@ -80,8 +83,7 @@ function fromParseError(error: unknown): ErrorResponse | undefined {
 
 function fromFrameworkCode(error: unknown, form: UploadForm): ErrorResponse | undefined {
   const frameworkCode = propertyOf(error, 'code');
-  const mapped =
-    typeof frameworkCode === 'string' ? frameworkClientErrors.get(frameworkCode) : undefined;
+  const mapped = frameworkClientErrors.get(frameworkCode);
   if (mapped === undefined) return undefined;
   const [status, code, message] = mapped;
   return errorResponse(status, code, message, afterFrameworkFailure(form));
@@ -102,9 +104,11 @@ function fromMultipartProtocol(error: unknown, form: UploadForm): ErrorResponse 
  * potentially unsafe original messages or masquerade as multipart errors.
  */
 function fromClientStatus(error: unknown, form: UploadForm): ErrorResponse | undefined {
-  const status = propertyOf(error, 'statusCode');
-  if (typeof status !== 'number' || !Number.isInteger(status) || status < 400 || status >= 500)
-    return undefined;
+  const candidate = propertyOf(error, 'statusCode');
+  if (!Number.isInteger(candidate)) return undefined;
+  // Native integer validation rejects non-numbers without coercion.
+  const status = candidate as number;
+  if (status < 400 || status >= 500) return undefined;
   if (status === 413) {
     return errorResponse(
       413,

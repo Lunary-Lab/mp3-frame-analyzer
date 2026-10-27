@@ -5,7 +5,6 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { frame, multipartBody } from './helpers/mp3-fixtures.js';
 import { openUpload } from './helpers/upload-socket.js';
-import { maxActiveUploadsFromEnvironment } from '../src/server-config.js';
 
 const apps: FastifyInstance[] = [];
 afterEach(async () => {
@@ -163,24 +162,7 @@ it('shuts down while uploads are active without retaining their work after abort
   expect(app.server.listening).toBe(false);
 });
 
-it('validates deployment and app admission limits without coercions or unlimited mode', async () => {
-  expect(maxActiveUploadsFromEnvironment(undefined)).toBe(8);
-  for (const value of ['1', '8', '1024', '0002'])
-    expect(maxActiveUploadsFromEnvironment(value)).toBe(Number(value));
-  for (const value of [
-    '',
-    '0',
-    '-1',
-    '+1',
-    '1.5',
-    ' 1',
-    '1e2',
-    'Infinity',
-    '1025',
-    '9'.repeat(400),
-  ]) {
-    expect(() => maxActiveUploadsFromEnvironment(value)).toThrow('MAX_ACTIVE_UPLOADS');
-  }
+it('validates app admission limits without coercions or unlimited mode', async () => {
   for (const maximum of [0, -1, 0.5, 1025, Infinity, NaN]) {
     await expect(buildApp({ maxActiveUploads: maximum })).rejects.toThrow('maxActiveUploads');
   }

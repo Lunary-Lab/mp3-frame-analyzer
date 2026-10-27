@@ -27,3 +27,6 @@ crash.log
 .release-notes-input/
 .release-notes-native/
 reports/mutation-cache-validation/
+
+.stryker-pure-tmp/
+reports/mutation-pure/
