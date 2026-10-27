@@ -6,7 +6,7 @@ Downloaded a release archive? Start with its **RUNTIME.md**, also available in t
 
 ## Quick start
 
-Requirements: **Node.js 24 LTS** (Node.js 26 is also tested) and **npm 11.9 or later within major 11**. Development and release CI use **npm 11.19.0**, recorded in `packageManager`; the [verified bootstrap](docs/security.md#npm-bootstrap-integrity) selects that exact bundle by SHA-512 without a global install. Dependencies are locked in `package-lock.json`; use `npm ci` for reproducible installation.
+Requirements: **Node.js 24 LTS** (Node.js 26 is also tested) and **npm 11.9 or later within major 11**. Development and release CI use **npm 11.19.0**, recorded in `packageManager`; the [verified bootstrap](docs/security.md#npm-bootstrap-integrity) selects that exact bundle by SHA-512 without a global install. Dependencies are locked in `package-lock.json`; use `npm ci` for reproducible installation. The repository `.npmrc` deliberately disables automatic dependency/root lifecycle scripts, matching CI; native platform packages remain installed from the exact lock. Hooks are opt-in with `npm run hooks:install`, not installed by dependency postinstall.
 
 ```bash
 npm ci
@@ -183,7 +183,7 @@ k6 run bench/upload.k6.js
 - Node 24, native TypeScript 7 with the TypeScript 6 API compatibility alias, `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, ESM.
 - ESLint + type-aware `typescript-eslint`, maintained Node security rules for application code, JS/MJS linting for build/fuzz/benchmark scripts, enforced production cyclomatic complexity limits (errors above 10), advisory test complexity warnings above 16, and Prettier. See [code quality limits](docs/code-quality.md).
 - Vitest/V8 coverage with enforced thresholds; fast-check properties; mutation smoke, Jazzer.js coverage-guided fuzzing, and replayable crash regressions.
-- [Lefthook](https://lefthook.dev/) optional local hooks: `npm run hooks:install`. Pre-commit checks staged formatting and [Betterleaks](https://github.com/betterleaks/betterleaks) staged secrets (v1.9.0). Pre-push runs `npm run check`.
+- [Lefthook](https://lefthook.dev/) optional local hooks: `npm run hooks:install`. Pre-commit uses the installed locked Prettier CLI (no `npx` acquisition fallback) for staged formatting and [Betterleaks](https://github.com/betterleaks/betterleaks) staged secrets (v1.9.0). Pre-push runs `npm run check`.
 - GitHub Actions CI checks Node 24 and 26, a clean npm 11.9 installation, build/test/type/lint, focused mutation testing, bounded fuzzing, memory scaling, local HTTP measurements, complete and production dependency audits, workflow validation, Git-history secret scanning, fixed-config runtime architecture SAST, and an unpacked release artifact. Weekly dependency audits catch newly published advisories.
 - GitHub Actions are pinned to commit SHAs; validation jobs have read-only repository permissions and checkouts do not persist credentials. Dependabot monitors npm and Actions dependencies. Release automation has separate, narrowly scoped write permissions.
 

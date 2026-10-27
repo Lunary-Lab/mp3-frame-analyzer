@@ -80,7 +80,8 @@ hash before extraction or execution. npm's bundled dependencies are inside that
 same verified archive. There is no global npm install, secondary dependency
 resolution, or lifecycle script execution during bootstrap. Project installation
 retains its existing explicit `--ignore-scripts` policy; this change does not
-silently alter local `npm ci` behavior or remove working native tools.
+remove working native tools. Local lifecycle policy is explicit below; it is separate
+from archive identity verification.
 
 On Linux/macOS with Node and GNU tar, match CI without modifying a global install:
 
@@ -367,3 +368,24 @@ upgrades need a fresh advisory review and unchanged five-case byte/decode/count
 fixture oracle. The encoder binary is CI-only and is not shipped in the application
 runtime artifact. Upstream LAME library licensing and the bundled decoder licensing
 remain in the downloaded source; no third-party source or binary is vendored here.
+
+### Local install and hook defaults
+
+The repository `.npmrc` now deliberately sets `ignore-scripts=true`, so the ordinary
+documented `npm ci` does not execute root/dependency install lifecycle scripts.
+This aligns local acquisition with the explicit CI/release flags, avoiding esbuild
+fallback acquisition and automatic Lefthook installation during dependency setup.
+It does not remove optional platform packages or disable explicitly requested npm
+scripts: `npm run check` and the opt-in `npm run hooks:install` still execute.
+
+The staged formatting hook calls the installed locked Prettier CLI directly and
+fails if it is absent; it cannot invoke `npx` to acquire a substitute. Run `npm ci`
+first. Local Betterleaks and the developer-selected Node/PATH are still explicitly
+provisioned host tools; this change does not authenticate an arbitrary local binary
+or make local hooks equivalent to the independent required CI history scan.
+
+This is a documented default, not a sandbox: explicit npm CLI/environment overrides
+can re-enable lifecycle scripts. Do not broadly enable them to repair an unsupported
+platform; diagnose the exact native package and review its acquisition first.
+Dependency code can still execute when an application or tool is intentionally run;
+skipping lifecycle scripts is not a claim that packages are benign or CVE-free.
