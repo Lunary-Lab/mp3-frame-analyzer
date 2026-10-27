@@ -233,11 +233,11 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-node-verified
-      - name: Install required independent encoder
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends lame
+      - uses: ./.github/actions/setup-lame-verified
+        id: encoder
       - name: Regenerate, decode and verify every fixed encoder fixture
+        env:
+          LAME_BINARY: ${{ steps.encoder.outputs.binary }}
         run: node scripts/encoder-fixtures.mjs
 
   npm-audit:

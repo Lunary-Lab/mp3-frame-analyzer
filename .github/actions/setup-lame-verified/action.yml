@@ -1,0 +1,15 @@
+name: Verified independent LAME encoder
+description: Build the reviewed LAME source and selected frontend patch after native hash verification
+outputs:
+  binary:
+    description: Exact freshly built LAME executable
+    value: ${{ steps.encoder.outputs.binary }}
+runs:
+  using: composite
+  steps:
+    - name: Verify both LAME archives and build the isolated native encoder
+      id: encoder
+      shell: bash
+      run: |
+        binary="$(bash scripts/bootstrap-lame.sh)"
+        printf 'binary=%s\n' "$binary" >> "$GITHUB_OUTPUT"
