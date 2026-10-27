@@ -58,6 +58,15 @@ function selectRunnerPolicy(source) {
     (statement) => callName(statement.thenStatement) === 'promoteCache',
   );
   assert.equal(promotion.length, 2, 'Expected both direct promotion guards');
+  const checkPromotionBounds = (node) => {
+    if (ts.isCallExpression(node) && node.expression.getText(parsed) === 'promoteCache')
+      assert.ok(
+        node.getStart(parsed) >= promotion[0].getStart(parsed) && node.end <= promotion.at(-1).end,
+        'Runner promotion call lies outside the tested policy span',
+      );
+    ts.forEachChild(node, checkPromotionBounds);
+  };
+  checkPromotionBounds(parsed);
   const cleanup = guards.filter(
     (statement) =>
       ts.isForOfStatement(statement.thenStatement) &&
@@ -522,5 +531,18 @@ test('policy fragment selection retains an additional promotion between the guar
       ]);
       return true;
     },
+  );
+});
+
+test('policy fragment selection rejects a promotion after the tested guards', () => {
+  const lastPromotion = 'await promoteCache(root, report, inputsHash, prIdentity);';
+  const edited = runnerSource.replace(
+    lastPromotion,
+    `${lastPromotion}\nawait promoteCache(root, report, inputsHash, 'local');`,
+  );
+  assert.notEqual(edited, runnerSource);
+  assert.throws(
+    () => selectRunnerPolicy(edited),
+    /Runner promotion call lies outside the tested policy span/,
   );
 });
