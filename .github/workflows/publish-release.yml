@@ -96,7 +96,7 @@ jobs:
           assert.ok(Number.isSafeInteger(release.id) && release.id > 0);
           assert.equal(release.prerelease, false);
           assert.equal(typeof release.body, 'string');
-          const bodyHash = createHash('sha256').update(release.body.trim()).digest('hex');
+          const bodyHash = createHash('sha256').update(release.body.replace(/\r\n/g, '\n').trim()).digest('hex');
           appendFileSync(process.env.GITHUB_OUTPUT, `release_id=${release.id}\ndraft_body_sha256=${bodyHash}\n` +
             `environment_id=${environment.id}\napprover_id=${reviewer.reviewer.id}\n`);
           JS
@@ -282,7 +282,9 @@ jobs:
           assert.equal(digest(body), e.NOTES_BODY_SHA256);
           assert.equal(manifest.bodySha256, e.NOTES_BODY_SHA256);
           assert.match(manifest.userNotesSha256, /^[a-f0-9]{64}$/);
-          assert.ok([manifest.userNotesSha256, digest(body.trim())].includes(e.DRAFT_BODY_SHA256), 'Draft notes were independently edited');
+          assert.match(manifest.releasePleaseNotesSha256, /^[a-f0-9]{64}$/);
+          assert.ok([manifest.userNotesSha256, manifest.releasePleaseNotesSha256, digest(body.trim())]
+            .includes(e.DRAFT_BODY_SHA256), 'Draft notes were independently edited');
           mkdirSync('.release-bundle', { recursive: true });
           cpSync('release', '.release-bundle/release', { recursive: true });
           cpSync('notes', '.release-bundle/notes', { recursive: true });
@@ -494,6 +496,7 @@ jobs:
           assert.equal(manifest.producer.runAttempt, e.GITHUB_RUN_ATTEMPT);
           assert.equal(manifest.producer.workflowSha, e.RELEASE_SHA);
           assert.equal(manifest.userNotesSha256, e.ORIGINAL_NOTES_SHA256);
+          assert.match(manifest.releasePleaseNotesSha256, /^[a-f0-9]{64}$/);
           assert.equal(digest(body), e.NOTES_BODY_SHA256);
           assert.equal(manifest.bodySha256, e.NOTES_BODY_SHA256);
           const identity = JSON.parse(readFileSync('release-identity.json', 'utf8'));
@@ -519,7 +522,8 @@ jobs:
             assert.equal(release.draft, true);
             assert.equal(release.prerelease, false);
             assert.equal(typeof release.body, 'string');
-            assert.ok([e.ORIGINAL_NOTES_SHA256, digest(body.trim())].includes(digest(release.body.trim())), 'Draft text changed outside this candidate');
+            assert.ok([e.ORIGINAL_NOTES_SHA256, manifest.releasePleaseNotesSha256, digest(body.trim())]
+              .includes(digest(release.body.replace(/\r\n/g, '\n').trim())), 'Draft text changed outside this candidate');
             assert.equal(api(`commits/${e.RELEASE_TAG}`).sha, e.RELEASE_SHA);
           }
           requireDraft();

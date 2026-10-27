@@ -64,6 +64,13 @@ test('composition is deterministic and preserves every user/breaking/migration b
   assert.ok(result.body.includes(`([commit](https://github.com/${repository}/commit/${head}))`));
   assert.ok(result.body.includes(`compare/${base}...${head}`));
   assert.equal(result.manifest.userNotesSha256, digest(userNotes));
+  assert.equal(
+    result.manifest.releasePleaseNotesSha256,
+    digest(
+      userNotes +
+        '\n\n---\nThis PR was generated with [Release Please](https://github.com/googleapis/release-please). See [documentation](https://github.com/googleapis/release-please#release-please).',
+    ),
+  );
   assert.equal(result.manifest.bodySha256, digest(result.body));
   assert.deepEqual(result.manifest.producer, producer);
   // Recomposition starts from CHANGELOG, not an already composed draft body.
