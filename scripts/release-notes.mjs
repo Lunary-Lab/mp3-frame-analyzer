@@ -158,7 +158,7 @@ async function composeCommand() {
 
 if (isMain(import.meta.url)) {
   const commands = { plan: planCommand, compose: composeCommand };
-  const command = commands[process.argv[2]];
+  const command = Object.hasOwn(commands, process.argv[2]) ? commands[process.argv[2]] : undefined;
   assert.equal(typeof command, 'function', 'Usage: node scripts/release-notes.mjs plan|compose');
   await command();
 }

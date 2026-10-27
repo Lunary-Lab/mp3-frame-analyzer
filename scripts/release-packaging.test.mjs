@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -22,12 +22,17 @@ test('release packaging works when the checkout directory differs from the packa
       'docs/runtime.md',
       'scripts/package-release.mjs',
       'scripts/production-sbom.mjs',
+      'scripts/sbom-schema.mjs',
+      'scripts/sbom-graph.mjs',
       'scripts/release-utils.mjs',
       'scripts/verify-version.mjs',
     ]) {
       await mkdir(join(root, file, '..'), { recursive: true });
       await cp(join(repositoryRoot, file), join(root, file));
     }
+    await cp(join(repositoryRoot, 'scripts/schemas'), join(root, 'scripts/schemas'), {
+      recursive: true,
+    });
     await mkdir(join(root, 'dist'));
     await writeFile(join(root, 'dist/server.js'), 'export {};\n');
     await run('git', ['init', '--quiet'], { cwd: root });
@@ -47,6 +52,8 @@ test('release packaging works when the checkout directory differs from the packa
       { cwd: root },
     );
     const head = (await run('git', ['rev-parse', 'HEAD'], { cwd: root })).stdout.trim();
+    // Build-tool dependencies belong to the producer, never the runtime archive.
+    await symlink(join(repositoryRoot, 'node_modules'), join(root, 'node_modules'), 'dir');
     const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
     await run(process.execPath, ['scripts/package-release.mjs'], {
       cwd: root,

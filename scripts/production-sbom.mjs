@@ -3,6 +3,8 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runNpm } from './release-utils.mjs';
+import { validateSbomSchema } from './sbom-schema.mjs';
+import { validateResolvedGraph } from './sbom-graph.mjs';
 
 function productionEntries(lock) {
   assert.equal(lock.lockfileVersion, 3, 'Production SBOM requires the reviewed npm v3 lock format');
@@ -43,7 +45,17 @@ function expectedInventory(lock) {
   const inventory = new Map();
   for (const [path, record] of productionEntries(lock)) {
     const item = identity(path, record);
+    const encoded = /^sha512-([A-Za-z0-9+/]{86}==)$/.exec(record.integrity ?? '')?.[1];
+    assert.ok(encoded, 'Production SBOM requires locked SHA-512 integrity');
+    const bytes = Buffer.from(encoded, 'base64');
+    assert.equal(bytes.toString('base64'), encoded, 'Noncanonical production SHA-512 integrity');
+    item.sha512 = bytes.toString('hex');
     const previous = inventory.get(item.id) ?? { ...item, displays: new Set([item.name]) };
+    assert.equal(
+      previous.sha512,
+      item.sha512,
+      'Conflicting integrity for one production component',
+    );
     previous.displays.add(item.alias);
     inventory.set(item.id, previous);
   }
@@ -80,6 +92,11 @@ function validateComponents(components, inventory) {
     assert.equal(component.purl, item.purl, 'Production SBOM purl identity mismatch');
     assert.ok(item.displays.has(component.name), 'Production SBOM display identity mismatch');
     assert.equal(component.type, 'library', 'Production dependency must be a library');
+    assert.deepEqual(
+      component.hashes,
+      [{ alg: 'SHA-512', content: item.sha512 }],
+      'Production SBOM SHA-512 mismatch',
+    );
     assert.ok(!observed.has(item.id), 'Duplicate production SBOM component');
     observed.add(item.id);
   }
@@ -109,6 +126,7 @@ function validateRelationships(sbom, inventory, root) {
 }
 
 export function validateProductionInventory(sbom, lock) {
+  validateSbomSchema(sbom);
   assert.equal(sbom.bomFormat, 'CycloneDX', 'Expected native npm CycloneDX output');
   const inventory = expectedInventory(lock);
   validateComponents(sbom.components, inventory);
@@ -149,6 +167,23 @@ export async function productionSbom(root, { execute = runNpm } = {}) {
     );
     const sbom = JSON.parse(result.stdout);
     validateProductionInventory(sbom, lock);
+    const listing = await execute(
+      [
+        'ls',
+        '--all',
+        '--long',
+        '--json',
+        '--package-lock-only',
+        '--omit=dev',
+        '--offline',
+        '--ignore-scripts',
+        '--no-audit',
+        '--cache',
+        join(temporary, 'cache'),
+      ],
+      { cwd: temporary },
+    );
+    validateResolvedGraph(sbom, projection.lock, JSON.parse(listing.stdout), temporary);
     return sbom;
   } finally {
     await rm(temporary, { recursive: true, force: true });

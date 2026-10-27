@@ -33,6 +33,9 @@ function fixture() {
       'node_modules/shared': { version: '1.0.0' },
     },
   };
+  for (const [path, record] of Object.entries(lock.packages)) {
+    if (path) record.integrity = `sha512-${Buffer.alloc(64, 1).toString('base64')}`;
+  }
   return { pkg, lock };
 }
 
@@ -54,6 +57,7 @@ test('production projection retains exact shared/optional records and never muta
     version: '2.0.0',
     devOptional: true,
     optional: true,
+    integrity: `sha512-${Buffer.alloc(64, 2).toString('base64')}`,
   };
   const before = structuredClone({ pkg, lock });
   const projected = productionProjection(pkg, lock);
@@ -69,6 +73,27 @@ test('production projection retains exact shared/optional records and never muta
     lock.packages['node_modules/optional-shared'],
   );
   assert.deepEqual({ pkg, lock }, before);
+});
+
+test('locked integrity must be canonical SHA-512 and agree across duplicate component identities', () => {
+  const { pkg, lock } = fixture();
+  const record = lock.packages['node_modules/shared'];
+  const valid = record.integrity;
+  for (const integrity of [
+    undefined,
+    'sha256-AAAA',
+    `${valid} ${valid}`,
+    valid.replace(/Q==$/, 'R=='),
+  ]) {
+    record.integrity = integrity;
+    assert.throws(() => productionProjection(pkg, lock), /SHA-512/);
+  }
+  record.integrity = valid;
+  lock.packages['node_modules/alias'] = { ...record, name: 'shared' };
+  productionProjection(pkg, lock);
+  lock.packages['node_modules/alias'].integrity =
+    `sha512-${Buffer.alloc(64, 2).toString('base64')}`;
+  assert.throws(() => productionProjection(pkg, lock), /Conflicting integrity/);
 });
 
 test('native offline npm regression includes a dependency shared by production and dev paths', async () => {
@@ -127,7 +152,11 @@ test('aliases validate canonical package identity without misreading npm11 displ
   await temporaryFixture(async (root, pkg, lock) => {
     pkg.dependencies.alias = 'npm:@fixture/real@2.0.0';
     lock.packages[''].dependencies = pkg.dependencies;
-    lock.packages['node_modules/alias'] = { name: '@fixture/real', version: '2.0.0' };
+    lock.packages['node_modules/alias'] = {
+      name: '@fixture/real',
+      version: '2.0.0',
+      integrity: `sha512-${Buffer.alloc(64, 2).toString('base64')}`,
+    };
     await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
     await writeFile(join(root, 'package-lock.json'), JSON.stringify(lock));
     const sbom = await productionSbom(root);
