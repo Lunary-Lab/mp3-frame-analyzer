@@ -87,15 +87,11 @@ jobs:
       - uses: ./.github/actions/setup-zizmor
       - name: Require immutable workflow dependencies with native negative controls
         run: node scripts/verify-workflow-pins.mjs "${RUNNER_TEMP}/zizmor-tool/zizmor"
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: ./.github/actions/setup-go-tool
         with:
-          go-version: '1.27.3'
+          tool: actionlint
       - name: Lint native workflow syntax without compatibility bypasses
-        run: |
-          go telemetry off
-          test "$(go env GOTELEMETRY)" = off
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          "$(go env GOPATH)/bin/actionlint" -color
+        run: actionlint -color
 
   types:
     name: TypeScript (current and legacy)
@@ -331,16 +327,11 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
           fetch-depth: 0
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: ./.github/actions/setup-go-tool
         with:
-          go-version: '1.27.3'
-      - name: Install pinned Betterleaks without optional Go telemetry
-        run: |
-          go telemetry off
-          test "$(go env GOTELEMETRY)" = off
-          go install github.com/betterleaks/betterleaks@v1.9.0
+          tool: betterleaks
       - name: Scan entire Git history for secrets
-        run: '"$(go env GOPATH)/bin/betterleaks" git . --no-banner'
+        run: betterleaks git . --no-banner
 
   semgrep:
     name: Semgrep focused SAST

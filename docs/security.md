@@ -191,6 +191,64 @@ platform boundaries. No project checkout or bootstrap is added to those
 controls merely to replace their host Node. Hashes establish identity, not
 absence of vulnerabilities or malicious upstream behavior.
 
+## Go helper installation integrity
+
+Actionlint 1.7.12 and Betterleaks 1.9.0 are built from their separate committed
+tool modules in `.github/tools/`. Native `go.mod` tool declarations and exact
+requirements select the graphs; `go.sum` records Go's normalized-content SHA-256
+(`h1`) checksums for source modules and their metadata. The
+[Go module authentication rules](https://go.dev/ref/mod#authenticating) apply to
+both direct and transitive dependencies. Native readonly installation rejects
+missing hashes or graph updates instead of silently resolving a new dependency.
+Before acquisition, a shared stdlib-only profile check uses Go's read-only JSON
+parser to reject `replace`/`exclude` directives, missing lock inputs and unreviewed
+toolchain selectors. Local replacements would otherwise bypass module hashes;
+they are intentionally unsupported. Workspace, per-user Go settings and ambient
+build flags are disabled, and explicit readonly mode does not select vendoring.
+`GOCACHEPROG` is explicitly cleared and checked: an inherited external cache
+program could otherwise execute or supply compiled output outside the fresh
+cache. Native tests inject a marker command and require a successful offline
+build without executing it.
+
+CI acquires the exact Go 1.27.3 Linux x86-64 archive from the official download
+host, checking `.github/security/go-archive.sha256` with native `sha256sum`
+before extraction or execution. The fixed filename binds the version, platform
+and digest. `scripts/bootstrap-go.sh` rejects redirects, missing/weak hashes,
+unsupported platforms and occupied destinations; native curl configuration is
+disabled and download time/size are bounded. Its deterministic exclusive path
+includes the full version and digest. It never trusts a preinstalled compiler or
+cached extracted tree. An optional archive argument supports the same verified
+offline path. Failed directories remain unpublished for job cleanup; no existing
+directory is removed or reused. Initial compiler probes use a clean environment.
+Extraction also uses a clean native environment, so inherited `TAR_OPTIONS`
+checkpoint commands or gzip options cannot alter that operation.
+
+CI binds GOROOT/PATH to that verified compiler and gives GOPATH/temporary files
+fresh job-local directories. Module acquisition/build runs under an explicit
+environment allowlist, with `GOAUTH=off` and no inherited command hooks. Only
+proxy and CA transport settings are preserved: those can influence routing and
+origin trust, but the committed module hashes remain authoritative. It builds
+with `GOTOOLCHAIN=local`, so no module can download and select another compiler.
+This deliberately avoids upstream prebuilt helper
+binaries with older embedded Go versions. Native `go telemetry off` uses a
+job-local configuration directory; CI verifies that it reports `off`. CGO is disabled, and
+each job creates exclusive fresh module, build-cache and executable directories;
+it does not restore compiled helper output from a cache. Native `go mod verify`
+and `scripts/test-go-tool-locks.py` run before publishing the helper directory to
+PATH. The tests cover missing/substituted source and metadata hashes for direct
+and transitive modules, an omitted version, and a forbidden toolchain upgrade.
+
+To update a helper, use `go get -tool` at an exact version in its own module,
+then `go mod tidy`; review both lock files and rerun the native build, rejection
+controls and scanner checks. Do not append `@version` to the CI install command:
+that form ignores the repository's module files. Separate modules prevent one
+helper's update from changing the other's selected dependencies. Checksums are
+not a vulnerability scan or proof of benign upstream code. The compiler pin was
+checked against official Go release metadata and actual archive bytes. Review
+both before updating; do not replace a failed digest with newly observed bytes.
+Hosted Python, Bash, curl, coreutils, tar and the runner remain platform trust
+boundaries; these locks do not claim an immutable operating system.
+
 ## Build dependencies and release credentials
 
 `@stryker-mutator/core@10.1.1` depends on `typed-rest-client@2.3.1`, which pins a vulnerable `qs@6.15.1`. The package override is scoped to **that parent's `qs` dependency**, selecting patched `6.16.1`; it does not force a major update of the parent client. Full mutation testing verifies the resulting toolchain. Remove the override when a compatible upstream Stryker dependency chain includes the fix ([stryker-js#6177](https://github.com/stryker-mutator/stryker-js/pull/6177)), then regenerate the lockfile and rerun mutation and audit checks. A tooling test fails when the locked parent stops pinning the vulnerable version, so the override cannot silently outlive its purpose.
