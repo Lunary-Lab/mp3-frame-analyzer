@@ -31,6 +31,10 @@ permissions:
   contents: read
 
 env:
+  NODE_OPTIONS: ''
+  NODE_PATH: ''
+  NODE_COMPILE_CACHE: ''
+  NODE_DISABLE_COMPILE_CACHE: '1'
   GH_NO_UPDATE_NOTIFIER: '1'
   GH_NO_EXTENSION_UPDATE_NOTIFIER: '1'
   DO_NOT_TRACK: '1'
@@ -54,9 +58,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
+      - uses: ./.github/actions/setup-node-verified
       - name: Resolve the shared release range and audit all commits and merged PRs
         id: plan
         env:
@@ -170,9 +172,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
+      - uses: ./.github/actions/setup-node-verified
       - name: Authenticate plan and native response by immutable artifact identity
         env:
           GH_TOKEN: ${{ github.token }}

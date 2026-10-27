@@ -14,6 +14,13 @@ Ordinary PR/push/scheduled CI and release validation require both visible Trivy 
 
 The binary archive is pinned by SHA-256 `c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0`, verified before extracting only `trivy`. This digest was rechecked against the official 0.76.1 checksum file on 2026-10-26. Changing the version/digest requires review.
 
+Bootstrap exclusively creates a private job-local tool directory; an occupied
+directory, file or symlink fails before download, without reuse or deletion.
+Native curl configuration is disabled before other arguments, and extraction
+runs with a clean native environment so inherited tar checkpoint commands and
+gzip options cannot alter it. The hosted runner, shell, curl, coreutils and tar
+remain trusted platform tools; this does not claim an immutable operating system.
+
 Unavoidable requests: GitHub release delivery (`github.com` and its HTTPS release-asset CDN) downloads the scanner; `ghcr.io/aquasecurity/trivy-db:2` and GitHub's OCI blob delivery download the vulnerability database. Registry requests expose the requested public tool/DB resource, normal connection/header information and runner IP, **not the project dependency inventory or source**. GitHub runner/action/checkout and existing release-artifact transport remain part of CI.
 
 Only local lock files are compared against the local database. Supported `--disable-telemetry --skip-version-check` disable optional usage/update traffic. During scans, `--offline-scan --skip-db-update --skip-java-db-update --skip-check-update --skip-vex-repo-update`, `--scanners vuln`, a private working directory/HOME and an allowlisted environment prevent ambient scanner servers, ignore config, credentials or optional checks from being selected. This is configuration-based network minimization, not a claim of kernel egress isolation. Necessary HTTPS proxy/CA settings may be inherited; Actions tokens and other secrets are not passed to the scanner.

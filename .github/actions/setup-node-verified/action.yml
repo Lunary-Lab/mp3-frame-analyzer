@@ -1,0 +1,26 @@
+name: Verified Node runtime setup
+description: Verify the reviewed Linux x86-64 Node archive before extraction or execution
+inputs:
+  version:
+    description: Exact reviewed Node version
+    default: '24.22.1'
+outputs:
+  root:
+    description: Exact verified runtime root
+    value: ${{ steps.runtime.outputs.root }}
+runs:
+  using: composite
+  steps:
+    - name: Acquire the reviewed Node runtime with native SHA-256 verification
+      id: runtime
+      shell: bash
+      env:
+        NODE_VERSION: ${{ inputs.version }}
+      run: |
+        test -z "${NODE_OPTIONS-}"
+        test -z "${NODE_PATH-}"
+        test -z "${NODE_COMPILE_CACHE-}"
+        test "${NODE_DISABLE_COMPILE_CACHE-}" = 1
+        root="$(bash scripts/bootstrap-node.sh "$NODE_VERSION")"
+        printf '%s\n' "$root/bin" >> "$GITHUB_PATH"
+        printf 'root=%s\n' "$root" >> "$GITHUB_OUTPUT"

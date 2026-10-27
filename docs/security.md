@@ -112,6 +112,14 @@ never replace a failed digest with the observed bytes merely to make CI pass.
 Hash identity does not establish package benignness, CVE safety, or an immutable
 hosted runner/Node/tar. See [npm registry signatures](https://docs.npmjs.com/about-registry-signatures/).
 
+Extraction passes only the selected host PATH to GNU tar, preventing inherited
+`TAR_OPTIONS` checkpoint commands and gzip options. The npm version probe runs
+through the active Node executable with a private working directory/HOME and a
+minimal environment, not another Node selected by PATH or inherited preload/cache
+options. These child-process controls do not sanitize an already running parent
+Node process or establish trust in the host PATH/tools. Published npm paths and
+mutation-cache environment identity are unchanged.
+
 ## Semgrep installation integrity
 
 The Semgrep CE install uses the complete reviewed version/SHA-256 wheel lock in
@@ -138,6 +146,50 @@ Do not replace a failed hash with the newly observed value merely to pass CI.
 Hashes prevent substitution relative to reviewed bytes, not malicious upstream
 code. The hosted runner, Python and pip remain trusted platform infrastructure,
 not immutable dependencies covered by this wheel lock.
+
+## Node runtime installation integrity
+
+CI project commands use reviewed Node 24.22.1 or 26.12.1 Linux x86-64 archives.
+`.github/security/node-archives.sha256` binds each exact version and filename to
+the SHA-256 published in Node's signed release checksums. The reviewed digests
+were checked against both official signed manifests and the Node release-key
+ring; refresh both version and digest together using the
+[official release verification procedure](https://github.com/nodejs/node#verifying-binaries).
+`.nvmrc` records the default exact version; the package engines still describe
+the wider supported compatibility range rather than an archive trust policy.
+
+The small native bootstrap downloads only the bound `nodejs.org/dist` HTTPS
+URL, disables ambient curl configuration, rejects redirects and bounds time and
+size. Native `sha256sum` must succeed before clean-environment tar extraction
+or the initial Node probe. Deterministic version-plus-full-digest directories
+preserve cache input stability; exclusive creation rejects existing files,
+directories, symlinks and concurrent reuse. No previously extracted runtime is
+trusted or deleted. The optional offline archive path receives the same checks.
+
+All callers explicitly clear `NODE_OPTIONS`, `NODE_PATH` and
+`NODE_COMPILE_CACHE`, and set `NODE_DISABLE_COMPILE_CACHE=1`. Verified bytes alone
+would not stop inherited preload code or a mutable compile cache. The composite
+checks that profile before acquisition, and the initial version probe uses a
+clean environment independently. These variables are set in workflow YAML,
+not through `GITHUB_ENV`, which GitHub forbids for `NODE_OPTIONS`. This is not a
+claim that every possible host environment hook or later trusted project code
+is constrained.
+
+Project setup installs the separately verified npm before invoking the existing
+SHA-pinned `actions/setup-node` solely for its maintained npm cache feature.
+That cache-only call omits both Node version inputs, so it neither acquires nor
+replaces the verified runtime. Compatibility check names retain their major
+labels while the matrix selects exact archive versions. Mutation provenance
+still includes the full environment; it is not weakened to preserve old cache
+entries across this runtime/profile change.
+
+The hosted runner, Bash, curl, coreutils and tar remain platform trust inputs;
+explicit proxy/CA transport configuration can influence connection trust but
+cannot replace the committed artifact digest. GitHub's JavaScript Action
+runtime and privileged no-checkout metadata/publishing controls remain hosted
+platform boundaries. No project checkout or bootstrap is added to those
+controls merely to replace their host Node. Hashes establish identity, not
+absence of vulnerabilities or malicious upstream behavior.
 
 ## Build dependencies and release credentials
 

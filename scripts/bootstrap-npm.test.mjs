@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -66,6 +67,71 @@ test('untrusted archive bytes fail before extraction and leave no installed exec
     assert.deepEqual(await readFile(archive), bytes);
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('verified extraction and version probing ignore inherited native command hooks', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'mp3-npm-native-options-'));
+  const variables = [
+    'PATH',
+    'TAR_OPTIONS',
+    'GZIP',
+    'NODE_OPTIONS',
+    'NODE_PATH',
+    'NODE_COMPILE_CACHE',
+  ];
+  const original = Object.fromEntries(variables.map((name) => [name, process.env[name]]));
+  try {
+    const sourceRoot = join(root, 'fixture');
+    await mkdir(join(sourceRoot, 'package', 'bin'), { recursive: true });
+    const cli = join(sourceRoot, 'package', 'bin', 'npm-cli.js');
+    await writeFile(cli, '#!/usr/bin/env node\nconsole.log("11.19.0");\n');
+    await chmod(cli, 0o700);
+    const archive = join(root, 'fixture.tgz');
+    const packed = spawnSync('tar', ['-czf', archive, '-C', sourceRoot, 'package'], {
+      env: { PATH: original.PATH },
+      encoding: 'utf8',
+    });
+    assert.ifError(packed.error);
+    assert.equal(packed.status, 0, packed.stderr);
+    const digest = createHash('sha512')
+      .update(await readFile(archive))
+      .digest('base64');
+    const source = (await readFile(new URL('./bootstrap-npm.mjs', import.meta.url), 'utf8'))
+      .replace(npmRelease('11.19.0').integrity, `sha512-${digest}`)
+      .replace("import { isMain } from './release-utils.mjs';", 'const isMain = () => false;');
+    const fixture = await import(
+      `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
+    );
+    const marker = join(root, 'executed');
+    const shim = join(root, 'shim');
+    await mkdir(shim);
+    for (const name of ['tar-hook', 'node']) {
+      const command = join(shim, name);
+      await writeFile(command, `#!/bin/sh\n: > '${marker}'\nexit 73\n`);
+      await chmod(command, 0o700);
+    }
+    const preload = join(root, 'preload.cjs');
+    await writeFile(
+      preload,
+      `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'preloaded');\n`,
+    );
+    process.env.PATH = `${shim}:${original.PATH}`;
+    process.env.TAR_OPTIONS = `--checkpoint=1 --checkpoint-action=exec=${join(shim, 'tar-hook')}`;
+    process.env.GZIP = '--invalid-inherited-option';
+    process.env.NODE_OPTIONS = `--require=${preload}`;
+    process.env.NODE_PATH = shim;
+    process.env.NODE_COMPILE_CACHE = join(root, 'unreviewed-cache');
+    const bin = await fixture.bootstrapNpm('11.19.0', { archive, temporaryRoot: root });
+    assert.deepEqual((await readdir(bin)).sort(), ['npm', 'npx']);
+    assert.equal((await readdir(root)).includes('executed'), false);
+    assert.equal((await readdir(root)).includes('unreviewed-cache'), false);
+  } finally {
+    for (const [name, value] of Object.entries(original)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    await rm(root, { recursive: true, force: true });
   }
 });
 
