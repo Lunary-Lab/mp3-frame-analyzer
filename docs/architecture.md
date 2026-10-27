@@ -43,7 +43,7 @@ The pinned multipart plugin reads `request.raw`, so a Fastify `preParsing` paylo
 
 The route hands the module a consumer, the frame counter, and never touches request bodies itself ([ADR 0001](adr/0001-upload-module-owns-the-upload-lifecycle.md)).
 
-An immediately ready in-memory async source can keep the parser busy until its input is consumed. The benchmark reports this delay honestly. Network backpressure and I/O provide natural scheduling points in the HTTP path; performance measurements include small requests alongside valid large uploads. If measurements under a real deployment show unfair scheduling, profile and add a bounded cooperative-yield policy before claiming a latency guarantee.
+Ordinary reader traversal now yields at bounded work intervals, including for immediately ready in-memory sources (see Cooperative traversal below). Free-format candidate inference remains synchronous within its bounded probe; cooperative inference scheduling and HTTP transport-to-parser cancellation remain separate follow-ups. These scheduling points improve opportunities for I/O and timers to run, but do not preempt arbitrary synchronous work or establish a latency guarantee.
 
 ## Why no MPEG parser package or FFmpeg dependency?
 
@@ -54,3 +54,26 @@ The assignment explicitly requires deriving frame counts by parsing the MP3, wit
 - [MPEG frame header structure (MP3 frame reference)](https://www.mp3-tech.org/programmer/frame_header.html)
 - [ID3v2.4 specification](https://id3.org/id3v2.4.0-structure)
 - [Fastify multipart stream API](https://github.com/fastify/fastify-multipart)
+
+## Cooperative traversal
+
+One constant-space scheduler belongs to each `AsyncByteReader`. It charges
+lookahead calls, upstream pulls and consumed slices, yielding to a real Node
+event-loop turn after 1,024 operations or 256 KiB of consumed bytes, whichever
+comes first. These are scheduling intervals, not format/upload limits; counting
+continues without discarding evidence. Tiny chunks and many small tags cannot
+avoid the operation interval. A huge already-buffered metadata slice is skipped
+in constant time, charged once and followed by a turn, without copying or
+splitting its content. The counters reset after scheduling and do not retain
+history or grow with the upload. Accounting stays synchronous; only a due turn
+invokes the separate wait, so ordinary checkpoints add no promise suspension.
+
+Embedded parser callers may supply an `AbortSignal`. Cancellation is checked at
+reader checkpoints and before/after scheduled turns; its reason is preserved
+through iterator cleanup. Already observed EOF does not cause a redundant
+iterator return. Arbitrary pending custom iterator calls cannot be forcibly
+interrupted. HTTP transport-to-parser cancellation is a separate adapter change;
+this slice does not add it or change the existing free-format inference rules.
+These deterministic work intervals improve responsiveness but are not a
+wall-clock latency SLA or a replacement for admission and deployment resource
+limits.

@@ -1,4 +1,5 @@
 import { Mp3ParseError } from './errors.js';
+import { TraversalScheduler } from './cooperative.js';
 
 /**
  * Incremental byte cursor. Parser callers request bounded lookahead; queued
@@ -14,9 +15,11 @@ export class AsyncByteReader {
   private ended = false;
   private absoluteOffset = 0;
   private static readonly MAX_EMPTY_CHUNKS = 1_024;
+  private readonly scheduling: TraversalScheduler;
 
-  constructor(input: AsyncIterable<Uint8Array>) {
+  constructor(input: AsyncIterable<Uint8Array>, signal?: AbortSignal) {
     this.iterator = input[Symbol.asyncIterator]();
+    this.scheduling = new TraversalScheduler(signal);
   }
 
   get offset(): number {
@@ -41,9 +44,8 @@ export class AsyncByteReader {
   }
 
   async has(length: number): Promise<boolean> {
-    if (!Number.isSafeInteger(length) || length < 0 || length > 12_288) {
-      throw new RangeError('Lookahead must be between 0 and 12288 bytes');
-    }
+    validateLookahead(length);
+    if (this.scheduling.checkpoint()) await this.scheduling.waitForTurn();
     let consecutiveEmptyChunks = 0;
     while (this.available < length && !this.ended) {
       const next = await this.iterator.next();
@@ -66,6 +68,7 @@ export class AsyncByteReader {
         this.queued.push(next.value);
         this.available += next.value.length;
       }
+      if (this.scheduling.checkpoint()) await this.scheduling.waitForTurn();
     }
     return this.available >= length;
   }
@@ -121,6 +124,15 @@ export class AsyncByteReader {
         }
         this.headOffset = 0;
       }
+      // Skipping a huge buffered view is constant work: charge it once, without
+      // copying/splitting metadata, then yield before traversing anything else.
+      if (this.scheduling.checkpoint(take)) await this.scheduling.waitForTurn();
     }
+  }
+}
+
+function validateLookahead(length: number): void {
+  if (!Number.isSafeInteger(length) || length < 0 || length > 12_288) {
+    throw new RangeError('Lookahead must be between 0 and 12288 bytes');
   }
 }

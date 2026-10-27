@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { countMp3Frames } from './mp3/count-frames.js';
 import { ClientError } from './client-error.js';
 import { errorResponseFor } from './error-response.js';
+import { stopAfterResponse } from './multipart-budget.js';
 import { loggerOptions } from './logging.js';
 import { closeIdleConnectionsAfterDrain } from './shutdown.js';
 import {
@@ -99,6 +100,16 @@ export async function buildApp({
   // Fastify's default 404 is not a method error; explicitly distinguish known
   // /file-upload routes from unknown paths without intercepting other routes.
   app.setNotFoundHandler((request, reply) => {
+    // These routes have no upload consumer or budget. Do not let Node drain an
+    // unfinished rejected body after responding; bodyless/completed requests
+    // can still reuse their connection. HTTP framing is validated by Node.
+    if (
+      !request.raw.complete &&
+      (request.headers['transfer-encoding'] !== undefined ||
+        Number(request.headers['content-length']) > 0)
+    ) {
+      stopAfterResponse(request, reply);
+    }
     if (request.url.split('?', 1)[0] === '/file-upload') {
       return reply.header('allow', 'POST').status(405).send({
         error: 'method-not-allowed',

@@ -18,13 +18,15 @@ import { isEncoderFrame } from './encoder-frame.js';
  */
 export interface Mp3CountOptions {
   readonly includeVbrHeaderFrame?: boolean;
+  /** Caller cancellation propagates its reason unchanged, never as an MPEG-format failure. */
+  readonly signal?: AbortSignal;
 }
 
 export async function countMp3Frames(
   input: AsyncIterable<Uint8Array>,
   options: Mp3CountOptions = {},
 ): Promise<number> {
-  const reader = new AsyncByteReader(input);
+  const reader = new AsyncByteReader(input, options.signal);
   let failed = false;
   try {
     return await countFrames(reader, options.includeVbrHeaderFrame !== false);
