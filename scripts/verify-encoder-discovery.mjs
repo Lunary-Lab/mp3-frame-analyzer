@@ -13,7 +13,7 @@ export const ENCODER_TEST_NAMES = Object.freeze(
 );
 
 export function assertEncoderDiscovery(report) {
-  const file = report.testFiles?.['tests/free-format-real.test.ts'];
+  const file = report.testFiles?.['tests/mp3/free-format-real.test.ts'];
   assert.ok(Array.isArray(file?.tests), 'Genuine encoder mutation suite is missing');
   assert.deepEqual(
     file.tests.map((test) => test.name).sort(),

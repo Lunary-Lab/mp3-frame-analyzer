@@ -48,7 +48,7 @@ Domain terms live in [`GLOSSARY.md`](GLOSSARY.md); architecture decisions live i
 
 ## Local preparation and required hosted verification
 
-Add focused tests in `tests/` and independent generated encoder fixtures; expand `fuzz/` oracles when widening format acceptance. Run `npm run check` and focused checks for the changed behavior locally. Run `npm run fuzz:regression` for parser, fixture, fuzz or runtime changes; run relevant memory/HTTP benchmarks when streaming, resource use, request handling or performance can change. Non-parser HTTP/runtime changes still need their focused tests, fuzz replay and relevant benchmarks; they are not documentation-only changes.
+Add parser suites under `tests/mp3/**/*.test.ts`, mirroring `src/mp3/`; keep HTTP/process suites in `tests/` and preserve existing mixed parser/in-process assertions. Add independent generated encoder fixtures; expand `fuzz/` oracles when widening format acceptance. Run `npm run check` and focused checks for the changed behavior locally. Run `npm run fuzz:regression` for parser, fixture, fuzz or runtime changes; run relevant memory/HTTP benchmarks when streaming, resource use, request handling or performance can change. Non-parser HTTP/runtime changes still need their focused tests, fuzz replay and relevant benchmarks; they are not documentation-only changes.
 
 Run a full native local `npm run mutation:full` for changes to parser source, parser test selection/fixtures/oracles, mutation runner/configuration, source-bound equivalence proofs, or cache validation/provenance/trust boundaries. Uncertain impact on those boundaries requires the full local campaign or explicit owner review, not an assumed exemption.
 

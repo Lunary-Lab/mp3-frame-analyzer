@@ -2,9 +2,10 @@
 
 A version in the package manifest is not proof that its tag or GitHub Release
 exists in this repository. The pinned Release Please implementation can infer a
-previous version from that manifest even when no corresponding tag exists. Its
-first-release entry can link to its own `releases/tag/vX.Y.Z` page instead of
-containing a previous-tag comparison; that header alone is never a baseline.
+previous version from that manifest even when no corresponding tag exists. The
+repository's existing [2.1.1 entry](../CHANGELOG.md#211) links to its own
+`releases/tag/v2.1.1` page rather than a previous-tag comparison; that header alone
+is never a baseline.
 The notes planner therefore never creates a historical tag or silently guesses
 a predecessor after a lookup failure.
 
@@ -70,6 +71,6 @@ closed rather than being guessed.
 
 ## Sources
 
-- [Release Please 17.6.0 manifest boundary and inferred-version logic](https://github.com/googleapis/release-please/blob/v17.6.0/src/manifest.ts)
-- [Pinned strategy's previous-tag selection](https://github.com/googleapis/release-please/blob/v17.6.0/src/strategies/base.ts)
+- [Release Please 17.6.0 manifest boundary and inferred-version logic](https://github.com/googleapis/release-please/blob/712fcf01effd08d7b0e7b1fd3861f2cb388bc8d1/src/manifest.ts)
+- [Pinned strategy's previous-tag selection](https://github.com/googleapis/release-please/blob/712fcf01effd08d7b0e7b1fd3861f2cb388bc8d1/src/strategies/base.ts)
 - [GitHub generate-notes endpoint and permissions](https://docs.github.com/en/rest/releases/releases#generate-release-notes-content-for-a-release)

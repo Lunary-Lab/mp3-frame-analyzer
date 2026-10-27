@@ -69,9 +69,9 @@ At an expected post-frame boundary, accept a final 128-byte `TAG` block and then
 
 Primary source is the **encoder implementation**, not ISO MPEG:
 
-- [LAME VbrTag.h](https://github.com/lameproject/lame/blob/master/libmp3lame/VbrTag.h) flags and data contract
-- [LAME VbrTag.c](https://github.com/lameproject/lame/blob/master/libmp3lame/VbrTag.c) actual writing/parsing and first-frame handling
-- [LAME API](https://github.com/lameproject/lame/blob/master/API) explicitly states that the tagging call creates a valid additional MP3 frame
+- [LAME VbrTag.h](https://github.com/lameproject/lame/blob/1f5cc9487284d5950343aa5d4f70de433468070a/libmp3lame/VbrTag.h) flags and data contract
+- [LAME VbrTag.c](https://github.com/lameproject/lame/blob/1f5cc9487284d5950343aa5d4f70de433468070a/libmp3lame/VbrTag.c) actual writing/parsing and first-frame handling
+- [LAME API](https://github.com/lameproject/lame/blob/1f5cc9487284d5950343aa5d4f70de433468070a/API) explicitly states that the tagging call creates a valid additional MP3 frame
 
 The first MPEG Layer III frame may contain an ancillary-data signature `Xing` (commonly VBR/ABR) or `Info` (commonly CBR) plus a 32-bit flags word. Up to four optional fields follow, in order:
 
@@ -90,10 +90,10 @@ HTTP default and explicit `includeVbrHeaderFrame=false`: exclude at most **one**
 
 ## 5. VBRI
 
-VBRI is a Fraunhofer-associated encoder header convention, **not part of ISO MPEG-1 Layer III's four-byte header**. A freely accessible, authoritative normative _VBRI specification_ was not established for this assessment, so treat the observed layout in [FFmpeg's reader](https://github.com/FFmpeg/FFmpeg/blob/master/libavformat/mp3dec.c) (`mp3_parse_vbri_tag`) and [TagLib's parser](https://github.com/taglib/taglib/blob/master/taglib/mpeg/xingheader.cpp) as corroborating implementation references, **not an ISO standard**.
+VBRI is a Fraunhofer-associated encoder header convention, **not part of ISO MPEG-1 Layer III's four-byte header**. A freely accessible, authoritative normative _VBRI specification_ was not established for this assessment, so treat the observed layout in [FFmpeg's reader](https://github.com/FFmpeg/FFmpeg/blob/c220739be57307ea821d1197ad89ff6e372180e8/libavformat/mp3dec.c) (`mp3_parse_vbri_tag`) and [TagLib's parser](https://github.com/taglib/taglib/blob/1ae164e382f567c463d14b7bd782b3fe10516685/taglib/mpeg/xingheader.cpp) as corroborating implementation references, **not an ISO standard**.
 
 - FFmpeg probes signature `VBRI` at byte offset `4 + 32 = 36` from the MPEG frame start.
-- A recognized version-1 header carries declared byte/frame counts and seeking-table information. The current project requires a nonempty table with widths 1–4 and a complete `26 + entries × width` body. [GStreamer's reader](https://github.com/GStreamer/gstreamer/blob/main/subprojects/gst-plugins-good/gst/audioparsers/gstmpegaudioparse.c) corroborates those fields, but accepts some headers without a usable table. Thus our nonempty-table recognition is a **stricter project policy**, not proven universal VBRI validity.
+- A recognized version-1 header carries declared byte/frame counts and seeking-table information. The current project requires a nonempty table with widths 1–4 and a complete `26 + entries × width` body. [GStreamer's reader](https://github.com/GStreamer/gstreamer/blob/0250ebe851c131429b86779d4de37e414759e9db/subprojects/gst-plugins-good/gst/audioparsers/gstmpegaudioparse.c) corroborates those fields, but accepts some headers without a usable table. Thus our nonempty-table recognition is a **stricter project policy**, not proven universal VBRI validity.
 - Its presence never authorizes accepting a malformed MPEG frame, trusting the declared count for physical traversal, or subtracting an unconditional frame.
 
 ## 6. Other tag families / strict-policy boundaries
@@ -105,4 +105,4 @@ VBRI is a Fraunhofer-associated encoder header convention, **not part of ISO MPE
 
 ## 7. Relevant source and tests
 
-[`id3.ts`](../../src/mp3/id3.ts), [`count-frames.ts`](../../src/mp3/count-frames.ts), [`encoder-frame.ts`](../../src/mp3/encoder-frame.ts), [`id3.test.ts`](../../tests/id3.test.ts), [`metadata-layouts.test.ts`](../../tests/metadata-layouts.test.ts), [`encoder-layouts.test.ts`](../../tests/encoder-layouts.test.ts), [`count-frames.test.ts`](../../tests/count-frames.test.ts), and [`frame-count-contract.md`](../frame-count-contract.md).
+[`id3.ts`](../../src/mp3/id3.ts), [`count-frames.ts`](../../src/mp3/count-frames.ts), [`encoder-frame.ts`](../../src/mp3/encoder-frame.ts), [`id3.test.ts`](../../tests/mp3/id3.test.ts), [`metadata-layouts.test.ts`](../../tests/mp3/metadata-layouts.test.ts), [`encoder-layouts.test.ts`](../../tests/mp3/encoder-layouts.test.ts), [`count-frames.test.ts`](../../tests/mp3/count-frames.test.ts), and [`frame-count-contract.md`](../frame-count-contract.md).
