@@ -31,11 +31,20 @@ file exactly once, current source/test bytes, common configuration and declared
 inputs, clean process completion, run/attempt/commit identity and artifact/report
 digests. It applies the existing source-bound equivalent proofs and 100% adjusted
 policy across unchanged raw reports, resolving test IDs within each report.
+GitHub can assign different image revisions within a fresh matrix. Full collection
+requires the same image family, platform, architecture and Node/component versions,
+but permits different image revisions; each raw manifest retains its exact revision.
+This exception applies only to fresh full runs, never to cached-result admission.
 Missing, duplicate, stale, failed or inconsistent evidence fails the full gate.
 Rerun **all jobs** after a partial failure; artifacts from an older attempt cannot
 complete a newer one. Raw `full-parser-shard-<attempt>-<index>` artifacts and the
 `full-parser-mutation-report-<attempt>` audit remain separate; no merged report is
 constructed for Stryker or the cache.
+
+The collector repeats native file discovery to require every owned parser suite,
+then uses Vitest's runnable-test discovery for report file coverage. This permits
+native all-skipped suites (such as an absent optional external sample) without a
+filename exception; every runnable suite must appear consistently in every shard.
 
 Ordinary PR/main runs, including cache misses, retain the single-runner path.
 File workloads may be uneven; runner count alone does not establish a latency

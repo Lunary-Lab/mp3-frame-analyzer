@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { auditMutationShards, PARSER_GLOB, sha256 } from './mutation-policy.mjs';
 import { mutationEnvironment, mutationInputs, fingerprint } from './mutation-cache-inputs.mjs';
-import { PARSER_TEST_GLOB, verifyParserTestDiscovery } from './parser-test-discovery.mjs';
+import { runnableParserTestFiles, verifyParserTestDiscovery } from './parser-test-discovery.mjs';
 import { assertEncoderShardDiscovery } from './verify-encoder-discovery.mjs';
 import { runMutationProcess } from './mutation-process.mjs';
 import { isMain, readJson, repositoryRoot } from './release-utils.mjs';
@@ -106,6 +106,20 @@ export async function runShard(root, shard) {
   }
 }
 
+function freshComparableInputs({ runtime, ...inputs }) {
+  const { runnerImage, ...host } = runtime;
+  assert.ok(
+    Array.isArray(runnerImage) &&
+      runnerImage.length === 2 &&
+      (runnerImage.every((part) => part === null) ||
+        runnerImage.every((part) => typeof part === 'string' && part.length > 0)),
+    'Missing runner image provenance',
+  );
+  // Hosted image revisions vary within one fresh matrix. Keep the family and
+  // every other input equal; raw manifests retain each exact image revision.
+  return { ...inputs, runtime: { ...host, runnerImage: runnerImage[0] } };
+}
+
 export function validateShardEvidence(entries, scopes, expected, inputs) {
   assert.equal(entries.length, scopes.length, 'Missing or extra parser shard');
   const reports = [];
@@ -117,7 +131,11 @@ export function validateShardEvidence(entries, scopes, expected, inputs) {
       assert.equal(manifest[key], expected[key], `Inconsistent shard ${key}`);
     assert.equal(manifest.completed, true, 'Incomplete parser shard');
     assert.deepEqual(manifest.scope, scope, 'Inconsistent shard scope');
-    assert.deepEqual(manifest.inputs, inputs, 'Inconsistent shard inputs');
+    assert.deepEqual(
+      freshComparableInputs(manifest.inputs),
+      freshComparableInputs(inputs),
+      'Inconsistent shard inputs',
+    );
     assert.equal(manifest.reportSha256, sha256(bytes), 'Shard report digest mismatch');
     reports.push(JSON.parse(bytes));
   }
@@ -144,9 +162,9 @@ export function assertShardTestInventory(reports, expected) {
 }
 
 async function freshTestSources(root, reports) {
-  const expected = (await Array.fromAsync(glob(PARSER_TEST_GLOB, { cwd: root }))).map((file) =>
-    file.replaceAll('\\', '/'),
-  );
+  const env = mutationEnvironment();
+  await verifyParserTestDiscovery(root, env);
+  const expected = await runnableParserTestFiles(root, env);
   assertShardTestInventory(reports, expected);
   for (const report of reports)
     for (const [file, record] of Object.entries(report.testFiles))

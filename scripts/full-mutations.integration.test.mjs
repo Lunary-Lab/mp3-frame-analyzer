@@ -25,6 +25,7 @@ async function fixture() {
     'vitest.mutation.config.ts':
       "export default { test: { include: ['tests/mp3/**/*.test.ts'], maxWorkers: 1 } };",
     'stryker.config.json': JSON.stringify(config),
+    'tests/mp3/optional.test.ts': "import {it} from 'vitest'; it.skip('optional sample',()=>{});",
     'tests/mp3/free-format-real.test.ts': `import {test,expect} from 'vitest';
       import {positive} from '../../src/mp3/a';
       import {negative} from '../../src/mp3/b';
@@ -89,6 +90,10 @@ test(
       assert.equal(summary.adjustedScore, 100);
       assert.equal(summary.execution.reused, 0);
       assert.equal(summary.execution.shards, 2);
+      const native = JSON.parse(
+        await readFile(join(directory, `full-parser-shard-${attempt}-0/mutation.json`), 'utf8'),
+      );
+      assert.equal(Object.hasOwn(native.testFiles, 'tests/mp3/optional.test.ts'), false);
       await assert.rejects(readFile(join(root, '.cache/mutation/native-baseline.json')), {
         code: 'ENOENT',
       });

@@ -10,6 +10,7 @@ import {
   assertShardTestInventory,
 } from './full-mutations.mjs';
 import { sha256 } from './mutation-policy.mjs';
+import { fingerprint } from './mutation-cache-inputs.mjs';
 import { assertEncoderShardDiscovery, ENCODER_TEST_NAMES } from './verify-encoder-discovery.mjs';
 
 test('whole-file partitions are complete, deterministic and bounded without empty jobs', () => {
@@ -50,7 +51,12 @@ function evidence() {
   const expected = { commit: 'a'.repeat(40), run: '123', attempt: '2' };
   const inputs = {
     files: [['src/mp3/a.ts', 420, 'digest']],
-    runtime: {},
+    runtime: {
+      versions: { node: '24.19.0' },
+      platform: 'linux',
+      arch: 'x64',
+      runnerImage: ['ubuntu24', '20261023.334.3'],
+    },
     environmentSha256: 'env',
   };
   const entries = scopes.map((scope, shard) => {
@@ -77,6 +83,40 @@ test('evidence accepts report-local IDs without changing raw bytes or statuses',
   assert.equal(validate(f).length, 2);
   assert.deepEqual(f, original);
 });
+
+test('fresh evidence permits hosted image revisions while retaining exact provenance', () => {
+  const f = structuredClone(evidence());
+  f.inputs.runtime.runnerImage[1] = 'collector-revision';
+  f.entries[0].manifest.inputs = structuredClone(f.inputs);
+  f.entries[0].manifest.inputs.runtime.runnerImage[1] = '20261026.354.1';
+  assert.notEqual(fingerprint(f.inputs), fingerprint(f.entries[0].manifest.inputs));
+  const original = structuredClone(f);
+  assert.equal(validate(f).length, 2);
+  assert.deepEqual(f, original);
+});
+
+for (const [field, value] of [
+  ['runnerImage', ['ubuntu22', '20261023.334.3']],
+  ['runnerImage', ['ubuntu24']],
+  ['runnerImage', ['ubuntu24', null]],
+  ['runnerImage', ['ubuntu24', '']],
+  ['versions', { node: '24.20.0' }],
+  ['platform', 'win32'],
+  ['arch', 'arm64'],
+])
+  test(`fresh evidence rejects incompatible or incomplete runtime ${field}: ${value}`, () => {
+    const f = evidence();
+    f.entries[0].manifest.inputs = structuredClone(f.inputs);
+    f.entries[0].manifest.inputs.runtime[field] = value;
+    assert.throws(() => validate(f));
+  });
+
+for (const field of ['environmentSha256', 'externalSampleSha256'])
+  test(`fresh evidence still rejects changed ${field}`, () => {
+    const f = evidence();
+    f.entries[0].manifest.inputs = { ...f.inputs, [field]: 'changed' };
+    assert.throws(() => validate(f), /Inconsistent shard inputs/);
+  });
 
 for (const [name, change] of [
   ['missing shard', (f) => f.entries.pop()],
