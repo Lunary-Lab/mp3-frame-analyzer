@@ -91,6 +91,14 @@ mismatch. The source manifest and all checksums are independently verified.
 The notes producer artifact contains exactly `body.md` and `manifest.json`. Its
 manifest records both boundary SHAs/tags, PR and direct-commit identities,
 input/body hashes, and producer run, attempt and workflow SHA. The sealed bundle
+also authenticates `releasePleaseNotesSha256`: the tagged user entry followed by
+the pinned Release Please producer's exact default attribution footer. Sealing
+and publication accept only the canonical entry, that exact generated form, or
+the prepared combined body. Only mutable draft text normalizes native web-editor
+CRLF to LF before the existing outer-whitespace trimming; authenticated artifact
+bytes, checksums and final published-body equality remain exact. Edited
+notes, changed/duplicated footers and other suffixes fail closed. A producer pin
+or footer configuration change requires reviewing this contract again. The bundle
 preserves those bytes and the runtime's existing four files, adding
 `release-identity.json` (both producer artifact IDs/digests, repository ID,
 source/tag and run/attempt) and `BUNDLE-SHA256SUMS`. The latter describes the

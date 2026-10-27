@@ -28,6 +28,9 @@ const sha = 'b'.repeat(40);
 const tag = 'v2.1.1';
 const body = '## 2.1.1\n\nApproved user and engineering notes.\n';
 const original = '## 2.1.1\n\nOriginal Release Please notes.';
+// Exact native footer observed on v2.2.0, including its 178-byte separator.
+const releasePleaseFooter =
+  '\n\n---\nThis PR was generated with [Release Please](https://github.com/googleapis/release-please). See [documentation](https://github.com/googleapis/release-please#release-please).';
 const base = 'mp3-frame-analyzer-2.1.1';
 
 function metadata() {
@@ -142,6 +145,7 @@ async function fixture() {
       tag,
       bodySha256: hash(body),
       userNotesSha256: hash(original),
+      releasePleaseNotesSha256: hash(original + releasePleaseFooter),
       producer: { runId: '123', runAttempt: '1', workflowSha: sha },
     }),
   );
@@ -239,6 +243,55 @@ test('preflight and candidate prepare exact identities without release mutations
     await f.cleanup();
   }
 });
+
+for (const [name, draft, accepted] of [
+  ['canonical notes', original, true],
+  ['native generated footer', original + releasePleaseFooter, true],
+  ['composed notes', body, true],
+  ['canonical notes with CRLF', original.replace(/\n/g, '\r\n'), true],
+  [
+    'native generated footer with CRLF',
+    (original + releasePleaseFooter).replace(/\n/g, '\r\n'),
+    true,
+  ],
+  ['composed notes with CRLF', body.replace(/\n/g, '\r\n'), true],
+  ['edited notes with native footer', original + 'Edited' + releasePleaseFooter, false],
+  [
+    'edited notes with CRLF',
+    (original + 'Edited' + releasePleaseFooter).replace(/\n/g, '\r\n'),
+    false,
+  ],
+  ['lone internal CR', original.replace('Original', 'Original\r') + releasePleaseFooter, false],
+  ['edited footer', original + releasePleaseFooter.replace('This PR', 'This release'), false],
+  ['duplicate footer', original + releasePleaseFooter.repeat(2), false],
+  ['unexpected suffix', original + releasePleaseFooter + '\nUnexpected', false],
+  ['footer on composed notes', body.trim() + releasePleaseFooter, false],
+])
+  test(`draft contract ${accepted ? 'accepts' : 'rejects'} ${name} at sealing and publication`, async () => {
+    assert.equal(Buffer.byteLength(releasePleaseFooter), 178);
+    const f = await fixture();
+    try {
+      await f.change((s) => {
+        s.release.body = draft;
+      });
+      const preflight = f.run(0);
+      assert.equal(preflight.status, 0, preflight.stderr);
+      const output = await readFile(join(f.directory, 'output'), 'utf8');
+      f.env.DRAFT_BODY_SHA256 = output.match(/^draft_body_sha256=(.+)$/m)[1];
+      const results = [1, 2].map(f.run);
+      assert.deepEqual(
+        results.map((result) => result.status === 0),
+        [accepted, accepted],
+        results.map((result) => result.stderr).join('\n'),
+      );
+      for (const result of results)
+        if (!accepted)
+          assert.match(result.stderr, /Draft notes were independently edited|Draft text changed/);
+      if (!accepted) assert.ok((await f.calls()).every((args) => args[0] === 'api'));
+    } finally {
+      await f.cleanup();
+    }
+  });
 
 test('publication uploads only approved files, publishes approved text, and reads back the result', async () => {
   const f = await fixture();
