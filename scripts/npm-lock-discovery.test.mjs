@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -66,31 +66,50 @@ test('every npm ci acquisition runs preflight first with native source flags', a
 });
 
 test('a failed preflight stops the actual install block before npm can execute', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'mp3-npm-preflight-'));
+  const directory = await mkdtemp(join(tmpdir(), "mp3-npm-preflight 'quote'; [meta] $value-"));
   try {
     execFileSync('git', ['init', '--quiet', directory]);
     await writeProject(directory, { ...lock, packages: {} });
     const marker = join(directory, 'npm-called');
     await mkdir(join(directory, 'bin'));
-    await writeFile(join(directory, 'bin/npm'), `#!/bin/sh\ntouch '${marker}'\n`, { mode: 0o755 });
+    await writeFile(join(directory, 'bin/npm'), '#!/bin/sh\ntouch -- "$NPM_CALLED_MARKER"\n', {
+      mode: 0o755,
+    });
+    await mkdir(join(directory, 'checker scripts'));
+    for (const name of ['verify-npm-lock.mjs', 'npm-lock-policy.mjs', 'release-utils.mjs'])
+      await copyFile(resolve('scripts', name), join(directory, 'checker scripts', name));
+    const checker = join(directory, 'checker scripts/verify-npm-lock.mjs');
     const source = await readFile(
       new URL('../.github/actions/setup-project/action.yml', import.meta.url),
       'utf8',
     );
     const block = source.slice(source.lastIndexOf('      run: |') + '      run: |'.length).trim();
-    const command = block.replace(
-      'scripts/verify-npm-lock.mjs',
-      resolve('scripts/verify-npm-lock.mjs'),
-    );
-    const result = spawnSync(
-      'bash',
-      ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', command],
-      {
-        cwd: directory,
-        env: { ...process.env, PATH: `${join(directory, 'bin')}:${process.env.PATH}` },
-        encoding: 'utf8',
-      },
-    );
+    const command = block.replace('scripts/verify-npm-lock.mjs', '"$1"');
+    const invoke = () =>
+      spawnSync(
+        'bash',
+        [
+          '--noprofile',
+          '--norc',
+          '-e',
+          '-o',
+          'pipefail',
+          '-c',
+          command,
+          'npm-lock-preflight',
+          checker,
+        ],
+        {
+          cwd: directory,
+          env: {
+            ...process.env,
+            PATH: `${join(directory, 'bin')}:${process.env.PATH}`,
+            NPM_CALLED_MARKER: marker,
+          },
+          encoding: 'utf8',
+        },
+      );
+    const result = invoke();
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /npm integrity policy failed/);
     await assert.rejects(readFile(marker), { code: 'ENOENT' });
@@ -101,15 +120,15 @@ test('a failed preflight stops the actual install block before npm can execute',
       else changedManifest.overrides = { fastify: { child: 'file:../unhashed.tgz' } };
       await writeProject(directory, changedLock);
       await writeFile(join(directory, 'package.json'), JSON.stringify(changedManifest));
-      const rejected = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', command], {
-        cwd: directory,
-        env: { ...process.env, PATH: `${join(directory, 'bin')}:${process.env.PATH}` },
-        encoding: 'utf8',
-      });
+      const rejected = invoke();
       assert.notEqual(rejected.status, 0, kind);
       assert.match(rejected.stderr, /npm integrity policy failed/);
       await assert.rejects(readFile(marker), { code: 'ENOENT' });
     }
+    await writeProject(directory);
+    const accepted = invoke();
+    assert.equal(accepted.status, 0, accepted.stderr);
+    assert.equal(await readFile(marker, 'utf8'), '');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
