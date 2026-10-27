@@ -35,8 +35,10 @@ exact lockfile with `npm ci --ignore-scripts`; we do not recursively hash
 `node_modules`.
 
 The only noninputs are named root documentation files, Markdown under `docs/`
-(except `docs/mutation-review.md`), governance files, Semgrep configuration and
-fixtures, the Copilot instructions, and the parent `ci.yml`. The latter's exact
+(except `docs/mutation-review.md`), governance files, the four named runtime
+architecture scanner/test scripts and `tests/runtime-architecture/` fixtures,
+the Copilot instructions, and the parent `ci.yml`. These SAST-only files are not
+inputs to the parser mutation tests; other scripts remain keyed. The parent's exact
 mutation job is checked against `scripts/mutation-job-contract.json`, which
 **is** a keyed input; the mutation composite/setup actions and scripts are keyed.
 Thus changing an unrelated CI job does not invalidate results, but changing the

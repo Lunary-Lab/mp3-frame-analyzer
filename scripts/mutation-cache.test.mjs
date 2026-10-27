@@ -39,8 +39,11 @@ test('the same declared inputs are stable; rooted noninputs do not invalidate', 
     'README.md',
     'AGENTS.md',
     'docs/testing.md',
-    '.semgrep.yml',
-    'tests/semgrep/example.fixture',
+    'scripts/runtime-architecture.mjs',
+    'scripts/runtime-architecture-rule.mjs',
+    'scripts/runtime-architecture.test.mjs',
+    'scripts/runtime-architecture-native.test.mjs',
+    'tests/runtime-architecture/example.fixture',
     'governance/main.tf',
     '.github/workflows/ci.yml',
   ]) {
@@ -64,6 +67,8 @@ test('source, helper, selected test, every resource extension, config, lock and 
     'package-lock.json',
     'docs/mutation-review.md',
     '.github/actions/test-mutations/action.yml',
+    'scripts/runtime-architecture-extra.mjs',
+    '.semgrep.yml',
     'unknown.txt',
   ]) {
     const before = await capture();

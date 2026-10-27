@@ -29,7 +29,7 @@ const required = [
   'trivy',
   'trivy-release',
   'secrets',
-  'semgrep',
+  'architecture',
   'fuzz',
   'package',
   'governance',
@@ -255,7 +255,8 @@ test('existing scans, production-only archive smoke and release dispatch remain 
   assert.match(job('npm-audit'), /npm run audit:dependencies/);
   assert.match(job('secrets'), /fetch-depth: 0/);
   assert.match(job('secrets'), /betterleaks.*git \. --no-banner/);
-  assert.match(job('semgrep'), /semgrep.*scan --config \.semgrep\.yml.*--error/);
+  assert.match(job('architecture'), /npm run test:sast/);
+  assert.match(job('architecture'), /npm run sast:runtime/);
   assert.match(job('package'), /npm run test:artifact/);
   assert.match(job('package'), /name: release-assets/);
   assert.match(job('package'), /SOURCE_COMMIT: \$\{\{ inputs\.ref \|\| github\.sha \}\}/);
@@ -296,8 +297,6 @@ test('native scanner and setup commands retain pinned versions and explicit repo
   for (const setting of [
     "NPM_CONFIG_UPDATE_NOTIFIER: 'false'",
     "PIP_DISABLE_PIP_VERSION_CHECK: '1'",
-    "SEMGREP_SEND_METRICS: 'off'",
-    "SEMGREP_ENABLE_VERSION_CHECK: '0'",
     "OTEL_SDK_DISABLED: 'true'",
   ])
     assert.ok(ci.includes(setting), setting);
@@ -332,33 +331,11 @@ test('native scanner and setup commands retain pinned versions and explicit repo
   assert.match(goSetup, /go -C "\$module" mod verify/);
   assert.match(goSetup, /python3 -I -B scripts\/test-go-tool-locks\.py "\$GO_TOOL"/);
   assert.ok(goSetup.indexOf('test-go-tool-locks.py') < goSetup.indexOf('>> "$GITHUB_PATH"'));
-  const scannerLock = await readFile(
-    new URL('../.github/security/semgrep-requirements.txt', import.meta.url),
-    'utf8',
-  );
-  assert.match(scannerLock, /^semgrep==1\.182\.1 --hash=sha256:[a-f0-9]{64}$/m);
-  const scanner = job('semgrep');
-  assert.match(scanner, /Semgrep lock requires CPython 3\.12 on Linux x86_64/);
-  assert.match(scanner, /export PIP_CONFIG_FILE=\/dev\/null/);
-  assert.match(
-    scanner,
-    /-I -m pip --isolated --disable-pip-version-check download --index-url https:\/\/pypi\.org\/simple/,
-  );
-  assert.match(
-    scanner,
-    /download .* --require-hashes --only-binary=:all: --no-cache-dir --dest "\$wheels"/,
-  );
-  assert.match(
-    scanner,
-    /-I -m pip --isolated --disable-pip-version-check install --no-index --find-links "\$wheels"/,
-  );
-  assert.match(
-    scanner,
-    /install .* --require-hashes --only-binary=:all: --no-cache-dir --requirement "\$lock"/,
-  );
-  assert.match(scanner, /-I -m pip --isolated --disable-pip-version-check --no-cache-dir check/);
-  assert.match(scanner, /-I scripts\/test-semgrep-lock\.py "\$wheels"/);
-  assert.match(job('semgrep'), /--strict --error --metrics=off --disable-version-check --no-trace/);
+  const scanner = job('architecture');
+  assert.match(scanner, /name: Runtime architecture SAST \(ESLint\)/);
+  assert.match(scanner, /uses: \.\/\.github\/actions\/setup-project/);
+  assert.ok(scanner.indexOf('npm run test:sast') < scanner.indexOf('npm run sast:runtime'));
+  assert.doesNotMatch(scanner, /pip|semgrep|continue-on-error|--ignore|--suppress/);
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
   assert.equal(pkg.scripts['audit:production'], 'npm audit --omit=dev --audit-level=moderate');
   assert.equal(pkg.scripts['audit:dependencies'], 'npm audit --audit-level=moderate');

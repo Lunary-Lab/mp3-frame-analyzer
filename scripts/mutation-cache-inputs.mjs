@@ -5,6 +5,12 @@ import { sha256 } from './mutation-policy.mjs';
 
 export const fingerprint = (value) => sha256(JSON.stringify(value));
 const passive = /^(README|AGENTS|GLOSSARY|CHANGELOG|CLAUDE|TODO)\.md$/;
+const architectureOnly = new Set([
+  'scripts/runtime-architecture.mjs',
+  'scripts/runtime-architecture-rule.mjs',
+  'scripts/runtime-architecture.test.mjs',
+  'scripts/runtime-architecture-native.test.mjs',
+]);
 export function isMutationInput(path) {
   if (path === 'docs/mutation-review.md') return true;
   return !(
@@ -12,8 +18,8 @@ export function isMutationInput(path) {
     passive.test(path) ||
     /^docs\/.*\.md$/.test(path) ||
     path.startsWith('governance/') ||
-    path.startsWith('tests/semgrep/') ||
-    path === '.semgrep.yml' ||
+    path.startsWith('tests/runtime-architecture/') ||
+    architectureOnly.has(path) ||
     path === '.github/workflows/ci.yml' ||
     path === '.github/copilot-instructions.md'
   );

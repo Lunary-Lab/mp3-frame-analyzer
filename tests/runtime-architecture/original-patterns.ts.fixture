@@ -1,0 +1,26 @@
+// Original architecture-policy fixture, parsed by native ESLint only. These examples are never compiled or executed.
+// Each configured pattern needs a positive example, not merely one per rule ID.
+
+// ruleid: mp3-api-no-dynamic-code-execution
+eval('fixture');
+// ruleid: mp3-api-no-dynamic-code-execution
+new Function('return "fixture"');
+// ruleid: mp3-api-no-shell-command-execution
+execSync('fixture');
+// ruleid: mp3-api-no-shell-command-execution
+exec('fixture');
+// ruleid: mp3-api-no-shell-command-execution
+spawn('fixture');
+
+// ok: mp3-api-no-dynamic-code-execution
+JSON.parse('{"fixture":true}');
+// ok: mp3-api-no-dynamic-code-execution
+const dynamicLabel = 'eval("fixture"); new Function("fixture")';
+// ok: mp3-api-no-shell-command-execution
+const shellLabel = 'execSync("fixture"); exec("fixture"); spawn("fixture")';
+// ok: mp3-api-no-shell-command-execution
+/fixture/.exec('fixture');
+// ok: mp3-api-no-shell-command-execution
+const local = { exec: () => 'fixture' };
+// ok: mp3-api-no-shell-command-execution
+local.exec();
