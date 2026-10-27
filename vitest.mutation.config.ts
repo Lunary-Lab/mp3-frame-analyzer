@@ -7,6 +7,8 @@ export default defineConfig({
     ...base.test,
     include: [
       'tests/byte-reader.test.ts',
+      'tests/cooperative.test.ts',
+      'tests/traversal-scheduling.test.ts',
       'tests/count-frames.test.ts',
       'tests/count-frames.property.test.ts',
       'tests/frame-header.test.ts',
