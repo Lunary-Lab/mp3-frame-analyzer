@@ -24,6 +24,11 @@ twelfth mutation slot. This ceiling is not a measured optimum or a cap on other
 CI jobs. Each parser job retains two Stryker workers, the ordinary full Vitest
 suite, native parser-test discovery and a fresh Stryker coverage dry run.
 
+The reusable workflow checks out the immutable event SHA and rejects a caller ref
+that differs before running repository code. Release preflight already binds the
+requested source to that tagged event; PR, main, scheduled and manual CI use their
+event SHA. Caller inputs cannot select other code within the event's cache scope.
+
 Fresh jobs remove native working state before `--force --mutate`, because force
 alone can retain out-of-scope results from an old incremental report. They never
 restore or publish mutation-result caches. The collector checks every assigned

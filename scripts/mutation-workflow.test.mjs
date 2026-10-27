@@ -21,14 +21,43 @@ test('ordinary mutation keeps the existing native action and environment without
   assert.equal(ordinary.strategy, undefined);
   assert.equal(ordinary['runs-on'], 'ubuntu-24.04');
   assert.equal(ordinary['timeout-minutes'], 100);
-  assert.deepEqual(ordinary.steps, [
-    { uses: checkout, with: { ref: '${{ inputs.ref }}', 'persist-credentials': false } },
+  assert.deepEqual(ordinary.steps.slice(1), [
+    { uses: checkout, with: { ref: '${{ github.sha }}', 'persist-credentials': false } },
     { uses: './.github/actions/setup-project' },
     {
       uses: './.github/actions/test-mutations',
       with: { base: '${{ inputs.base }}', full: 'false', publish: '${{ inputs.publish }}' },
     },
   ]);
+});
+
+test('entry jobs reject source drift before checkout or repository code runs', () => {
+  const sha = 'a'.repeat(40);
+  for (const job of [ordinary, plan]) {
+    const guard = job.steps[0];
+    assert.deepEqual(guard.env, { EXPECTED_SHA: '${{ inputs.ref }}' });
+    assert.equal(job.steps[1].uses, checkout);
+    const program = guard.run.split("<<'JS'\n")[1]?.split('\nJS')[0];
+    assert.ok(program);
+    const run = (env) =>
+      spawnSync(process.execPath, ['--input-type=module', '-e', program], {
+        env,
+        encoding: 'utf8',
+        timeout: 5000,
+      }).status;
+    assert.equal(run({ EXPECTED_SHA: sha, GITHUB_SHA: sha }), 0);
+    for (const env of [
+      { EXPECTED_SHA: 'b'.repeat(40), GITHUB_SHA: sha },
+      { EXPECTED_SHA: 'refs/heads/main', GITHUB_SHA: sha },
+      { EXPECTED_SHA: sha + '\n', GITHUB_SHA: sha },
+      { EXPECTED_SHA: '', GITHUB_SHA: sha },
+      { GITHUB_SHA: sha },
+      { EXPECTED_SHA: sha },
+      {},
+    ])
+      assert.notEqual(run(env), 0);
+  }
+  assert.equal(ordinary.steps[0].run, plan.steps[0].run);
 });
 
 test('full partitions use a native dynamic matrix capped at eleven beside the pure campaign', () => {
@@ -71,7 +100,7 @@ test('all branches check out the exact caller source and keep pinned read-only d
   ]);
   for (const job of Object.values(workflow.jobs)) {
     const step = job.steps.find((step) => step.uses === checkout);
-    assert.deepEqual(step.with, { ref: '${{ inputs.ref }}', 'persist-credentials': false });
+    assert.deepEqual(step.with, { ref: '${{ github.sha }}', 'persist-credentials': false });
     assert.equal(job.permissions, undefined);
     for (const step of job.steps) if (step.uses) assert.ok(allowed.has(step.uses));
   }

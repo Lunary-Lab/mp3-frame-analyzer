@@ -37,9 +37,19 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     steps:
+      # Supported callers bind ref to their event SHA; reject drift before executing source.
+      - name: Require the caller's exact commit
+        env:
+          EXPECTED_SHA: ${{ inputs.ref }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          assert.match(process.env.EXPECTED_SHA ?? '', /^[a-f0-9]{40}$/);
+          assert.equal(process.env.EXPECTED_SHA, process.env.GITHUB_SHA, 'Caller source differs from event SHA');
+          JS
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-project
       - uses: ./.github/actions/test-mutations
@@ -56,9 +66,18 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
+      - name: Require the caller's exact commit
+        env:
+          EXPECTED_SHA: ${{ inputs.ref }}
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          assert.match(process.env.EXPECTED_SHA ?? '', /^[a-f0-9]{40}$/);
+          assert.equal(process.env.EXPECTED_SHA, process.env.GITHUB_SHA, 'Caller source differs from event SHA');
+          JS
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-project
         with:
@@ -82,7 +101,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-project
       - name: Run ordinary tests and native full partition
@@ -117,7 +136,7 @@ jobs:
           JS
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-project
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
