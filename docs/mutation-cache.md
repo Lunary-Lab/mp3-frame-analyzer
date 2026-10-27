@@ -59,6 +59,24 @@ experiments and declare new deterministic inputs before enabling reuse.
 `NODE_OPTIONS`, unreadable or unsupported nonregular inputs disable reuse.
 Any detected input change during execution fails and prevents promotion.
 
+### Why changed tests force a fresh run
+
+A local diagnostic with pinned Stryker **10.1.1** (2026-10-27) kept the same 224
+nonparser mutant identities and source bytes while adding 26 tests (75 → 101).
+Direct native incremental execution retained **61 static survivors** that the
+following fresh run, with the identical 101 tests, killed. This demonstrates
+**stale-red results** (an outdated lower score), not an unsafe passing result.
+It is a diagnostic native-tool observation, not an accepted production baseline
+or a claim about a different, subsequently refactored mutation inventory.
+
+The [pinned incremental differ](https://github.com/stryker-mutator/stryker-js/blob/959127763e5bbe2eb65f5341a8161780d6d8a476/packages/core/src/mutants/incremental-differ.ts#L428-L470)
+uses coverage changes when deciding whether to retain non-killed outcomes;
+static results may lack per-test coverage. Our declared-input key therefore
+forces full execution when tests/helpers change instead of adding a custom
+per-mutant refresh engine. Missing duration alone is not a universal reuse
+indicator: erroneous native outcomes can omit it too, and the gate rejects those
+outcomes before counting accepted fresh/reused results.
+
 ## Local and CI provenance
 
 A local successful audited run saves a `sourceCommit: local` baseline; subsequent
