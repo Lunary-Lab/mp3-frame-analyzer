@@ -5,26 +5,12 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   currentSources,
-  partitionSources,
   validateShardEvidence,
   assertShardTestInventory,
 } from './full-mutations.mjs';
 import { sha256 } from './mutation-policy.mjs';
 import { fingerprint } from './mutation-cache-inputs.mjs';
 import { assertEncoderShardDiscovery, ENCODER_TEST_NAMES } from './verify-encoder-discovery.mjs';
-
-test('whole-file partitions are complete, deterministic and bounded without empty jobs', () => {
-  assert.throws(() => partitionSources([]), /Empty/);
-  assert.throws(() => partitionSources(['a', 'a']), /Duplicate/);
-  for (const count of [1, 2, 8, 11, 12, 25]) {
-    const files = Array.from({ length: count }, (_, index) => `src/mp3/${index}.ts`);
-    const scopes = partitionSources(files);
-    assert.equal(scopes.length, Math.min(11, count));
-    assert.ok(scopes.every((scope) => scope.length > 0));
-    assert.deepEqual(scopes.flat().sort(), files.toSorted());
-    assert.deepEqual(partitionSources(files.toReversed()), scopes);
-  }
-});
 
 test('native source discovery picks up new nested files and excludes declarations', async () => {
   const root = await mkdtemp(join(tmpdir(), 'mp3-shard-discovery-'));

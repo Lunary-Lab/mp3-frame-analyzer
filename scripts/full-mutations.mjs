@@ -9,17 +9,11 @@ import { mutationEnvironment, mutationInputs, fingerprint } from './mutation-cac
 import { runnableParserTestFiles, verifyParserTestDiscovery } from './parser-test-discovery.mjs';
 import { assertEncoderShardDiscovery } from './verify-encoder-discovery.mjs';
 import { runMutationProcess } from './mutation-process.mjs';
+import { mutationPartitions } from './mutation-partitions.mjs';
 import { isMain, readJson, repositoryRoot } from './release-utils.mjs';
 
 // Reserve the twelfth mutation runner for the independent pure-runtime campaign.
 export const MAX_PARSER_SHARDS = 11;
-export function partitionSources(paths) {
-  assert.ok(paths.length > 0, 'Empty parser source inventory');
-  assert.equal(new Set(paths).size, paths.length, 'Duplicate parser source');
-  const groups = Array.from({ length: Math.min(MAX_PARSER_SHARDS, paths.length) }, () => []);
-  paths.toSorted().forEach((file, index) => groups[index % groups.length].push(file));
-  return groups;
-}
 
 export async function currentSources(root) {
   const paths = (await Array.fromAsync(glob(PARSER_GLOB, { cwd: root })))
@@ -67,7 +61,7 @@ async function freshTests(root, scope, env, log) {
 
 export async function runShard(root, shard) {
   const sources = await currentSources(root);
-  const scopes = partitionSources([...sources.keys()]);
+  const { scopes } = await mutationPartitions(sources, MAX_PARSER_SHARDS);
   assert.ok(Number.isInteger(shard) && scopes[shard], 'Invalid parser shard');
   const output = join(root, 'reports/mutation');
   const lock = join(root, '.cache/mutation/run.lock');
@@ -179,7 +173,7 @@ export async function collectShards(root, directory) {
   const output = join(root, 'reports/mutation');
   await rm(output, { recursive: true, force: true });
   const sources = await currentSources(root);
-  const scopes = partitionSources([...sources.keys()]);
+  const { scopes, inventories } = await mutationPartitions(sources, MAX_PARSER_SHARDS);
   const expected = invocation(root);
   const names = scopes.map((_, index) => artifactName(expected.attempt, index));
   assert.deepEqual(
@@ -196,7 +190,7 @@ export async function collectShards(root, directory) {
   const inputs = await mutationInputs(root, mutationEnvironment());
   const reports = validateShardEvidence(entries, scopes, expected, inputs);
   const policy = await readJson(join(root, 'mutation-equivalents.json'));
-  const summary = auditMutationShards(reports, policy, sources, scopes);
+  const summary = auditMutationShards(reports, policy, sources, scopes, inventories);
   await freshTestSources(root, reports);
   assertEncoderShardDiscovery(reports);
   assert.equal(fingerprint(await mutationInputs(root, mutationEnvironment())), fingerprint(inputs));
@@ -221,7 +215,10 @@ if (isMain(import.meta.url)) {
   const [command, argument, ...extra] = process.argv.slice(2);
   assert.equal(extra.length, 0, 'Unexpected arguments');
   if (command === 'plan' && argument === undefined) {
-    const scopes = partitionSources([...(await currentSources(repositoryRoot)).keys()]);
+    const { scopes } = await mutationPartitions(
+      await currentSources(repositoryRoot),
+      MAX_PARSER_SHARDS,
+    );
     console.log(JSON.stringify({ include: scopes.map((_, shard) => ({ shard })) }));
   } else if (command === 'run' && /^(0|[1-9]\d*)$/.test(argument ?? '')) {
     await runShard(repositoryRoot, Number(argument));

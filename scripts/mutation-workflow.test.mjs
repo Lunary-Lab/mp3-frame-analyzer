@@ -71,10 +71,8 @@ test('full partitions use a native dynamic matrix capped at eleven beside the pu
   });
   assert.deepEqual(plan.outputs, { matrix: '${{ steps.plan.outputs.matrix }}' });
   assert.deepEqual(
-    plan.steps.find((step) => step.uses === './.github/actions/setup-project').with,
-    {
-      install: 'false',
-    },
+    plan.steps.find((step) => step.uses === './.github/actions/setup-project'),
+    { uses: './.github/actions/setup-project' },
   );
   const planning = plan.steps.find((step) => step.id === 'plan').run;
   assert.ok(planning.startsWith('matrix=$(node scripts/full-mutations.mjs plan)\n'));
