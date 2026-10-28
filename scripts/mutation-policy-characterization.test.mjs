@@ -170,21 +170,21 @@ const rejected = [
     (f) => {
       delete f.report.config;
     },
-    'Mutation scope must include the entire parser',
+    'Mutation scope differs from expected scope',
   ],
   [
     'narrow scope',
     (f) => {
       f.report.config.mutate = ['src/mp3/example.ts'];
     },
-    'Mutation scope must include the entire parser',
+    'Mutation scope differs from expected scope',
   ],
   [
     'extra scope',
     (f) => {
       f.report.config.mutate.push('src/*.ts');
     },
-    'Mutation scope must include the entire parser',
+    'Mutation scope differs from expected scope',
   ],
   [
     'excluded family',
@@ -640,7 +640,7 @@ for (const [name, change, message] of [
       f.report.config.mutate = [];
       f.report.config.ignorers = ['plugin'];
     },
-    'Mutation scope must include the entire parser',
+    'Mutation scope differs from expected scope',
   ],
   [
     'context before proof',

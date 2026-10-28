@@ -39,7 +39,7 @@ function validateExecutionConfiguration(config) {
 export function validateMutationConfiguration(config, scope = [PARSER_GLOB]) {
   requireThat(
     JSON.stringify(config?.mutate) === JSON.stringify(scope),
-    'Mutation scope must include the entire parser',
+    'Mutation scope differs from expected scope',
   );
   validateExecutionConfiguration(config);
   requireThat(
