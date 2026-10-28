@@ -391,7 +391,11 @@ jobs:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-project
-      - run: npm run build
+        with:
+          install: 'false'
+      - run: node scripts/verify-npm-lock.mjs
+      - name: Run the documented source quick start from a clean checkout
+        run: node scripts/quickstart-smoke.mjs
       - run: npm run verify:version && npm run package:release
         env:
           SOURCE_COMMIT: ${{ inputs.ref || github.sha }}
