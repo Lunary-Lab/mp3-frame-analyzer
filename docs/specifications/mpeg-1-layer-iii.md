@@ -6,7 +6,7 @@
 
 Only MPEG-**1** Audio Layer **III** (MP3) elementary audio frames. A compliant frame may use any valid MPEG-1 Layer III table bitrate, sample rate, CRC-protection setting, padding setting, channel mode, and other valid header flags. CBR/VBR/ABR describe encoder bitrate behavior; **they are not different MPEG versions or distinct frame header syntaxes**. The frame length must be resolved afresh at each indexed-bitrate frame.
 
-Formats outside this target include MPEG-2 Layer III, non-ISO MPEG-2.5, MPEG-1 Layers I/II, ADTS AAC and MPEG-4/MP4. Recognized nonreserved MPEG version/layer identifiers reject as unsupported; reserved identifiers are malformed. AAC/MP4 declared media types reject as unsupported media, while mislabeled non-MPEG bytes need not be identified by codec. See the [exact input classification contract](input-classification.md). MPEG ancillary data does not change the underlying frame-boundary counting requirement.
+Formats outside this target include MPEG-2 Layer III, non-ISO MPEG-2.5, MPEG-1 Layers I/II, ADTS AAC and MPEG-4/MP4. Recognized nonreserved MPEG version/layer identifiers reject as unsupported; reserved identifiers are malformed. AAC/MP4 declared media types reject as unsupported media, while mislabeled non-MPEG bytes need not be identified by codec. See the [exact input classification contract](http-api.md#supported-unsupported-and-malformed-input). MPEG ancillary data does not change the underlying frame-boundary counting requirement.
 
 ## 2. Four-byte header: bit-accurate layout
 

@@ -12,8 +12,8 @@ Every generated mutant must have an audited result: freshly executed or explicit
 reused by native Stryker from a validated same-input completed baseline. Native
 matching and current coverage own reuse; no custom killing-witness engine is used.
 Forced-full mode executes all mutants. There are **no source-level Stryker ignores,
-no excluded mutator families, and no native ignore plugin**. The raw JSON report
-is preserved unchanged. The adjusted score excludes only exact, reviewed,
+no excluded mutator families, and no native ignore plugin**. Raw Stryker JSON
+reports are preserved unchanged. The adjusted score excludes only exact, reviewed,
 behaviorally equivalent mutants from its population. A reviewed equivalent that
 times out remains a timeout in the raw report and raw score; it is removed from
 both the adjusted detected count and denominator. The adjusted score is a
@@ -34,12 +34,14 @@ replacement**. No neighboring mutation is exempted.
 hash** also binds proofs that depend on another module's invariants. Any parser
 change requires re-reviewing those assumptions before updating that hash.
 
-`scripts/run-mutations.mjs` deletes previous output reports, runs the normal
-Vitest suite and Stryker, and audits the newly generated complete report with
-`scripts/mutation-policy.mjs`. A new report may include explicitly accounted-for
-validated reused outcomes; it is not represented as all-fresh execution.
-[Cache safety and verification](mutation-cache.md) documents the trust boundary
-and conservative invalidation rules. CI fails for:
+For local execution and CI's native route, `scripts/run-mutations.mjs` deletes
+previous output reports, runs the normal Vitest suite and Stryker, and audits the newly
+generated complete report with `scripts/mutation-policy.mjs`. A new report may
+include explicitly accounted-for validated reused outcomes; it is not represented
+as all-fresh execution. Cold ordinary PRs and explicitly full CI use a matrix with
+separate unchanged raw shard reports and a collected audit; it does not merge the raw Stryker reports.
+[Execution paths and cache safety](mutation-cache.md#what-runs) document that
+distinction, the trust boundary and conservative invalidation rules. CI fails for:
 
 - Any unexplained survivor, uncovered mutant, ignored mutant, pending result,
   compile error, runtime error, or failed Stryker process.
@@ -61,13 +63,16 @@ incomplete or erroneous outcomes remain failures.
 
 The native Stryker `thresholds.break` is deliberately **0** so Stryker can emit
 its unfiltered report. It is **not the acceptance threshold**. The mandatory
-auditor then requires exactly 100%, with no rounding tolerance. CI invokes the
-wrapper, never bare `stryker run`. Running bare Stryker is diagnostic only.
+auditor then requires exactly 100%, with no rounding tolerance. Native execution
+invokes the wrapper audit; matrix execution requires its collected audit.
+Running bare `stryker run` is diagnostic only.
 
-Both reports are uploaded: `reports/mutation/mutation.json` (raw) and
+The native execution path produces `reports/mutation/mutation.json` (raw) and
 `reports/mutation/audit.json` (adjusted, with explicit counts, exception IDs,
-and executed/reused accounting). Test-process logs and input fingerprints are
-uploaded beside them. The unmodified Stryker schema stays at 1.0 and the
+and executed/reused accounting); native CI uploads both with test-process logs
+and input fingerprints. The [fresh full matrix](mutation-cache.md#what-runs)
+retains each shard's raw report alongside its collected audit, with no merged
+Stryker report. The unmodified Stryker schema stays at 1.0 and the
 equivalence policy at 1; only the separate audit adds an `execution` object.
 A failed run cannot reuse a stale passing audit. Mutation jobs run for pull
 requests, pushes to `main`, manual dispatches, and a weekly forced-full run.
@@ -246,11 +251,15 @@ Raw score: **95.45%**; adjusted score: **100%**. All 32 survivors match exact
 reviewed equivalents. Timeouts are reported separately from assertion kills;
 their split can vary with the machine's scheduling.
 
-The preceding merged PR #9 campaign recorded 694 mutants: 632 killed,
+The preceding merged PR #9 campaign (October 24, 2026, Stryker 10.1.1,
+`PROPERTY_SEED=20261024`) recorded 694 mutants across seven modules: 632 killed,
 34 timed out and 28 reviewed equivalents, for 95.97% raw and 100% adjusted.
-Its earlier full-suite run detected the same 666 mutants, split as 560 killed
-and 106 timed out. Earlier testing in that work found and killed 46
-non-equivalent survivors with boundary tests:
+It took 5 minutes 41 seconds locally. Its earlier full-suite run detected the
+same 666 mutants, split as 560 killed and 106 timed out, and took 14 minutes
+49 seconds locally but exceeded the 20-minute CI wall-clock limit. The mutation
+command then switched to parser tests with `timeoutMS: 2000` as an additional
+allowance. The first run on the combined tree scored 89.77% raw; its 46
+non-equivalent survivors were killed with boundary tests:
 
 - Xing optional fields that exactly fill a frame, or fall one byte short.
 - Partial and wrong signatures.

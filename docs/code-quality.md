@@ -3,8 +3,10 @@
 These are this project's review and CI policies, not universal definitions of
 good code. They apply to maintained TypeScript and JavaScript: application and
 parser code, build/release scripts, mutation/cache gates, fuzz generators,
-benchmarks, and configuration modules. Generated output and dependencies remain
-outside the lint scope; hand-written tooling does not.
+benchmarks, and configuration modules. [`eslint.config.mjs`](../eslint.config.mjs)
+defines the exact scopes and limits. Shell, Python, Terraform, and JavaScript
+embedded in workflow YAML are outside this ESLint gate. Generated output and
+dependencies are also excluded; maintained JavaScript/TypeScript tooling is included.
 
 | Check                 | Production limit | Enforcement                                                     |
 | --------------------- | ---------------: | --------------------------------------------------------------- |
@@ -21,9 +23,9 @@ Width exceptions are limited to a standalone, single-line quoted/template
 literal, or a comment containing only an HTTP(S) URL. They preserve exact binary
 protocol strings, generated-source fixtures and useful links. A line merely
 containing a string or URL is **not** exempt: surrounding code still has to fit.
-One descriptive test-call line has a local, explained width suppression because
-Prettier keeps that call together. There are no production complexity or size
-suppressions.
+There are currently no local width, production complexity, or production size
+suppressions. Strings containing suppression directives in scanner test fixtures
+are rejection controls, not active lint exemptions.
 
 ## Test policy
 
@@ -33,8 +35,8 @@ production file/function line caps: splitting a table or nested `describe` only
 to reduce its measured length makes the tests harder to review. Width checks
 still apply. Test helpers outside test files retain the production size caps.
 
-The existing TypeScript-test complexity warning above 16 is preserved and made
-consistent for JavaScript test files. This advisory threshold is deliberately
+TypeScript under `tests/` and JavaScript test files receive a complexity warning
+above 16. Helpers retain the production file/function size caps. This advisory threshold is deliberately
 separate from the production error at 10; it is not permission to hide production
 logic in test files. Test behavior, assertions and coverage/mutation thresholds
 must not be weakened to satisfy a metric.
