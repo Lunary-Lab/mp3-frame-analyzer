@@ -26,7 +26,9 @@ const runnerSource = await readFile(new URL('./run-mutations.mjs', import.meta.u
 function selectRunnerPolicy(source) {
   const parsed = ts.createSourceFile('run-mutations.mjs', source, ts.ScriptTarget.Latest, true);
   assert.equal(parsed.parseDiagnostics.length, 0, 'Runner source must parse');
-  const tries = parsed.statements.filter(ts.isTryStatement);
+  const tries = parsed.statements
+    .map((statement) => (ts.isLabeledStatement(statement) ? statement.statement : statement))
+    .filter(ts.isTryStatement);
   assert.equal(tries.length, 1, 'Expected one top-level runner try block');
   const declarationName = (statement) =>
     ts.isVariableStatement(statement) &&
@@ -558,3 +560,55 @@ test('policy fragment selection rejects a promotion after the tested guards', ()
     /Runner promotion call lies outside the tested policy span/,
   );
 });
+
+test('policy fragment selection executes routing identity initialization with or without the outer label', async () => {
+  const parsed = ts.createSourceFile('runner.mjs', runnerSource, ts.ScriptTarget.Latest, true);
+  const outer = parsed.statements.find(ts.isLabeledStatement);
+  assert.ok(outer && ts.isTryStatement(outer.statement));
+  const unlabeled =
+    runnerSource.slice(0, outer.getStart(parsed)) +
+    runnerSource.slice(outer.statement.getStart(parsed));
+  assert.deepEqual(selectRunnerPolicy(unlabeled), runnerPolicy);
+  for (const source of [runnerSource, unlabeled]) {
+    const calls = [];
+    const policy = selectRunnerPolicy(source);
+    const identity = await runInNewContext(
+      '(async () => {' + policy.admission + '; return routingIdentity;})()',
+      {
+        args: [],
+        env: {},
+        inputsHash: key,
+        process: { env: { MUTATION_PR_CACHE_RESTORED: 'true' } },
+        pullRequestIdentity: () => {
+          calls.push(['identity']);
+          return 'pr:42:7';
+        },
+        root: '/project',
+        audit() {},
+        readCache: async (...values) => {
+          calls.push(['read', values[2]]);
+          return { report: null };
+        },
+      },
+      { timeout: 1000 },
+    );
+    assert.equal(identity, 'pr:42:7');
+    assert.deepEqual(calls, [['identity'], ['read', 'pr:42:7']]);
+  }
+});
+
+for (const position of ['before', 'nested before', 'nested after'])
+  test('policy fragment selection rejects a promotion ' + position + ' the tested guards', () => {
+    const call = "await promoteCache(root, report, inputsHash, 'local');";
+    const extra = position.startsWith('nested') ? 'if (true) { ' + call + ' }' : call;
+    const promotion = runnerPolicy.promotion;
+    const inserted = position.endsWith('before')
+      ? extra + '\n' + promotion
+      : promotion + '\n' + extra;
+    const edited = runnerSource.replace(promotion, inserted);
+    assert.notEqual(edited, runnerSource);
+    assert.throws(
+      () => selectRunnerPolicy(edited),
+      /Runner promotion call lies outside the tested policy span/,
+    );
+  });
