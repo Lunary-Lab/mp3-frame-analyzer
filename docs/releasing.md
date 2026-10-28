@@ -163,14 +163,25 @@ rechecking boundary and composition behavior, not assuming it is unchanged.
 ## Automated path
 
 1. A merge to `main` runs `release-please.yml`. Its metadata-only job creates or updates the release PR; it does not check out project code.
-2. The workflow reports the generated **release PR and current head** in its job summary without launching duplicate checks. GitHub queues `GITHUB_TOKEN`-generated `pull_request` CI for workflow-execution approval, but does not trigger the metadata-only `pull_request_target` title workflow. Moreover, dispatched workflow checks [do not satisfy PR rulesets](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks#checks-from-some-workflow-jobs-are-not-evaluated), even when green on that head. After the intended main-branch changes are complete, review the finalized release PR; a maintainer can **close and reopen** it to trigger native CI and title validation, or **Update branch** if it is behind `main`. Review any **Approve workflows to run** prompt and confirm **All checks** and **Conventional Commit PR title** pass in the PR checks. Recheck the head after any update; earlier-head or manual-dispatch success is not admission evidence. Workflow execution approval neither merges the PR nor publishes a release.
-3. Review and squash merge the release PR. Release Please creates a **draft release** and, with `force-tag-creation`, creates its `vX.Y.Z` tag while it is still a draft.
+2. The workflow reports the generated **release PR and current head** without launching duplicate checks. Initial bot-created checks may need a maintainer to **close and reopen** the PR and review an **Approve workflows to run** prompt. Confirm **All checks** and **Conventional Commit PR title** pass on the current PR head; earlier-head or separately dispatched success is not admission evidence. Dispatched workflow checks [do not satisfy PR rulesets](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks#checks-from-some-workflow-jobs-are-not-evaluated). This workflow-execution decision does not approve publication.
+3. After [queue activation](governance.md#activate-and-verify-the-queue), review and **enqueue** the release PR using the maintainer's existing GitHub account; `GITHUB_TOKEN` cannot enqueue it. GitHub tests the integrated queue SHA and squash merges only after both required checks pass. Later PRs wait behind it; ordinary `main` advancement requires no repeated **Update branch** clicks. Release Please continues updating versions and changelogs: a genuine release-PR head change invalidates the candidate and needs fresh checks and requeueing. Release Please then creates a **draft release** and, with `force-tag-creation`, creates its `vX.Y.Z` tag while it is still a draft.
 4. The workflow dispatches `publish-release.yml` **at that exact tag**, passing its full commit SHA. Preflight requires a matching draft, a matching tag commit already reachable from `main`, and `GITHUB_SHA` equal to the declared source commit. Dispatching from `main` is rejected.
 5. The reusable, read-only CI validates that commit. It checks Node 24 and 26, npm compatibility, formatting, lint, both TypeScript compilers, coverage, tooling, mutation testing, fuzzing, dependency audits, static analysis, secrets, and measured memory/HTTP behavior. The Node 24 release lane packages the existing compiled output and tests the unpacked artifact; the publisher never rebuilds it.
 6. Native notes preparation independently verifies the same release range. The candidate job seals the tested runtime and both notes views, with immutable input identities and checksums, into one artifact. Build provenance attests every sealed file.
 7. The `publish` job waits in the `release` environment for one approval from the release approver ([Release approval](governance.md#release-approval)). After approval it authenticates and downloads the same sealed artifact, verifies its complete checksum/identity ledger, rechecks the owner decision, draft and tag, attaches the files and combined notes, and only then publishes the draft. A validation, attestation or approval that does not succeed leaves it unpublished.
 
 The version verifier requires agreement between `package.json`, both lockfile root versions, the release manifest, and the supplied release tag. In CI, the recorded source commit must equal the checked-out Git HEAD. Tag-based invocation also keeps the standard attestation's workflow commit aligned with the actual build source.
+
+The stable publication candidate is the exact tagged merge commit, which may be
+an ancestor of a newer `main`; it need not remain the branch tip during validation
+or owner approval. The queue handles integration before that point, without a
+manual freeze of `main`. CI validates the queue SHA in its own concurrency group;
+the metadata-only title check binds live GraphQL `headCommit`/`baseCommit` to the
+queue event without checking out code. Changed or missing bindings fail closed.
+The queue configuration is proposed, **not applied**: follow the separately
+approved activation and nonpublishing acceptance procedure in
+[governance](governance.md#activate-and-verify-the-queue). Until then, existing
+strict branch-update requirements still apply.
 
 ## Published files
 
@@ -201,7 +212,7 @@ The runtime archive is deliberately assembled from compiled output; `npm pack` i
 | Provenance        | `id-token: write` and `attestations: write`; downloads tested assets, no project checkout/build        |
 | Publication       | `contents: write` and `actions: read`; downloads and uploads tested assets, no rebuilding              |
 
-Workflow actions are pinned by commit. Optional CLI update notices and OpenTelemetry are disabled (`GH_NO_UPDATE_NOTIFIER`, `GH_NO_EXTENSION_UPDATE_NOTIFIER`, `DO_NOT_TRACK`, `OTEL_SDK_DISABLED`). Required GitHub API, artifact and attestation service traffic and service-side audit logs remain; these controls do not claim otherwise. Ordinary PR title validation uses `pull_request_target` only to inspect metadata; it never executes PR code. The optional dispatched title check is diagnostic only; it cannot satisfy a PR ruleset.
+Workflow actions are pinned by commit. Optional CLI update notices and OpenTelemetry are disabled (`GH_NO_UPDATE_NOTIFIER`, `GH_NO_EXTENSION_UPDATE_NOTIFIER`, `DO_NOT_TRACK`, `OTEL_SDK_DISABLED`). Required GitHub API, artifact and attestation service traffic and service-side audit logs remain; these controls do not claim otherwise. Ordinary PR title validation uses `pull_request_target` and queue title validation uses `merge_group` only to inspect metadata; neither executes PR code. The optional dispatched title check is diagnostic only; it cannot satisfy a PR ruleset.
 
 ## Repository settings
 
@@ -209,7 +220,7 @@ Terraform in [`governance/`](../governance/) manages the repository's settings; 
 
 - Squash merging only, titled by the PR title with a blank body; merged branches are deleted.
 - The default `GITHUB_TOKEN` is read-only; only GitHub-owned, verified-creator and the two listed third-party actions may run, each pinned to a full commit SHA.
-- The `main` ruleset requires a pull request, passing `All checks` and `Conventional Commit PR title` checks on an up-to-date branch, resolved conversations, and linear history; it blocks force pushes and deletion and has no bypass.
+- The `main` ruleset requires a pull request with zero mandatory PR approvals, passing `All checks` and `Conventional Commit PR title`, strict checks, resolved conversations, and linear history; it blocks force pushes and deletion and has no bypass. Proposed queue settings add one candidate at a time (`SQUASH`, `ALLGREEN`, build/merge/minimum counts 1, wait 0, timeout 180 minutes); activation is separate.
 - `v*` tags cannot be moved or deleted, and publication waits for the release approver in the `release` environment.
 - Workflows from forks wait for approval before running, and never receive write tokens or secrets.
 
@@ -227,6 +238,10 @@ The `main` ruleset enforces the merge policy. `main-policy-audit.yml` remains a 
 - was force-pushed.
 
 It warns when the PR had no approval from someone other than its author. A failed audit means the policy was bypassed after the fact; investigate it and correct `main` through a new PR. Release publication separately revalidates the exact tagged commit, so an unchecked merge cannot publish without passing CI.
+
+The audit deliberately retains the original PR-head admission evidence. Native
+queue validation uses a different integrated SHA, enforced by the ruleset; the
+audit does not substitute original-head checks for that queue validation.
 
 ## Local verification
 
@@ -266,7 +281,8 @@ Then follow [the runtime guide](runtime.md) to extract the archive, install prod
 
 ## Recover from a failed release
 
-- **Release PR validation failed or required checks are absent:** fix any source defect in an ordinary PR and finish the intended main-branch batch before validating the release PR again. Review its current head, then close and reopen it as a maintainer to trigger both native CI and metadata-only title validation; **Update branch** is another option when it is behind `main`. Review any workflow-execution approval prompt and verify both required checks in the PR, not a separate manual dispatch. A GitHub App installation token can automate eligible events without recurring prompts, but configuring one is optional and requires separate credential/permission approval; it is not required for this maintainer path. Publication still revalidates the exact tag and waits for separate final owner approval.
+- **Release PR checks are absent:** review its current head, close and reopen it as a maintainer to trigger native CI and metadata-only title validation, and review any workflow-execution approval prompt. Verify both required checks in the PR, not a separate manual dispatch, then enqueue it after queue activation. This uses the existing account and needs no new credential.
+- **Queue validation failed or the release PR changed:** investigate the failed check, fix source defects through an ordinary PR, and let Release Please update the version/changelog when needed. Review the new head and its fresh checks before requeueing. Genuine candidate changes cannot reuse earlier checks; ordinary advancement of `main` alone does not require manually updating the release branch. Publication still validates the exact tag and waits for one final owner approval.
 - **Publication failed after the draft and tag were created:** a retry runs the workflows and source from the tag, so changes merged to `main` cannot repair it. Retry the draft as shown below for transient failures, such as a runner or network error. If the tagged source or its workflows are defective, leave the draft unpublished, merge the fix, and let Release Please propose the next version. Never move or recreate a release tag.
 - **A published release is defective:** published releases are immutable. Merge a correction and release a new version.
 

@@ -149,6 +149,22 @@ test('exact-source release validation is isolated and never cancels in progress'
   assert.notEqual(result.group, concurrency(values).group);
 });
 
+test('a new main arrival cannot replace validation of the native queue candidate', () => {
+  const queued = context({ event: 'merge_group', ref: 'refs/heads/gh-readonly-queue/main/pr-15' });
+  queued.github.sha = 'a'.repeat(40);
+  const initial = concurrency(queued);
+  assert.equal(initial.group, `ci-queue-${queued.github.sha}`);
+  const main = context({ event: 'push', ref: 'refs/heads/main', run: 2 });
+  main.github.sha = 'b'.repeat(40);
+  assert.notEqual(concurrency(main).group, initial.group);
+  // Native candidate replacement gets its own exact SHA; no PR branch update is dispatched.
+  const replacement = structuredClone(queued);
+  replacement.github.sha = 'c'.repeat(40);
+  assert.notEqual(concurrency(replacement).group, initial.group);
+  assert.deepEqual(parse(ci).on.merge_group, { types: ['checks_requested'] });
+  assert.doesNotMatch(ci, /update-branch|gh pr merge/);
+});
+
 test('the stable aggregate needs exactly every native validation job', () => {
   const jobs = [...ci.slice(ci.indexOf('jobs:\n')).matchAll(/^ {2}([a-z][a-z0-9-]+):$/gm)]
     .map((match) => match[1])
