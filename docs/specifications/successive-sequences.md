@@ -32,7 +32,13 @@ decision. Metadata alone is not treated as an ISO reset marker.
 ## Admissibility, ranking and errors
 
 1. Search remains one 8,647-byte probe plus one unsearched EOF-witness byte.
-   Candidate unpadded spans remain 20–2,880 bytes.
+   Every root and successor candidate uses its own sample rate's upper unpadded
+   span: 1,044 / 960 / 1,440 bytes at 44.1 / 48 / 32 kHz. Its physical span,
+   including padding, must fit 1,045 / 960 / 1,440 bytes. These follow the
+   [documented inclusive 320 kbps interpretation](mpeg-1-layer-iii.md#4-free-format-layer-iii-bitrate-index-zero),
+   based on the detailed maximum-rate rule and fixed-rate arithmetic. Maximum-base
+   padding at 32/48 kHz exceeds that envelope; it fits at 44.1 kHz. Check every
+   candidate frame so extension-only spans cannot supply competing evidence.
 2. Within a free configuration, compatible-header count ranks first, then
    validated metadata evidence. This existing strongest-chain preference remains
    a **heuristic**, not proof of universal mathematical uniqueness.
@@ -47,13 +53,15 @@ decision. Metadata alone is not treated as an ISO reset marker.
    outvoted by a coarser same-rate chain hiding that configuration. It, or an
    equal best same-configuration score, returns unsupported-format / HTTP 415:
    **“Ambiguous free-format MPEG frame layout”**. No numeric count is guessed.
-6. No qualifying candidate retains the separate **“Cannot infer a unique
-   free-format MPEG frame size from consecutive headers”** error. These inference
-   failures do not declare every such byte string ISO-invalid.
+6. No qualifying candidate returns **"Cannot infer a unique free-format MPEG
+   frame size within the supported 320 kb/s bitrate envelope"**, with
+   unsupported-format / HTTP 415. This reports failed in-scope inference; it
+   does not diagnose an exact bitrate or declare every such byte string ISO-invalid.
 7. Once established, a span is skipped without scanning payload. No new sequence
    causes another encoder-header subtraction: HTTP omitted/false excludes at most
    the upload's initial recognized Xing/Info/VBRI frame; true and the direct parser
-   default count physical frames.
+   default count physical frames. Every later free-format physical span still
+   must fit its rate's envelope; an overrun raises `invalid-mp3` / HTTP 422.
 
 ## Necessary side-information bounds, not decoding
 
@@ -165,7 +173,7 @@ bounded lookahead, chunk independence, scheduling fairness, cancellation and
 iterator cleanup. A 2,700-byte three-frame control with dense ancillary patterns
 remains counted: proposed alternatives either lack their claimed history or
 contain impossible spectral-pair counts. No reservoir reset is assumed. All 48 normally
-flushed short encoder fixtures remain mandatory controls.
+flushed short encoder fixtures remain controls: 128 kbps acceptance and 400 kbps rejection.
 
 Sequence-aware property and coverage-guided fuzz targets generate changed-rate
 indexed/free combinations, padding/CRC/channel modes, ancillary patterns,

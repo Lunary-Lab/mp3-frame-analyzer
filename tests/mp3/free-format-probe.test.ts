@@ -110,7 +110,7 @@ describe('probe work is driven by supported boundary evidence', () => {
   });
 
   it('does not turn non-target ancillary sync markers into extra candidate walks or yields', async () => {
-    const clean = freeFrame(2_880);
+    const clean = freeFrame(1_044);
     const first = decodeFrameHeader(clean.subarray(0, 4));
     if (first.kind !== 'free-format') throw new Error('Invalid fixture');
     const baseline = analyzeFreeFormatProbeSteps(clean, first, true, clean.length).next();

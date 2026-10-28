@@ -1,7 +1,7 @@
 import type { AsyncByteReader } from './byte-reader.js';
 import { Mp3ParseError } from './errors.js';
 import { decodeFrameHeader, type FrameHeader, type FreeFormatFrameHeader } from './frame-header.js';
-import { inferFreeFormatBaseLength } from './free-format.js';
+import { inferFreeFormatBaseLength, MAX_FREE_FORMAT_PHYSICAL_BYTES } from './free-format.js';
 
 /** A physical frame's decoded header and its span in bytes. */
 export interface FrameSpan {
@@ -53,6 +53,13 @@ export class FrameSpans {
     }
     const mode = this.mode?.kind === 'free-format' ? this.mode : await this.discover(header);
     const length = mode.baseLength + header.padding;
+    if (length > MAX_FREE_FORMAT_PHYSICAL_BYTES[header.sampleRateIndex]!) {
+      throw new Mp3ParseError(
+        'invalid-mp3',
+        offset,
+        'Free-format frame exceeds the supported 320 kb/s bitrate envelope',
+      );
+    }
     validateFreeFormatPrefix(header, length, offset);
     return { header, length };
   }

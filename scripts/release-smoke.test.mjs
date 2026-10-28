@@ -8,7 +8,7 @@ import {
   uploadLimit,
 } from './release-smoke-cases.mjs';
 import { sendRequest, verifyResponse } from './release-smoke-http.mjs';
-import { decodeFixtureManifest } from './release-smoke-fixtures.mjs';
+import { decodeFixtureManifest, loadSmokeFixtures } from './release-smoke-fixtures.mjs';
 import { createHash } from 'node:crypto';
 
 const fixture = { name: 'cbr', bytes: Buffer.from([1, 2, 3]), audioFrames: 32, physicalFrames: 33 };
@@ -75,6 +75,33 @@ test('upload-limit source stays bounded and counts frames without using producti
   assert.throws(() => frameStream(-1), /frame count/);
 });
 
+test('genuine free-format smoke retains in-scope counts and rejects higher-rate extensions', async () => {
+  const fixtures = await loadSmokeFixtures();
+  assert.equal(fixtures.length, 8);
+  const scenarios = buildScenarios(fixtures);
+  const extensions = new Set(['free-format-44100-1-400-false', 'free-format-32000-1-400-true']);
+  for (const item of fixtures) {
+    for (const form of ['raw', 'multipart']) {
+      for (const policy of ['default', 'false', 'true']) {
+        const found = scenarios.find(
+          (scenario) => scenario.id === `${item.name}/${form}/${policy}`,
+        );
+        assert.ok(found);
+        assert.deepEqual(
+          found.expected,
+          extensions.has(item.name)
+            ? { status: 415, error: 'unsupported-format' }
+            : {
+                status: 200,
+                frameCount: policy === 'true' ? item.physicalFrames : item.audioFrames,
+              },
+          found.id,
+        );
+      }
+    }
+  }
+});
+
 test('multipart generator places body bytes between complete deterministic boundaries', async () => {
   const parts = [];
   for await (const part of multipartStream([Buffer.from('abc')])) parts.push(part);
@@ -110,6 +137,7 @@ test('genuine fixture manifest requires exact bytes and bounded independent coun
   const bytes = Buffer.from('benign fixture');
   const record = {
     name: 'reviewed',
+    bitrate: 128,
     bytes: bytes.length,
     audioFrames: 2,
     physicalFrames: 3,
@@ -123,6 +151,8 @@ test('genuine fixture manifest requires exact bytes and bounded independent coun
     { bytes: 1 },
     { audioFrames: 0 },
     { physicalFrames: 99 },
+    { bitrate: 0 },
+    { bitrate: '400' },
   ]) {
     assert.throws(() => decodeFixtureManifest({ ...manifest, records: [{ ...record, ...patch }] }));
   }
