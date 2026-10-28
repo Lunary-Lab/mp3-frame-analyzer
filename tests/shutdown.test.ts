@@ -1,7 +1,28 @@
 import { expect, it, vi } from 'vitest';
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import { Agent, request, type IncomingMessage } from 'node:http';
 import { closeIdleConnectionsAfterDrain, closeWithDeadline } from '../src/shutdown.js';
+import { observeListenerCleanup } from './helpers/listener-cleanup.js';
+
+function observeShutdownListeners(app: FastifyInstance) {
+  const observed = new WeakMap<IncomingMessage, ReturnType<typeof observeListenerCleanup>>();
+  const unrelated = () => {};
+  app.addHook('onRequest', (request, _reply, done) => {
+    request.raw.on('end', unrelated);
+    request.raw.on('close', unrelated);
+    observed.set(request.raw, observeListenerCleanup(request.raw, ['end', 'close']));
+    done();
+  });
+  closeIdleConnectionsAfterDrain(app);
+  app.addHook('onRequest', (request, _reply, done) => {
+    observed.get(request.raw)!.capture();
+    done();
+  });
+  return (raw: IncomingMessage) => {
+    observed.get(raw)!.expectDetached();
+    for (const event of ['end', 'close']) expect(raw.listeners(event)).toContain(unrelated);
+  };
+}
 
 it('closes a real listening server and runs its close hooks', async () => {
   const app = Fastify();
@@ -40,7 +61,7 @@ it('bounds a stalled close hook and releases its deadline timer', async () => {
 
 it('closes a newly idle keep-alive connection only after its accepted response finishes', async () => {
   const app = Fastify();
-  closeIdleConnectionsAfterDrain(app);
+  const expectDetached = observeShutdownListeners(app);
   const entered = Promise.withResolvers<void>();
   const closing = Promise.withResolvers<void>();
   let raw: IncomingMessage | undefined;
@@ -82,8 +103,7 @@ it('closes a newly idle keep-alive connection only after its accepted response f
     client.end('b');
     expect(await response.promise).toEqual({ status: 200, body: '{"bytes":2}' });
     await stopped;
-    expect(raw!.listeners('end').some((listener) => listener.name === 'reapIdle')).toBe(false);
-    expect(raw!.listeners('close').some((listener) => listener.name === 'detach')).toBe(false);
+    expectDetached(raw!);
   } finally {
     client.destroy();
     agent.destroy();
@@ -94,7 +114,7 @@ it('closes a newly idle keep-alive connection only after its accepted response f
 
 it('detaches after abort and does not reap idle connections outside shutdown', async () => {
   const app = Fastify();
-  closeIdleConnectionsAfterDrain(app);
+  const expectDetached = observeShutdownListeners(app);
   const reap = vi.spyOn(app.server, 'closeIdleConnections');
   const received = Promise.withResolvers<IncomingMessage>();
   app.addContentTypeParser('application/octet-stream', (_request, payload, done) =>
@@ -119,13 +139,11 @@ it('detaches after abort and does not reap idle connections outside shutdown', a
   try {
     client.write('a');
     const raw = await received.promise;
-    expect(raw.listeners('end').some((listener) => listener.name === 'reapIdle')).toBe(true);
     const closed = new Promise<void>((resolve) => raw.once('close', resolve));
     client.destroy();
     await closed;
     expect(raw.readableEnded).toBe(false);
-    expect(raw.listeners('end').some((listener) => listener.name === 'reapIdle')).toBe(false);
-    expect(raw.listeners('close').some((listener) => listener.name === 'detach')).toBe(false);
+    expectDetached(raw);
     expect(reap).not.toHaveBeenCalled();
   } finally {
     client.destroy();

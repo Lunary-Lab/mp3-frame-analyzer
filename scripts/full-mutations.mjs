@@ -37,7 +37,7 @@ const artifactName = (attempt, shard) => `full-parser-shard-${attempt}-${shard}`
 const cli = (packageName, executable) =>
   join(dirname(fileURLToPath(import.meta.resolve(`${packageName}/package.json`))), executable);
 
-async function freshTests(root, scope, env, log) {
+async function runFreshShardCampaign(root, scope, env, log) {
   const discovery = await verifyParserTestDiscovery(root, env);
   await writeFile(
     join(root, 'reports/mutation/discovery.json'),
@@ -76,7 +76,7 @@ export async function runShard(root, shard) {
     const env = mutationEnvironment();
     const before = await mutationInputs(root, env);
     log = createWriteStream(join(output, 'execution.log'));
-    await freshTests(root, scopes[shard], env, log);
+    await runFreshShardCampaign(root, scopes[shard], env, log);
     const after = await mutationInputs(root, env);
     assert.equal(
       fingerprint(after),
@@ -155,7 +155,7 @@ export function assertShardTestInventory(reports, expected) {
   }
 }
 
-async function freshTestSources(root, reports) {
+async function assertCurrentShardTests(root, reports) {
   const env = mutationEnvironment();
   await verifyParserTestDiscovery(root, env);
   const expected = await runnableParserTestFiles(root, env);
@@ -191,7 +191,7 @@ export async function collectShards(root, directory) {
   const reports = validateShardEvidence(entries, scopes, expected, inputs);
   const policy = await readJson(join(root, 'mutation-equivalents.json'));
   const summary = auditMutationShards(reports, policy, sources, scopes, inventories);
-  await freshTestSources(root, reports);
+  await assertCurrentShardTests(root, reports);
   assertEncoderShardDiscovery(reports);
   assert.equal(fingerprint(await mutationInputs(root, mutationEnvironment())), fingerprint(inputs));
   await mkdir(output, { recursive: true });
