@@ -1,6 +1,6 @@
 import { createWriteStream } from 'node:fs';
 import { runMutationProcess } from './mutation-process.mjs';
-import { readFile, readdir, rm, mkdir, writeFile } from 'node:fs/promises';
+import { appendFile, readFile, readdir, rm, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { auditMutations, sourceContext } from './mutation-policy.mjs';
@@ -37,11 +37,14 @@ async function parserSources(directory = join(root, 'src/mp3')) {
 let log;
 let locked = false;
 const lock = join(root, '.cache/mutation/run.lock');
-try {
+mutationRun: try {
   const args = process.argv.slice(2);
-  if (args.some((arg) => arg !== '--full' && arg !== '--cache-key') || args.length > 1) {
+  if (
+    args.some((arg) => !['--full', '--cache-key', '--parallel-fallback'].includes(arg)) ||
+    args.length > 1
+  ) {
     throw new Error(
-      'Only --full and --cache-key are supported; narrowing mutation scope is forbidden',
+      'Only --full, --cache-key or --parallel-fallback is supported; narrowing mutation scope is forbidden',
     );
   }
   if (!args.includes('--cache-key')) {
@@ -82,11 +85,10 @@ try {
         'Parser context changed: review equivalence proofs before rerunning mutations',
       );
     }
-    const discovery = await verifyParserTestDiscovery(root, env);
-    await writeFile(join(output, 'discovery.json'), JSON.stringify(discovery, null, 2) + '\n');
     const audit = (report, options) => auditMutations(report, policy, sources, options);
     const force = args.includes('--full') || Boolean(env.NODE_OPTIONS) || !inputsHash;
-    const prIdentity = force ? null : pullRequestIdentity(process.env);
+    const routingIdentity = pullRequestIdentity(process.env);
+    const prIdentity = force ? null : routingIdentity;
     const sourceIdentity =
       prIdentity && process.env.MUTATION_PR_CACHE_RESTORED === 'true'
         ? prIdentity
@@ -103,6 +105,29 @@ try {
     if (process.env.GITHUB_ACTIONS === 'true')
       for (const path of [BASELINE, PR_BASELINE]) await rm(join(root, path), { force: true });
     console.log(`Mutation cache: ${cache.reason}. Native Stryker owns result reuse.`);
+    if (args.includes('--parallel-fallback')) {
+      const mainPush =
+        process.env.GITHUB_ACTIONS === 'true' &&
+        process.env.GITHUB_EVENT_NAME === 'push' &&
+        process.env.GITHUB_REF === 'refs/heads/main';
+      if (!routingIdentity && !mainPush)
+        throw new Error('Parallel fallback requires a hosted pull-request merge or main push');
+      if (!process.env.GITHUB_OUTPUT) throw new Error('Parallel fallback requires GITHUB_OUTPUT');
+      const route = routingIdentity && !cache.report ? 'full-sharded' : 'native';
+      await writeFile(
+        join(output, 'routing.json'),
+        JSON.stringify(
+          { route, cacheReason: cache.reason, inputsHash, inputCaptureError },
+          null,
+          2,
+        ) + '\n',
+      );
+      await appendFile(process.env.GITHUB_OUTPUT, `route=${route}\n`);
+      // Leave through finally so the shard handoff never retains the local lock.
+      if (route === 'full-sharded') break mutationRun;
+    }
+    const discovery = await verifyParserTestDiscovery(root, env);
+    await writeFile(join(output, 'discovery.json'), JSON.stringify(discovery, null, 2) + '\n');
     const started = performance.now();
     // A normal unmutated run is mandatory even for a 100% cache hit. Stryker
     // subsequently performs its own fresh discovery/coverage dry run as well.
