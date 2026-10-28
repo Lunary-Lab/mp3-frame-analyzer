@@ -12,7 +12,6 @@ const architectureOnly = new Set([
   'scripts/runtime-architecture-native.test.mjs',
 ]);
 export function isMutationInput(path) {
-  if (path === 'docs/mutation-review.md') return true;
   return !(
     path === 'node_modules' ||
     passive.test(path) ||

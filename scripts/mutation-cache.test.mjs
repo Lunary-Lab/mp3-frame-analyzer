@@ -114,6 +114,7 @@ test('the same declared inputs are stable; rooted noninputs do not invalidate', 
     'README.md',
     'AGENTS.md',
     'docs/testing.md',
+    'docs/mutation-review.md',
     'scripts/runtime-architecture.mjs',
     'scripts/runtime-architecture-rule.mjs',
     'scripts/runtime-architecture.test.mjs',
@@ -140,7 +141,7 @@ test('source, helper, selected test, every resource extension, config, lock and 
     'stryker.config.json',
     'vitest.mutation.config.ts',
     'package-lock.json',
-    'docs/mutation-review.md',
+    'mutation-equivalents.json',
     '.github/actions/test-mutations/action.yml',
     'scripts/runtime-architecture-extra.mjs',
     '.semgrep.yml',
@@ -155,6 +156,45 @@ test('source, helper, selected test, every resource extension, config, lock and 
     await rm(join(root, path));
     assert.equal(await capture(), before, `deleted ${path}`);
   }
+});
+
+test('editorial review edits preserve admission while current audit and proof inputs still bind', async (t) => {
+  const { root, put } = await fixture(t);
+  await put('.gitignore', '.cache/\n');
+  await put('docs/mutation-review.md', 'Editorial review notes');
+  await put('mutation-equivalents.json', '{"approvals":[]}');
+  const capture = () => mutationInputs(root, {}, {}).then(fingerprint);
+  const before = await capture();
+  const report = { files: {} };
+  await promoteCache(root, report, before, commit);
+  await put('docs/mutation-review.md', 'Updated editorial review notes');
+  const after = await capture();
+  assert.equal(after, before);
+  let audits = 0;
+  const audit = (value, options) => {
+    audits++;
+    assert.deepEqual(value, report);
+    assert.deepEqual(options, { nativeReuse: true });
+    if (audits > 1) throw new Error('Current policy rejected the report');
+  };
+  assert.deepEqual(await readCache(root, after, commit, audit), {
+    report,
+    reason: 'native-same-input-reuse',
+  });
+  assert.equal(audits, 1);
+  assert.deepEqual(await readCache(root, after, commit, audit), {
+    report: null,
+    reason: 'native-baseline-corrupt-or-unauditable',
+  });
+  assert.equal(audits, 2);
+  await put('mutation-equivalents.json', '{"approvals":[{"changed":true}]}');
+  const changedProof = await capture();
+  assert.notEqual(changedProof, before);
+  assert.deepEqual(await readCache(root, changedProof, commit, audit), {
+    report: null,
+    reason: 'native-baseline-incompatible',
+  });
+  assert.equal(audits, 2);
 });
 
 test('tracked deletion, rename, executable mode, runtime, environment and external resources bind', async (t) => {
