@@ -1,7 +1,7 @@
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { connect } from 'node:net';
 import type { ClientRequest, IncomingMessage } from 'node:http';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { afterEach, expect, it, vi } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { errorResponseFor } from '../src/error-response.js';
@@ -9,6 +9,23 @@ import { registerUploads, type UploadConsumer } from '../src/upload.js';
 import { frame, multipartBody } from './helpers/mp3-fixtures.js';
 import { openUpload } from './helpers/upload-socket.js';
 import { sendPipelined } from './helpers/http.js';
+import { observeListenerCleanup } from './helpers/listener-cleanup.js';
+
+function observeBudgetListeners(request: FastifyRequest) {
+  const unrelated = () => {};
+  request.raw.on('close', unrelated);
+  const cleanup = observeListenerCleanup(request.raw, ['data', 'resume', 'end', 'close']);
+  const parts = request.parts.bind(request);
+  request.parts = (options) => {
+    // The budget installs its listeners immediately before calling the multipart provider.
+    cleanup.capture();
+    return parts(options);
+  };
+  return () => {
+    cleanup.expectDetached();
+    expect(request.raw.listeners('close')).toContain(unrelated);
+  };
+}
 
 const apps: FastifyInstance[] = [];
 const clients: ClientRequest[] = [];
@@ -40,7 +57,9 @@ async function customListener(consumer: UploadConsumer<unknown>, maxMultipartByt
   apps.push(app);
   const uploads = await registerUploads(app, { maxUploadBytes: 2048, maxMultipartBytes });
   const raw = Promise.withResolvers<IncomingMessage>();
+  const cleanup = new WeakMap<IncomingMessage, () => void>();
   app.post('/file-upload', async (request, reply) => {
+    if (request.isMultipart()) cleanup.set(request.raw, observeBudgetListeners(request));
     raw.resolve(request.raw);
     return { result: await uploads.consume(request, reply, consumer) };
   });
@@ -51,7 +70,7 @@ async function customListener(consumer: UploadConsumer<unknown>, maxMultipartByt
     return reply.status(response.status).send(response.body);
   });
   const address = await app.listen({ host: '127.0.0.1', port: 0 });
-  return { app, address, raw: raw.promise };
+  return { app, address, raw: raw.promise, cleanup };
 }
 
 const aggregateError = {
@@ -226,7 +245,7 @@ it('awaits and counts a separately arriving epilogue before returning success', 
 it.each(['abort', 'idle timeout'] as const)(
   'removes its body guard after %s and serves the next client',
   async (ending) => {
-    const { address, raw } = await customListener(async (upload) => {
+    const { address, raw, cleanup } = await customListener(async (upload) => {
       let bytes = 0;
       for await (const chunk of upload) bytes += chunk.length;
       return bytes;
@@ -240,14 +259,12 @@ it.each(['abort', 'idle timeout'] as const)(
     upload.client.write(form.payload.subarray(0, -128));
     const serverRequest = await raw;
     const closed = new Promise<void>((resolve) => serverRequest.once('close', resolve));
-    expect(serverRequest.listeners('data').some((fn) => fn.name === 'onData')).toBe(true);
     if (ending === 'abort') upload.client.destroy();
     await closed;
     // Neither ending may be supplied by the test client's fallback watchdog.
     expect(clientTimedOut).toBe(false);
     expect(serverRequest.aborted).toBe(true);
-    expect(serverRequest.listeners('data').some((fn) => fn.name === 'onData')).toBe(false);
-    expect(serverRequest.listeners('close').some((fn) => fn.name === 'cleanup')).toBe(false);
+    cleanup.get(serverRequest)!();
     const followup = open(address, form.contentType, form.payload.length);
     followup.client.end(form.payload);
     expect(await followup.response).toMatchObject({ status: 200, body: { result: 512 } });
@@ -348,8 +365,10 @@ it.each([
     const app = await buildApp({ maxUploadBytes: 1024, maxMultipartBytes: 128 });
     apps.push(app);
     const requests: IncomingMessage[] = [];
+    const cleanup = new WeakMap<IncomingMessage, () => void>();
     app.addHook('preHandler', async (request) => {
       requests.push(request.raw);
+      cleanup.set(request.raw, observeBudgetListeners(request));
     });
     const address = await app.listen({ host: '127.0.0.1', port: 0 });
     const socket = connect(Number(new URL(address).port), '127.0.0.1');
@@ -403,9 +422,7 @@ it.each([
       expect(text.toLowerCase()).toContain('connection: close');
       expect(requests).toHaveLength(1);
       await expect.poll(() => requests[0]!.destroyed).toBe(true);
-      expect(requests[0]!.listeners('data').some((fn) => fn.name === 'onData')).toBe(false);
-      expect(requests[0]!.listeners('resume').some((fn) => fn.name === 'onResume')).toBe(false);
-      expect(requests[0]!.listeners('close').some((fn) => fn.name === 'cleanup')).toBe(false);
+      cleanup.get(requests[0]!)!();
       const recovery = open(address, 'audio/mpeg');
       recovery.client.end(frame());
       expect(await recovery.response).toMatchObject({ status: 200, body: { frameCount: 1 } });

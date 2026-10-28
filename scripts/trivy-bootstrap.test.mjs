@@ -13,14 +13,18 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { parse } from 'yaml';
 
 const action = readFileSync(
   new URL('../.github/actions/setup-trivy/action.yml', import.meta.url),
   'utf8',
 );
-const blocks = action.split('      run: |\n');
-assert.equal(blocks.length, 2);
-const script = blocks[1].replace(/^ {8}/gm, '');
+const steps = parse(action).runs.steps.filter(
+  (step) => step.name === 'Download and verify the pinned Trivy release',
+);
+assert.equal(steps.length, 1, 'Expected one Trivy bootstrap step');
+const script = steps[0].run;
+assert.equal(typeof script, 'string', 'Missing Trivy bootstrap shell script');
 const pin = 'c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0';
 
 function fixture(t) {

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
+import { parse } from 'yaml';
 
 // Fixed harmless shell executables; official release archives are replayed separately.
 const fixtures = {
@@ -220,11 +221,8 @@ test('Node composite rejects unreviewed inherited process settings before invoki
     new URL('../.github/actions/setup-node-verified/action.yml', import.meta.url),
     'utf8',
   );
-  const block = source
-    .split('      run: |\n')[1]
-    .split('\n')
-    .map((line) => line.replace(/^ {8}/, ''))
-    .join('\n');
+  const block = parse(source).runs.steps.find((step) => step.id === 'runtime')?.run;
+  assert.equal(typeof block, 'string', 'Missing runtime shell step');
   for (const setting of [
     'NODE_OPTIONS',
     'NODE_PATH',
@@ -256,11 +254,8 @@ test('Node composite publishes the verified path only after a successful clean-p
       new URL('../.github/actions/setup-node-verified/action.yml', import.meta.url),
       'utf8',
     );
-    const block = source
-      .split('      run: |\n')[1]
-      .split('\n')
-      .map((line) => line.replace(/^ {8}/, ''))
-      .join('\n');
+    const block = parse(source).runs.steps.find((step) => step.id === 'runtime')?.run;
+    assert.equal(typeof block, 'string', 'Missing runtime shell step');
     const transport = join(root, 'transport');
     await mkdir(transport);
     await writeFile(

@@ -97,7 +97,10 @@ test('audits all files and proofs while preserving raw statuses and report-local
   assert.deepEqual(result.equivalents, ['EQ-0', 'EQ-1']);
   assert.deepEqual(result.scope, [...f.sources.keys()]);
   assert.deepEqual(f, before);
-  assert.throws(() => auditMutations(f.reports[0], f.policy, f.sources), /entire parser/);
+  assert.throws(
+    () => auditMutations(f.reports[0], f.policy, f.sources),
+    /differs from expected scope/,
+  );
 });
 
 test('supports one tiny shard and automatically expanded complete source inventories', () => {
@@ -168,7 +171,7 @@ for (const [name, change, message] of [
     },
     /assigned source files/,
   ],
-  ['wrong report ownership', (f) => f.reports.reverse(), /entire parser/],
+  ['wrong report ownership', (f) => f.reports.reverse(), /differs from expected scope/],
   [
     'stale report source',
     (f) => {
@@ -263,18 +266,18 @@ for (const [name, change, message] of [
     /exclusions/,
   ],
   [
-    'whole-project glob',
+    'whole-parser glob in a shard report',
     (c) => {
       c.mutate = ['src/mp3/**/*.ts'];
     },
-    /entire parser/,
+    /differs from expected scope/,
   ],
   [
     'range selector',
     (c) => {
       c.mutate = ['src/mp3/file-1.ts:1-2'];
     },
-    /entire parser/,
+    /differs from expected scope/,
   ],
   [
     'inconsistent timeout',
