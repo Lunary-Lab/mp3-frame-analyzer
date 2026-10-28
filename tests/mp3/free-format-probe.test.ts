@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { countMp3Frames } from '../../src/mp3/count-frames.js';
 import { decodeFrameHeader } from '../../src/mp3/frame-header.js';
-import { Probe } from '../../src/mp3/free-format-probe.js';
+import { ClosedShortCandidates, Probe } from '../../src/mp3/free-format-probe.js';
 import { analyzeFreeFormatProbe, analyzeFreeFormatProbeSteps } from '../../src/mp3/free-format.js';
 import * as sideInformation from '../../src/mp3/side-information.js';
 import { chunks, id3v2 } from '../helpers/mp3-fixtures.js';
@@ -11,6 +11,31 @@ function freeFrame(length = 100): Buffer {
   bytes.set([255, 251, 0, 192]);
   return bytes;
 }
+
+it.each([1, 2, 3, 4])('defers only short walks, given a complete %i-frame walk', (count) => {
+  const bytes = Buffer.concat(Array.from({ length: count }, () => freeFrame()));
+  const header = decodeFrameHeader(bytes.subarray(0, 4));
+  if (header.kind !== 'free-format') throw new Error('Invalid fixture');
+  const shorts = new ClosedShortCandidates(new Probe(bytes, true, bytes.length), header, true);
+  shorts.observe({
+    base: 100,
+    matches: count,
+    anchored: true,
+    metadataMatches: 0,
+    transition: false,
+    closed: true,
+    frames: Array.from({ length: count }, (_, index) => ({
+      start: index * 100,
+      end: (index + 1) * 100,
+      header,
+    })),
+  });
+  // Long walks contribute bounded header evidence, but must not be retained
+  // as deferred frame records by the short-candidate component.
+  expect([...shorts.candidates()].map((candidate) => candidate.matches)).toEqual(
+    count <= 2 ? [count] : [],
+  );
+});
 
 describe('short-probe metadata evidence across nonzero frame starts', () => {
   it('retains a plausible ID3 prefix after an earlier boundary-aligned ID3 tag', async () => {
@@ -94,19 +119,34 @@ describe('necessary frame capacity is relative to the proposed frame start', () 
 });
 
 describe('probe work is driven by supported boundary evidence', () => {
-  it('does not enumerate the unproved probe edge as a successor candidate', () => {
+  it('bounds work and fallback allocations with an unproved successor edge', () => {
     const bytes = Buffer.alloc(8_647);
     bytes.set([255, 251, 0, 192]);
     bytes.set([255, 251, 4, 192], 8_200);
     const first = decodeFrameHeader(bytes.subarray(0, 4));
     if (first.kind !== 'free-format') throw new Error('Invalid fixture');
-    // The changed-rate suffix is inside a full, open production-size probe.
-    // Neither header has a later real landmark within its allowed span.
-    const result = analyzeFreeFormatProbe(bytes, first, false, bytes.length + 1);
-    expect(result.bestMatches).toBe(0);
-    expect(result.candidates).toBe(0);
-    expect(result.followedFrames).toBe(0);
-    expect(result.metadataSteps).toBe(0);
+    let allocations = 0;
+    const observed = new Proxy(Uint16Array, {
+      construct(target, args) {
+        allocations++;
+        return Reflect.construct(target, args) as Uint16Array;
+      },
+    });
+    vi.stubGlobal('Uint16Array', observed);
+    try {
+      // The changed-rate suffix is inside a full, open production-size probe.
+      // Neither header has a later real landmark within its allowed span.
+      const result = analyzeFreeFormatProbe(bytes, first, false, bytes.length + 1);
+      expect(result.bestMatches).toBe(0);
+      expect(result.candidates).toBe(0);
+      expect(result.followedFrames).toBe(0);
+      expect(result.metadataSteps).toBe(0);
+      // Five fixed observation indexes plus at most one root fallback index;
+      // failed suffixes must never each allocate a window-sized prefix.
+      expect(allocations).toBeLessThanOrEqual(6);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('does not turn non-target ancillary sync markers into extra candidate walks or yields', async () => {
