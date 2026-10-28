@@ -35,6 +35,9 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           target-branch: main
+          # Only an explicit preparation may create or refresh the candidate.
+          # Pushes still turn merged release PRs into their exact tags and drafts.
+          skip-github-pull-request: ${{ github.event_name != 'workflow_dispatch' }}
 
   release-pr-status:
     needs: version
@@ -76,9 +79,11 @@ jobs:
           }
           appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
             '## Release PR validation', '', ...rows, '',
-            'After the intended main-branch changes are complete, review the current release PR head.',
-            'A maintainer can close and reopen the PR to trigger native CI and metadata-only title validation; if it is behind main, Update branch also triggers them.',
-            'Review any Approve workflows to run prompt. Confirm All checks and Conventional Commit PR title pass in the PR checks before merging.',
+            'This explicit preparation may change the release PR head. Main pushes will not refresh it again.',
+            'Give the release PR a short merge window: keep main unchanged during final preparation, native validation and squash merge. Development can continue on branches.',
+            'After preparation, a maintainer must close and reopen the PR to trigger native CI and metadata-only title validation. Approving bot-created CI alone does not trigger the title workflow.',
+            'Review any Approve workflows to run prompt. Confirm All checks and Conventional Commit PR title pass on the current head before merging.',
+            'If main advances first, prepare again and review the resulting version, notes and head; strict up-to-date checks still apply. After merging, publication stays on the exact tag while main advances.',
             'workflow_dispatch checks do not satisfy PR rulesets. This summary does not approve workflows, and workflow approval does not merge or publish.',
             'Final publication still requires the separate owner approval in the release environment.', '',
           ].join('\n'));
