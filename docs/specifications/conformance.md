@@ -1,6 +1,6 @@
 # Conformance, format coverage and evidence matrix
 
-This is a **capability and test checklist**, not a claim of certified ISO conformance or a list of employer-imposed acceptance requirements. The [assessment-only checklist](assessment-scope.md) takes precedence: most metadata, the configurable 50 MiB default, raw upload and 321–640 kbps entries below are project choices. Applicable authority: [source register](README.md). Source-of-truth for what the assignment demands: [original brief](../assessment-brief.md). The [count contract](../frame-count-contract.md) records the owner-selected HTTP default and the dated audio-frame/sample clarification. Implementation statuses below describe the code inspected on **2026-10-27**, not proof from a fresh exhaustive CI run; the separately dated **Confirmed** row records the later evaluator clarification.
+This is a **capability and test checklist**, not a claim of certified ISO conformance or a list of employer-imposed acceptance requirements. The [assessment-only checklist](../assessment-brief.md#appendix-project-interpretation-not-assignment-text) takes precedence: most metadata, the configurable 50 MiB default, raw upload and 321–640 kbps entries below are project choices. Applicable authority: [source register](README.md). Source-of-truth for what the assignment demands: [original brief](../assessment-brief.md). The [count contract](../frame-count-contract.md) records the owner-selected HTTP default and the dated audio-frame/sample clarification. Implementation statuses below describe the code inspected on **2026-10-27**, not proof from a fresh exhaustive CI run; the separately dated **Confirmed** row records the later evaluator clarification.
 
 Legend: **Required** = assessment's format; **Supported** = implemented structural handling; **Limited** = implemented with documented restriction; **Policy** = stricter or extended application choice; **Out of scope** = not required for assignment; **Open** = unresolved external interpretation; **Confirmed** = dated evaluator clarification of the stated requirement and sample expectation, not a full conformance result.
 
@@ -40,7 +40,7 @@ Legend: **Required** = assessment's format; **Supported** = implemented structur
 
 ## Error distinctions and executable coverage
 
-See the [input classification matrix](input-classification.md) for supported
+See the [input classification matrix](http-api.md#supported-unsupported-and-malformed-input) for supported
 geometry, recognized out-of-scope identifiers, reserved/forbidden identifiers,
 truncation, unknown future ID3 versions and exact raw/multipart HTTP errors.
 Reserved MPEG version/layer identifiers and forbidden ID3 `0xff` version bytes

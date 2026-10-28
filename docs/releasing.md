@@ -45,7 +45,7 @@ maintained “internal changelog.”
 The source is the tagged `CHANGELOG.md` entry, not an editable draft release body.
 Normally its comparison supplies the previous tag; both tags resolve to checked
 full SHAs. A first successor release with no previous tag instead requires the
-explicitly reviewed [initialization boundary](release-notes-initialization.md).
+explicitly reviewed [initialization boundary](#appendix-initial-release-notes-after-repository-migration).
 The previous SHA is exclusive and the current SHA inclusive. No date windows,
 “latest release” guesses, automatic fallback tags, or new tags are used. A
 missing uninitialized boundary, divergent history, a truncating Release Please anchor,
@@ -114,6 +114,9 @@ and complete proposed body before that decision. The final job checks that the
 configured reviewer and actual native approval are the explicitly reviewed owner
 `choskeli` (ID `98036866`), not merely an arbitrary configured reviewer. There is
 no administrator bypass and only `v*` tags may deploy.
+
+The owner approves through **Actions → the run → Review deployments**. Comments,
+labels, PR reviews and bot actions do not satisfy this native environment decision.
 
 After approval, that job downloads the **same sealed bundle** by authenticated
 ID, rechecks all bytes and identities, then rechecks owner/environment decision,
@@ -271,13 +274,17 @@ mkdir "release-$tag" && cd "release-$tag"
 gh release download "$tag" --repo Lunary-Lab/mp3-frame-analyzer
 sha256sum --check SHA256SUMS
 gh release verify "$tag" --repo Lunary-Lab/mp3-frame-analyzer
+gh release verify-asset "$tag" "mp3-frame-analyzer-${tag#v}.tar.gz" --repo Lunary-Lab/mp3-frame-analyzer
 gh attestation verify "mp3-frame-analyzer-${tag#v}.tar.gz" --repo Lunary-Lab/mp3-frame-analyzer \
   --signer-workflow Lunary-Lab/mp3-frame-analyzer/.github/workflows/publish-release.yml --source-ref "refs/tags/$tag"
 jq . "mp3-frame-analyzer-${tag#v}.manifest.json"   # version, tag, sourceCommit
 gh api "repos/Lunary-Lab/mp3-frame-analyzer/commits/$tag" --jq .sha   # must equal sourceCommit
 ```
 
-Then follow [the runtime guide](runtime.md) to extract the archive, install production dependencies, upload an MP3, and stop the server with `SIGTERM`.
+A modified asset fails both `verify-asset` and `attestation verify`; an asset from
+another release fails `verify-asset` for this tag. Then follow
+[the runtime guide](runtime.md) to extract the archive, install production
+dependencies, upload an MP3, and stop the server with `SIGTERM`.
 
 ## Recover from a failed release
 
@@ -301,3 +308,80 @@ gh workflow run publish-release.yml \
 ```
 
 Replace `vX.Y.Z` with the actual draft tag. Do not use **Re-run jobs**: attempts after the first are rejected. The newly dispatched run waits for a new approval in the `release` environment again. A `--ref main` invocation fails preflight, as does a changed tag, non-`main` source commit, mismatched SHA, or already-published release. Retrying may replace assets only while the release remains a draft. Publication is serialized and checks existing stable versions so retrying an older draft cannot move the `latest` designation backwards. For a published defect, merge a correction and release a new version.
+
+## Appendix: Initial release notes after repository migration
+
+A version in the package manifest is not proof that its tag or GitHub Release
+exists in this repository. The pinned Release Please implementation can infer a
+previous version from that manifest even when no corresponding tag exists. The
+repository's existing [2.1.1 entry](../CHANGELOG.md#211-2026-10-25) links to its own
+`releases/tag/v2.1.1` page rather than a previous-tag comparison; that header alone
+is never a baseline.
+The notes planner therefore never creates a historical tag or silently guesses
+a predecessor after a lookup failure.
+
+For an existing previous tag, ordinary generation retains explicit tag/SHA
+boundaries. If the previous version has no tag, the initial-release path requires
+an explicitly reviewed `.github/release-notes-initial.json` committed **before**
+the release is tagged:
+
+```json
+{
+  "schemaVersion": 1,
+  "repositoryId": "<current numeric repository ID, as a string>",
+  "baseSha": "<reviewed 40-character initialization commit>",
+  "previousVersionTag": "vX.Y.Z"
+}
+```
+
+These placeholders are documentation, not runnable configuration. Rediscover the
+current repository ID, source ancestry and version before filling them. No
+initialization file is generated automatically, and no archive state or old
+approval is inherited.
+
+The planner requires:
+
+- the API repository ID and full name to match the current workflow;
+- the initialization ID to match that repository;
+- the base SHA to equal the tagged Release Please `last-release-sha`;
+- a readable version manifest at that exact base matching the previous version;
+- the base to be a strict ancestor of the release source, and any bootstrap
+  anchor not to truncate that range;
+- the current tag to be the repository's only tag, with no other releases;
+- complete compare, per-commit PR-association and independent merged-PR coverage.
+
+The metadata-only native API job repeats the repository/tag/release inventory
+checks with its write token, which can see drafts. It omits `previous_tag_name`
+only in this explicit initial mode: GitHub documents that field as a **tag name**,
+not a commit-baseline parameter. It never passes a SHA pretending to be a tag.
+The native PR set must exactly equal the independently audited commit range;
+missing or extra entries stop preparation. A native comparison to some other
+boundary also fails. No API error, absent initialization or incomplete inventory
+is converted into a successful empty result.
+
+The composed initial body replaces only the user entry's header link with the
+verified immutable SHA comparison and explains the initialization boundary.
+Breaking and migration text is unchanged. The manifest records both the original
+user-entry hash and final body hash, stable repository ID, source SHA, boundary,
+producer run and attempt. Plain historical version headings delimit entries so
+older releases are not accidentally copied into the next entry.
+
+After the first actual release, the next entry uses its real previous tag and the
+normal path. The initialization file does not override an existing release range.
+Changed identities, artifacts or attempts require a new prepared candidate and
+the same single owner publication approval; a preview does not approve release.
+
+### Verification status
+
+Offline fixtures exercise both modes, malformed/missing initialization,
+repository replacement, tag/history drift, boundary ancestry, PR coverage, and
+execution of the fixed native-job script against a local API stub. They are not
+a live native `generate-notes` service test. The first live preparation must still
+be checked before any publication approval; unknown native formatting fails
+closed rather than being guessed.
+
+### Sources
+
+- [Release Please 17.6.0 manifest boundary and inferred-version logic](https://github.com/googleapis/release-please/blob/712fcf01effd08d7b0e7b1fd3861f2cb388bc8d1/src/manifest.ts)
+- [Pinned strategy's previous-tag selection](https://github.com/googleapis/release-please/blob/712fcf01effd08d7b0e7b1fd3861f2cb388bc8d1/src/strategies/base.ts)
+- [GitHub generate-notes endpoint and permissions](https://docs.github.com/en/rest/releases/releases#generate-release-notes-content-for-a-release)

@@ -2,10 +2,12 @@
 
 Answering "how long is this physical frame?" used to take four views of the same four header bytes (`parseFrameHeader`, `isFreeFormatHeader`, `looksLikeUnsupportedMpeg` and `requireFrameHeader`), sample-rate and padding bits re-extracted by hand in two modules, and free-format state held in `countFrames` while its discovery lived in `free-format.ts`. Encoder-frame recognition then decoded the header a fifth time. We replaced the predicates with one `decodeFrameHeader` that classifies the bytes as indexed, free-format, unsupported or invalid and exposes padding, sample rate, CRC and whether the frame is mono; for an indexed frame it also computes the length from the bitrate table. A `FrameSpans` resolver over the byte reader owns free-format discovery, the base-length and sample-rate lock and the no-mixing rule. `isEncoderFrame` receives the decoded header and the complete frame.
 
-## Decisions
+## Original decisions
+
+These record the extraction at the time; subsequent classification and sequence-policy changes are noted below.
 
 - **Restructure, not a behaviour change.** Every count, error kind, offset and message is unchanged, including which error wins when several apply: mixing indexed and free-format frames is reported before an invalid or unsupported header, as before.
-- **One decode, four outcomes.** Unsupported means a valid MPEG sync for another version or layer, including the reserved version and layer values, as before; invalid is everything else, including MPEG-1 Layer III with a reserved bitrate, sample rate or emphasis. Callers never re-extract header bits.
+- **One decode, four outcomes.** One decoder classifies each candidate as indexed, free-format, unsupported or invalid. Callers never re-extract header bits. The original extraction preserved classification; the current reserved-identifier policy is recorded below.
 - **Encoder-frame recognition takes a resolved frame.** Traversal passes exactly one frame's span, so recognition no longer re-parses the header or re-checks the length. Recognition itself still validates the Xing/Info and VBRI layouts against the frame it is given.
 - **The byte reader keeps `bufferedLength`.** Free-format discovery uses it to size its probe window, and the reader's own tests use it to prove bounded buffering, which is part of the reader's interface. Replacing it would reopen the reader's audited mutation proofs for no gain.
 - **`vbr-header.ts` becomes `encoder-frame.ts`.** The glossary's term is encoder frame; only the public `includeVbrHeaderFrame` option keeps the old wording, because renaming it would break clients.
@@ -15,3 +17,7 @@ Answering "how long is this physical frame?" used to take four views of the same
 ## Later note (2026-10-25)
 
 A follow-up fix reversed the preserved precedence on purpose: an invalid or unsupported header after free-format frames now reports itself, as it always did after indexed frames. Mixing needs two valid MPEG-1 Layer III headers. The rule lives in [the MPEG-1 Layer III specification notes](../specifications/mpeg-1-layer-iii.md).
+
+## Current classification and sequence policy
+
+Reserved MPEG version/layer identifiers are malformed (`invalid`); another nonreserved version or layer is `unsupported`. The canonical classification is [`decodeFrameHeader`](../../src/mp3/frame-header.ts). A valid changed sample rate can start a new configuration under the [bounded sequence policy](../specifications/successive-sequences.md); same-rate indexed/free-format switching remains rejected. These later changes preserve the single-decoder and frame-span ownership decisions above.

@@ -193,7 +193,13 @@ The contract inspects the aggregate's `if` and `needs`; it is not a general Acti
 
 Both required workflows handle `merge_group`. CI tests the event's queue SHA in a separate concurrency group; an ordinary PR or `main` run cannot cancel it. The title job uses live GraphQL queue metadata to require exactly one entry whose `headCommit` and `baseCommit` match the event, then validates that entry's PR title. It has no checkout. Missing or changed bindings fail closed. The post-merge audit still checks admission evidence on the original PR head; GitHub's ruleset enforces checks on the integrated queue candidate.
 
-**Release PRs require eligible native events.** Release Please keeps automatically updating versions and changelogs. Its `GITHUB_TOKEN` cannot enqueue a PR; a maintainer uses their existing GitHub account. Initial bot-created checks may need a one-time close/reopen and an **Approve workflows to run** decision. Verify both required checks on the current PR head before queueing. A separate `workflow_dispatch` check does **not** satisfy PR rulesets. A genuine release-PR head change invalidates that candidate and requires fresh checks and requeueing; ordinary advancement of `main` no longer requires repeated **Update branch** clicks after activation. No new credential is needed, and queueing does not approve publication. See [recovery](releasing.md#recover-from-a-failed-release), GitHub's [token-generated events](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow#triggering-a-workflow-from-a-workflow), and [required-check eligibility](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks#checks-from-some-workflow-jobs-are-not-evaluated).
+**Release PRs require eligible native events.** A `workflow_dispatch` run, even
+green on the exact head, does **not** satisfy PR ruleset checks. Follow the
+[release PR validation procedure](releasing.md#automated-path) and
+[failed-release recovery](releasing.md#recover-from-a-failed-release) for native
+events and workflow-execution approval. Those actions do not authorize publication.
+GitHub documents [token-generated events](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow#triggering-a-workflow-from-a-workflow)
+and [required-check event eligibility](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks#checks-from-some-workflow-jobs-are-not-evaluated).
 
 ### Activate and verify the queue
 
@@ -212,7 +218,12 @@ Final publication waits for exactly one approval from the release approver, `cho
 - sets `can_admins_bypass = false`, so administrators cannot skip the approval;
 - admits only `v*` tags, so no branch, including `main`, can deploy to it.
 
-Only the `publish` job of [`publish-release.yml`](../.github/workflows/publish-release.yml) uses it. By the time it asks for approval, the same run has validated the exact tagged commit with the full reusable CI, tested the unpacked artifact, and attested the tested bytes. Approving in **Actions → the run → Review deployments** releases the job, which downloads those bytes, verifies their checksums, attaches them to the draft and publishes it without rebuilding. A new tag, commit or set of artifacts means a new run, which waits for a new approval. Comments, labels, reviews and bot actions do not satisfy it.
+Only the `publish` job of [`publish-release.yml`](../.github/workflows/publish-release.yml)
+uses this environment. The canonical
+[preparation and publication procedure](releasing.md#preparation-and-publication-integration)
+defines the exact-tag checks, sealed artifacts, native owner decision and
+post-approval verification. [Retrying an unpublished draft](releasing.md#retry-an-unpublished-draft)
+requires a new run and a new approval.
 
 ## Signing and release authenticity
 
@@ -221,18 +232,8 @@ Only the `publish` job of [`publish-release.yml`](../.github/workflows/publish-r
 - **Release attestations.** For each published release, GitHub signs an attestation binding the tag, commit and asset digests.
 - **Build provenance.** The `provenance` job attests the tested artifacts with [`actions/attest`](https://github.com/actions/attest) (SLSA build provenance, recorded in the public Sigstore transparency log), binding each digest to this repository, `publish-release.yml` and the tag.
 
-Verify a release and an asset:
-
-```bash
-tag=vX.Y.Z
-gh release download "$tag" --repo Lunary-Lab/mp3-frame-analyzer
-gh release verify "$tag" --repo Lunary-Lab/mp3-frame-analyzer
-gh release verify-asset "$tag" "mp3-frame-analyzer-${tag#v}.tar.gz" --repo Lunary-Lab/mp3-frame-analyzer
-gh attestation verify "mp3-frame-analyzer-${tag#v}.tar.gz" --repo Lunary-Lab/mp3-frame-analyzer \
-  --signer-workflow Lunary-Lab/mp3-frame-analyzer/.github/workflows/publish-release.yml --source-ref "refs/tags/$tag"
-```
-
-A modified asset fails both `verify-asset` and `attestation verify`; an asset from another release fails `verify-asset` for this tag.
+Use the canonical [published-release verification commands](releasing.md#verify-a-published-release)
+to check the release, asset digests, attestation and source metadata.
 
 ## Verification
 
