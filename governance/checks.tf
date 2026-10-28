@@ -1,5 +1,5 @@
 # Required checks must come from jobs that report under their own name on
-# every pull request and merge group into main. A check that never reports blocks
+# every pull request into main. Requiring a check that never reports blocks
 # every merge, and GitHub counts a skipped check as passing.
 locals {
   commit_changing_activities = ["opened", "synchronize", "reopened"]
@@ -38,25 +38,6 @@ locals {
     ])
   ]
 
-  merge_group_filters = {
-    for name, on in local.triggers : name => [
-      for event in try(keys(on), flatten([on])) : coalesce(try(on[event], null), {})
-      if event == "merge_group"
-    ]
-  }
-
-  # GitHub requires the same check names on the queue's checks_requested SHA.
-  # Only an unfiltered event or an exact main branch filter is supported.
-  every_merge_group_workflows = [
-    for name, filters in local.merge_group_filters : name
-    if length(filters) > 0 && alltrue([
-      for filter in filters :
-      length(setsubtract(keys(filter), ["branches", "types"])) == 0 &&
-      (!contains(keys(filter), "branches") || try(toset(filter.branches) == toset(["main"]), false)) &&
-      contains(try(filter.types, ["checks_requested"]), "checks_requested")
-    ])
-  ]
-
   # Check-name collisions matter across workflows, including filtered and
   # manually dispatched workflows, not only the eligible required-check jobs.
   workflow_jobs = flatten([
@@ -87,7 +68,7 @@ locals {
   # A job without a condition still skips when a job it needs fails.
   always_reporting_checks = [
     for job in local.every_pull_request_jobs : job.name
-    if contains(local.every_merge_group_workflows, job.workflow) && !job.renamed && (
+    if !job.renamed && (
       job.always ||
       (job.condition == null && length(job.needs) == 0)
       ) && (job.name != var.title_status_check || alltrue([
@@ -112,7 +93,7 @@ output "required_status_checks" {
       contains(local.always_reporting_checks, check) &&
       length([for job in local.workflow_jobs : job.name if job.name == check]) == 1
     ])
-    error_message = "Every required check must have one unique, unskippable job name across workflows and report on every pull request and merge_group checks_requested event into main. The title check must also report on edited events."
+    error_message = "Every required check must have one unique, unskippable job name across workflows and report on every pull request into main. The title check must also report on edited events."
   }
 }
 

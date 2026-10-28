@@ -76,10 +76,9 @@ jobs:
           }
           appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
             '## Release PR validation', '', ...rows, '',
-            'Review the current release PR head. A maintainer can close and reopen the PR once to trigger native CI and metadata-only title validation.',
+            'After the intended main-branch changes are complete, review the current release PR head.',
+            'A maintainer can close and reopen the PR to trigger native CI and metadata-only title validation; if it is behind main, Update branch also triggers them.',
             'Review any Approve workflows to run prompt. Confirm All checks and Conventional Commit PR title pass in the PR checks before merging.',
-            'After the reviewed merge queue configuration is activated, add the PR to the native main merge queue. A branch behind main does not need Update branch: GitHub validates the integrated queue candidate.',
-            'Queueing uses the maintainer account; GITHUB_TOKEN cannot enqueue it. A real Release Please head change or a failed check needs review and requeueing.',
             'workflow_dispatch checks do not satisfy PR rulesets. This summary does not approve workflows, and workflow approval does not merge or publish.',
             'Final publication still requires the separate owner approval in the release environment.', '',
           ].join('\n'));

@@ -1,5 +1,5 @@
 name: Second
-on: [pull_request, merge_group]
+on: pull_request
 jobs:
   lint:
     runs-on: ubuntu-latest

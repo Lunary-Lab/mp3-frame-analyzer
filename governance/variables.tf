@@ -16,7 +16,7 @@ variable "require_signed_commits" {
 }
 
 variable "required_status_checks" {
-  description = "Check runs every pull request and merge group into main must pass. Each must be a job name in a workflow that runs for both events."
+  description = "Check runs every pull request into main must pass. Each must be a job name in a workflow that runs for every pull request."
   type        = list(string)
   default     = ["All checks", "Conventional Commit PR title"]
 
