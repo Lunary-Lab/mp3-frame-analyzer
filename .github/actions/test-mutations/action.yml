@@ -10,6 +10,13 @@ inputs:
   publish:
     description: Publish only audited ordinary main-push results
     required: true
+  parallel-fallback:
+    description: Hand a cold hosted PR to the full partition workflow
+    default: 'false'
+outputs:
+  route:
+    description: Selected native execution or full partition handoff
+    value: ${{ steps.mutation.outputs.route }}
 runs:
   using: composite
   steps:
@@ -58,7 +65,7 @@ runs:
             core.setOutput('run', run.id);
             core.setOutput('commit', run.head_sha);
           } catch {
-            core.notice('Mutation baseline unavailable; native full execution will run.');
+            core.notice('Mutation baseline unavailable; fresh full execution is required.');
           }
     - name: Download the selected immutable file with native digest verification
       id: download
@@ -88,29 +95,46 @@ runs:
         path: .cache/mutation/pr-baseline.json
         key: mutation-pr-v1-${{ github.repository_id }}-${{ github.event.pull_request.number }}-${{ steps.pr-key.outputs.key }}
     - name: Run ordinary tests, full discovery and the adjusted mutation audit
+      id: mutation
       shell: bash
       env:
         FORCE_FULL: ${{ inputs.full }}
+        PARALLEL_FALLBACK: ${{ inputs.parallel-fallback }}
         MUTATION_PR_CACHE_RESTORED: ${{ steps.pr-cache.outcome == 'success' && steps.pr-cache.outputs.cache-hit == 'true' }}
         MUTATION_BASELINE_SHA: ${{ steps.download.outcome == 'success' && steps.baseline.outputs.commit || '' }}
       run: |
         if [ "$FORCE_FULL" = true ]; then
           node scripts/run-mutations.mjs --full
+          echo 'route=native' >> "$GITHUB_OUTPUT"
+        elif [ "$PARALLEL_FALLBACK" = true ]; then
+          node scripts/run-mutations.mjs --parallel-fallback
         else
           node scripts/run-mutations.mjs
+          echo 'route=native' >> "$GITHUB_OUTPUT"
         fi
+    - name: Require an explicit ordinary execution route
+      if: inputs.parallel-fallback == 'true' && inputs.full != 'true'
+      shell: bash
+      env:
+        ROUTE: ${{ steps.mutation.outputs.route }}
+      run: |
+        node --input-type=module <<'JS'
+        import assert from 'node:assert/strict';
+        assert.ok(['native', 'full-sharded'].includes(process.env.ROUTE), 'Missing or invalid mutation route');
+        JS
     - name: Require active genuine encoder mutation coverage
+      if: inputs.parallel-fallback != 'true' || inputs.full == 'true' || steps.mutation.outputs.route == 'native'
       shell: bash
       run: node scripts/verify-encoder-discovery.mjs reports/mutation/mutation.json
     - name: Save own-PR results only after mutation and encoder checks
-      if: success() && steps.pr-key.outputs.key != '' && steps.pr-cache.outputs.cache-hit != 'true' && hashFiles('.cache/mutation/pr-baseline.json') != ''
+      if: success() && (inputs.parallel-fallback != 'true' || inputs.full == 'true' || steps.mutation.outputs.route == 'native') && steps.pr-key.outputs.key != '' && steps.pr-cache.outputs.cache-hit != 'true' && hashFiles('.cache/mutation/pr-baseline.json') != ''
       continue-on-error: true
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: .cache/mutation/pr-baseline.json
         key: mutation-pr-v1-${{ github.repository_id }}-${{ github.event.pull_request.number }}-${{ steps.pr-key.outputs.key }}
     - name: Publish audited main results; consumers require the whole CI run to succeed
-      if: success() && inputs.publish == 'true' && hashFiles('.cache/mutation/native-baseline.json') != ''
+      if: success() && (inputs.parallel-fallback != 'true' || inputs.full == 'true' || steps.mutation.outputs.route == 'native') && inputs.publish == 'true' && hashFiles('.cache/mutation/native-baseline.json') != ''
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         path: .cache/mutation/native-baseline.json

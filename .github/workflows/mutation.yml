@@ -36,6 +36,8 @@ jobs:
     if: ${{ !inputs.full }}
     runs-on: ubuntu-24.04
     timeout-minutes: 100
+    outputs:
+      route: ${{ steps.mutation.outputs.route }}
     steps:
       # Supported callers bind ref to their event SHA; reject drift before executing source.
       - name: Require the caller's exact commit
@@ -53,14 +55,17 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-project
       - uses: ./.github/actions/test-mutations
+        id: mutation
         with:
           base: ${{ inputs.base }}
           full: 'false'
           publish: ${{ inputs.publish }}
+          parallel-fallback: ${{ github.event_name == 'pull_request' }}
 
   plan:
     name: Discover full parser partitions
-    if: inputs.full
+    if: ${{ !cancelled() && (inputs.full || (needs.ordinary.result == 'success' && needs.ordinary.outputs.route == 'full-sharded')) }}
+    needs: ordinary
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
@@ -87,7 +92,7 @@ jobs:
 
   shard:
     name: Fresh parser partition ${{ matrix.shard }}
-    if: inputs.full
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
     needs: plan
     strategy:
       fail-fast: false
@@ -117,7 +122,7 @@ jobs:
 
   collect:
     name: Audit complete fresh parser evidence
-    if: always() && inputs.full
+    if: always() && needs.plan.result != 'skipped'
     needs: [plan, shard]
     runs-on: ubuntu-24.04
     timeout-minutes: 15

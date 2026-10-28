@@ -113,20 +113,26 @@ test('missing, malformed, mismatched, incomplete and unauditable baselines are c
     assert.deepEqual(value, report);
     assert.deepEqual(options, { nativeReuse: true });
   };
-  assert.equal((await readCache(root, key, commit, audit)).report, null);
+  assert.deepEqual(await readCache(root, key, commit, audit), {
+    report: null,
+    reason: 'native-baseline-missing',
+  });
   await put(BASELINE, '{');
-  assert.equal((await readCache(root, key, commit, audit)).report, null);
+  assert.deepEqual(await readCache(root, key, commit, audit), {
+    report: null,
+    reason: 'native-baseline-corrupt-or-unauditable',
+  });
   await promoteCache(root, report, key, commit);
   const baseline = JSON.parse(await readFile(join(root, BASELINE), 'utf8'));
-  for (const delta of [
-    { completed: false },
-    { key: 'c'.repeat(64) },
-    { sourceCommit: 'd'.repeat(40) },
-    { schemaVersion: 0 },
-    { report: { survived: true } },
+  for (const [delta, reason] of [
+    [{ completed: false }, 'native-baseline-incompatible'],
+    [{ key: 'c'.repeat(64) }, 'native-baseline-incompatible'],
+    [{ sourceCommit: 'd'.repeat(40) }, 'native-baseline-incompatible'],
+    [{ schemaVersion: 0 }, 'native-baseline-incompatible'],
+    [{ report: { survived: true } }, 'native-baseline-corrupt-or-unauditable'],
   ]) {
     await put(BASELINE, JSON.stringify({ ...baseline, ...delta }));
-    assert.equal((await readCache(root, key, commit, audit)).report, null);
+    assert.deepEqual(await readCache(root, key, commit, audit), { report: null, reason });
   }
   assert.throws(() => validateCache(baseline, key, null, audit));
   assert.throws(() => validateCache(baseline, key, 'local', audit));
@@ -134,6 +140,12 @@ test('missing, malformed, mismatched, incomplete and unauditable baselines are c
   await promoteCache(root, report, key, 'local');
   assert.deepEqual((await readCache(root, key, 'local', audit)).report, report);
   assert.equal((await readCache(root, key, commit, audit)).report, null);
+  await rm(join(root, BASELINE));
+  await mkdir(join(root, BASELINE));
+  assert.deepEqual(await readCache(root, key, commit, audit), {
+    report: null,
+    reason: 'native-baseline-unreadable',
+  });
 });
 
 test('admission preserves native report bytes semantically and reports native reuse honestly', async (t) => {
