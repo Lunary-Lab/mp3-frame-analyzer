@@ -18,8 +18,10 @@ current discovery. `npm run mutation:full` remains a single fresh local campaign
 
 Scheduled CI, full manual CI and exact-source release validation instead use the
 native GitHub matrix in `.github/workflows/mutation.yml`. Node's filesystem glob
-discovers every parser source; sorted whole files are assigned round-robin to at
-most 11 nonempty parser jobs. The existing pure-runtime campaign occupies the
+discovers every parser source. The pinned Stryker instrumenter generates the
+complete current mutant inventory without running tests. A small planner joins
+overlapping mutant spans into indivisible components and assigns larger components
+first to the least-populated of at most 11 nonempty parser jobs. The existing pure-runtime campaign occupies the
 twelfth mutation slot. This ceiling is not a measured optimum or a cap on other
 CI jobs. Each parser job retains two Stryker workers, the ordinary full Vitest
 suite, native parser-test discovery and a fresh Stryker coverage dry run.
@@ -31,8 +33,12 @@ event SHA. Caller inputs cannot select other code within the event's cache scope
 
 Fresh jobs remove native working state before `--force --mutate`, because force
 alone can retain out-of-scope results from an old incremental report. They never
-restore or publish mutation-result caches. The collector checks every assigned
-file exactly once, current source/test bytes, common configuration and declared
+restore or publish mutation-result caches. Stryker has no distributed mutant-ID
+selector: jobs use its native line/column ranges. A range must fully contain a
+mutated AST node, so arbitrary adjacent line splits are unsafe. The planner
+re-instruments each assignment and requires its exact mutant identities to match
+the complete inventory, with no missing, extra or duplicate ownership. The
+collector repeats this check against the unchanged raw reports, current source/test bytes, common configuration and declared
 inputs, clean process completion, run/attempt/commit identity and artifact/report
 digests. It applies the existing source-bound equivalent proofs and 100% adjusted
 policy across unchanged raw reports, resolving test IDs within each report.
@@ -52,9 +58,15 @@ native all-skipped suites (such as an absent optional external sample) without a
 filename exception; every runnable suite must appear consistently in every shard.
 
 Ordinary PR/main runs, including cache misses, retain the single-runner path.
-File workloads may be uneven; runner count alone does not establish a latency
-guarantee. The short native regression in `scripts/full-mutations.integration.test.mjs`
+Mutant counts are only a scheduling heuristic: individual tests and timeouts vary
+widely, and a method-spanning mutant prevents further safe subdivision. The
+planner uses no historical timing store, result cache, dependency graph or report
+rewrite. Planning now installs the locked native instrumenter; each shard still
+pays for its own ordinary suite and coverage dry run. The short native regression in `scripts/full-mutations.integration.test.mjs`
 checks the real runner/collector, fresh state, changed inputs and failed evidence.
+It also verifies a file split across jobs and rejects a missing mutant even when
+the altered report's digest is updated. Ordinary incremental execution remains
+whole-scope. See the pinned native [range containment implementation](https://github.com/stryker-mutator/stryker-js/blob/959127763e5bbe2eb65f5341a8161780d6d8a476/packages/instrumenter/src/transformers/babel-transformer.ts).
 
 Native reuse includes killed, timeout and reviewed-equivalent outcomes. It is
 not fresh execution: reused native records omit `duration`. The audit permits an

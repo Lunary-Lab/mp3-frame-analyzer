@@ -74,8 +74,8 @@ function fixture(count = 2) {
   return { sources, policy, scopes, reports };
 }
 
-const run = ({ reports, policy, sources, scopes }) =>
-  auditMutationShards(reports, policy, sources, scopes);
+const run = ({ reports, policy, sources, scopes, inventories }) =>
+  auditMutationShards(reports, policy, sources, scopes, inventories);
 const record = (f, index = 0) => f.reports[index].files[f.scopes[index][0]];
 const rejected = (change, message) => {
   const f = fixture();
@@ -333,6 +333,70 @@ test('reviewed timeout accounting stays global and excludes it from adjusted det
   assert.equal(result.adjustedTotal, 2);
   assert.deepEqual(result.timedOutEquivalents, ['EQ-1']);
   assert.deepEqual(f, before);
+});
+
+function rangeFixture() {
+  const f = fixture(1);
+  const file = [...f.sources.keys()][0];
+  const original = f.reports[0];
+  f.reports = original.files[file].mutants.map((mutant) => {
+    const report = structuredClone(original);
+    report.files[file].mutants = [structuredClone(mutant)];
+    const { start, end } = mutant.location;
+    report.config.mutate = [
+      `${file}:${start.line}:${start.column - 1}-${end.line}:${end.column - 1}`,
+    ];
+    return report;
+  });
+  f.scopes = f.reports.map((report) => report.config.mutate);
+  f.inventories = f.reports.map((report) =>
+    report.files[file].mutants.map(({ location, mutatorName, replacement }) => ({
+      fileName: file,
+      location,
+      mutatorName,
+      replacement,
+    })),
+  );
+  return f;
+}
+
+test('range reports preserve source-bound proofs and aggregate per-file counts without rewriting', () => {
+  const f = rangeFixture();
+  const before = structuredClone(f);
+  const result = run(f);
+  assert.equal(result.total, 2);
+  assert.deepEqual(result.perFile['src/mp3/file-0.ts'], {
+    killed: 1,
+    timedOut: 0,
+    equivalent: 1,
+    total: 2,
+  });
+  assert.equal(result.adjustedScore, 100);
+  assert.deepEqual(f, before);
+});
+
+test('range collection rejects missing, duplicate and misplaced native identities', () => {
+  for (const change of [
+    (f, file) => {
+      f.reports[0].files[file].mutants.push(f.reports[1].files[file].mutants[0]);
+    },
+    (f, file) => {
+      f.reports[0].files[file].mutants = f.reports[1].files[file].mutants;
+    },
+    (f, file) => {
+      f.reports[0].files[file].mutants[0].replacement = 'unplanned';
+    },
+    (f) => {
+      f.inventories[1] = f.inventories[0];
+    },
+    (f) => {
+      f.inventories.pop();
+    },
+  ]) {
+    const f = rangeFixture();
+    change(f, [...f.sources.keys()][0]);
+    assert.throws(() => run(f), /native partition/);
+  }
 });
 
 for (const status of [

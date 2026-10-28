@@ -5,6 +5,7 @@ import {
   validateSchemas,
   validateMutationConfiguration,
   validateSourceInventory,
+  validatePartitionInventory,
 } from './mutation-policy-inputs.mjs';
 export { PARSER_GLOB, VITEST_CONFIG, sha256, sourceContext } from './mutation-policy-inputs.mjs';
 
@@ -232,7 +233,10 @@ function validateShard(report, scope, referenceConfig, policy) {
     'Inconsistent shard execution configurations',
   );
   requireThat(
-    isDeepStrictEqual(Object.keys(report.files ?? {}).sort(), scope.toSorted()),
+    isDeepStrictEqual(
+      Object.keys(report.files ?? {}).sort(),
+      [...new Set(scope.map((range) => range.split(':')[0]))].sort(),
+    ),
     'Shard report does not match its assigned source files',
   );
   for (const record of Object.values(report.files))
@@ -244,7 +248,7 @@ function validateShard(report, scope, referenceConfig, policy) {
 }
 
 /** Audit disjoint raw reports without merging their local mutant or test IDs. */
-export function auditMutationShards(reports, policy, sources, scopes) {
+export function auditMutationShards(reports, policy, sources, scopes, inventories) {
   requireThat(
     Array.isArray(scopes) &&
       scopes.length > 0 &&
@@ -255,10 +259,14 @@ export function auditMutationShards(reports, policy, sources, scopes) {
     Array.isArray(reports) && reports.length === scopes.length,
     'Missing or extra shard reports',
   );
-  const paths = validateSourceInventory(scopes.flat(), policy, sources);
+  const files = inventories
+    ? [...new Set(scopes.flat().map((range) => range.split(':')[0]))]
+    : scopes.flat();
+  const paths = validateSourceInventory(files, policy, sources);
   reports.forEach((report, index) =>
     validateShard(report, scopes[index], reports[0]?.config, policy),
   );
+  if (inventories) validatePartitionInventory(reports, inventories);
   return auditReports(reports, policy, sources, paths, false);
 }
 
@@ -277,7 +285,8 @@ function auditReports(reports, policy, sources, paths, nativeReuse) {
     context.mutantIds = new Set();
     for (const file of Object.keys(report.files).sort()) {
       const counts = auditSourceMutants(file, sources.get(file), report.files[file], context);
-      perFile[file] = counts;
+      perFile[file] ??= { killed: 0, timedOut: 0, equivalent: 0, total: 0 };
+      for (const key of Object.keys(counts)) perFile[file][key] += counts[key];
       for (const k of Object.keys(totals)) totals[k] += counts[k];
     }
   }

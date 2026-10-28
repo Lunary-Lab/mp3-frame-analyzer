@@ -80,8 +80,6 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-project
-        with:
-          install: 'false'
       - id: plan
         run: |
           matrix=$(node scripts/full-mutations.mjs plan)
