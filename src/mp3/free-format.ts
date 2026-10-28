@@ -123,11 +123,8 @@ function* selectCandidate(
   capacityRequired = false,
 ): Generator<ProbeWork, Selection> {
   const selected = new RankedCandidates();
-  const maximumBase = Math.min(
-    MAX_FREE_FORMAT_BASE_BYTES[first.sampleRateIndex]!,
-    MAX_FREE_FORMAT_PHYSICAL_BYTES[first.sampleRateIndex]! - first.padding,
-  );
-  // A suffix whose prefix cannot fit even the largest admitted span cannot
+  const maximumBase = MAX_FREE_FORMAT_BASE_BYTES[first.sampleRateIndex]!;
+  // A suffix whose prefix cannot fit even the largest candidate span cannot
   // contribute evidence. This also rejects impossible side fields once.
   if (capacityRequired && !probe.frameMayFit(start, start + maximumBase + first.padding, first)) {
     return selected.result();
