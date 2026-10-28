@@ -96,6 +96,7 @@ exact lockfile with `npm ci --ignore-scripts`; we do not recursively hash
 `node_modules`.
 
 The only noninputs are named root documentation files, Markdown under `docs/`,
+the prose files `fuzz/README.md` and `scripts/schemas/cyclonedx-1.5/README.md`,
 governance files, the four named runtime
 architecture scanner/test scripts and `tests/runtime-architecture/` fixtures,
 the Copilot instructions, and the parent `ci.yml`. These SAST-only files are not
@@ -169,8 +170,10 @@ parser or artifact authentication client is maintained.
 
 Admission diagnostics distinguish `native-baseline-missing`,
 `native-baseline-incompatible`, `native-baseline-corrupt-or-unauditable`, and
-`native-baseline-unreadable`. All four mean no admitted report and require fresh
-full execution through the applicable route; none bypasses the gate. A compatible
+`native-baseline-unreadable`. A rejected own-PR envelope can still fall back to
+the already downloaded authenticated main baseline. If neither report is admitted,
+fresh full execution is required through the applicable route; no rejection
+bypasses the gate. A compatible
 report is logged as `native-same-input-reuse`. Explicit full mode, an unavailable
 input fingerprint, or a supplied `NODE_OPTIONS` is logged as `native-full-required`.
 
@@ -183,6 +186,12 @@ update in that same PR can reuse completed results. No restore-prefix keys are
 used. Admission requires a successful restore with an exact cache hit, matching
 `prIdentity` and input key, and the existing report audit. The ordinary suite and
 native discovery/coverage still run; changed declared inputs still run full.
+
+The own-PR report is preferred when admitted. If it fails admission, the runner
+tries the already downloaded main envelope through the same key, source identity
+and current-policy audit before selecting a cold route. A missing or invalid
+authenticated main SHA cannot authorize this fallback. `audit.json` records the
+source actually admitted: the main commit or the own-PR identity.
 
 This is an **own-PR optimization, not authenticated producer provenance**.
 `prIdentity`/`audit.execution.baselinePR` name its scope; they are not a producing
@@ -199,9 +208,10 @@ With hosted routing enabled, an own-PR cache can be saved after a successful nat
 run that admitted a compatible baseline; the matrix does not seed it.
 
 Restore/save failures, eviction, partial/corrupt files or incompatible reports
-fall back to full execution. Native caches are immutable: an unusable exact-key
-entry cannot be repaired in place and may remain cold until eviction or a
-reviewed key-namespace change. No cache failure skips tests or weakens the gate.
+require full execution only when no compatible baseline is admitted. Native
+caches are immutable: an unusable exact-key entry cannot be repaired in place,
+but it does not prevent reuse of an authenticated compatible main baseline.
+No cache failure skips tests or weakens the gate.
 See GitHub's [cache-scope restrictions](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache).
 
 The new envelope is not compatible with the old schema3 cache. The first hosted
