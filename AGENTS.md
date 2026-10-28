@@ -5,7 +5,7 @@ Read this file before changing parser, API, fixtures, fuzzers, or counts. This f
 ## Instruction/source precedence
 
 1. [Original candidate assessment](docs/assessment-brief.md) controls the mandatory deliverable: TypeScript, `POST /file-upload`, MPEG-1 Audio **Layer III** frame counting, JSON `{"frameCount": number}`, no NPM package that parses MPEG frames for the implementation, and a Git repository with run/test instructions.
-2. [Assessment-only requirements and evaluator risk](docs/specifications/assessment-scope.md) distinguishes what the task explicitly requires from format compatibility and engineering enhancements.
+2. [Assessment-only requirements and evaluator risk](docs/assessment-brief.md#appendix-project-interpretation-not-assignment-text) distinguishes what the task explicitly requires from format compatibility and engineering enhancements.
 3. [Frame-count contract](docs/frame-count-contract.md) records the **owner-selected HTTP policy (2026-10-24)**: omitted or `includeVbrHeaderFrame=false` excludes one recognized initial Xing/Info/VBRI encoder frame; `true` counts all physical MPEG frames. Direct `countMp3Frames()` calls retain their physical default. The supplied sample returns 6089 by HTTP default and 6090 with `true`. The evaluator confirmed audio-frame counting and the sample result 6089 on 2026-10-26; this matches the existing HTTP default. The clarification does not specify later encoder-like payload or concatenation policies. Further default changes require an explicit owner decision.
 4. [Authoritative specifications registry](docs/specifications/README.md) identifies ISO/IEC, ID3, IETF/IANA and original encoder sources, including what they **do not** require. Read the relevant topic:
    - [MPEG-1 Layer III syntax and free-format](docs/specifications/mpeg-1-layer-iii.md)
@@ -16,7 +16,7 @@ Read this file before changing parser, API, fixtures, fuzzers, or counts. This f
 
 ## Current design invariants (not additional assessment requirements)
 
-**Scope gate:** Only requirements called out in the [assessment-only checklist](docs/specifications/assessment-scope.md) are mandated by the employer. The configurable 50 MiB default limit, raw uploads, metadata-exclusion option, extended free-format range, fuzzing and release tooling are established **project choices**, not extra conditions imposed by the brief. Keep them working but never broaden unrelated scope to satisfy a reference appendix.
+**Scope gate:** Only requirements called out in the [assessment-only checklist](docs/assessment-brief.md#appendix-project-interpretation-not-assignment-text) are mandated by the employer. The configurable 50 MiB default limit, raw uploads, metadata-exclusion option, extended free-format range, fuzzing and release tooling are established **project choices**, not extra conditions imposed by the brief. Keep them working but never broaden unrelated scope to satisfy a reference appendix.
 
 - MPEG-1 is version bits `11`; Layer III is layer bits `01`. Support bitrate indices 1–14 **and free-format index 0** (bounded frame-spacing inference); reject forbidden index 15 and reserved sample rate 3. MPEG-2, MPEG-2.5, Layers I/II, ADTS/AAC and MP4 are out of assessment scope.
 - Compute indexed frame lengths independently for **every frame**, including VBR/ABR, rather than multiplying the first frame length by the count or trusting a Xing/VBRI count.

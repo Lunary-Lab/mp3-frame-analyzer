@@ -148,3 +148,71 @@ The candidate should aim to complete the assessment within 5 days of receiving
 the task.
 
 Good luck! We look forward to seeing your solution.
+
+---
+
+## Appendix: project interpretation (not assignment text)
+
+This appendix separates the assignment's requirements from the repository's
+implementation choices. The original assignment and dated clarification above
+control assessment scope; the specification guides add reference detail, not
+new evaluator requirements.
+
+### Mandatory deliverables
+
+- Use **TypeScript** and expose **`POST /file-upload`** accepting an MP3 upload.
+- Logically parse **MPEG-1 Audio Layer III** frames to determine the count; do
+  not estimate it from file size, bitrate, duration or encoder-declared totals.
+- Do not use an NPM package that directly parses MP3 frame data. Generic web
+  frameworks and multipart utilities are allowed; independent decoders may be
+  development-only verification tools.
+- Return a JSON object containing a numeric **`frameCount`**, with the correct
+  **`Content-Type: application/json`** response header.
+- Submit a **Git repository** with clear run instructions and an example test
+  request. The [HTTP guide](specifications/http-api.md#reproducible-requests)
+  supplies requests for the current implementation.
+
+### Format coverage and limits
+
+[MPEG-1 Layer III rules](specifications/mpeg-1-layer-iii.md) cover header sync,
+version/layer identifiers, bitrate and sample-rate indices, padding and frame
+length. Legitimate in-scope streams include indexed **32-320 kbps** bitrates,
+**32/44.1/48 kHz**, all four channel modes, CRC-protected/unprotected frames and
+CBR/VBR/ABR. **Free-format index 0 is also a valid subtype**, although the brief
+does not call it out or promise a test; the parser supports inferable streams
+and rejects ambiguous short layouts, so it cannot claim unconditional coverage.
+Forbidden bitrate index 15 and reserved sample-rate index 3 are invalid.
+MPEG-2/2.5, Layers I/II, AAC/ADTS and MP4 are outside the assignment.
+
+ID3v1 and common ID3v2 envelopes matter to locating audio boundaries; internal
+records, artwork and lyrics need not be interpreted. Xing/Info/LAME/VBRI are
+encoder metadata conventions, not separate ID3 audio frames. See the
+[metadata guide](specifications/tags-and-encoder-headers.md). Logical counting
+does not require Layer III decoding, bit-reservoir or Huffman validation, or CRC
+verification, and does not prove decodable audio. The public
+[ISO catalog](https://www.iso.org/standard/22412.html) and these summaries do not
+constitute a certified ISO conformance audit.
+
+### Project choices and count policy
+
+The **2026-10-26 evaluator clarification** confirms audio-frame counting and
+**6089** for the supplied sample, matching the owner's **2026-10-24** HTTP
+default: omitted/`false` excludes at most one recognized initial Xing/Info/VBRI frame.
+Explicit `includeVbrHeaderFrame=true` returns its **6090 physical frames**;
+direct `countMp3Frames()` calls retain their physical default. Raw and multipart
+uploads share the HTTP policy. Later encoder-like payload and concatenation
+remain project decisions; structural exclusion does not guarantee agreement
+with every media tool. The [count contract](frame-count-contract.md) records
+the policy, its change from the earlier HTTP default and verification evidence.
+
+The brief does not prescribe a multipart field name, raw uploads, MIME aliases,
+query options, exact error statuses/schema, upload caps, libraries or deployment
+infrastructure. LAME free-format 321-640 kbps interoperability, arbitrary embedded
+ID3, APEv2/Lyrics3 and decoder-style recovery are optional compatibility choices.
+Fuzzing, mutation testing, 100% coverage, SBOMs, release automation, formal security
+audits and production auth/rate limiting are likewise not evaluator mandates.
+
+Correctness, readable TypeScript, useful errors, large-file performance, tooling
+and effective Git use remain evaluation criteria. The five-day target and
+requirement that the candidate understand and explain AI-assisted work favor a
+working, demonstrably correct solution over unrelated scope growth.

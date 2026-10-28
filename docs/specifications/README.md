@@ -1,6 +1,6 @@
 # Authoritative specifications and source hierarchy
 
-This directory is the **AI-agent and reviewer source register for this TypeScript MPEG-1 Layer III frame-counting assessment**. Last verified against linked publisher/maintainer materials: **2026-10-25**. Read [`AGENTS.md`](../../AGENTS.md), the [unaltered assignment](../assessment-brief.md), and the [assessment-only requirements](assessment-scope.md) first. **Reference specifications do not impose extra acceptance criteria:** only the assignment controls that.
+This directory is the **AI-agent and reviewer source register for this TypeScript MPEG-1 Layer III frame-counting assessment**. Last verified against linked publisher/maintainer materials: **2026-10-25**. Read [`AGENTS.md`](../../AGENTS.md), the [unaltered assignment](../assessment-brief.md), and the [assessment-only requirements](../assessment-brief.md#appendix-project-interpretation-not-assignment-text) first. **Reference specifications do not impose extra acceptance criteria:** only the assignment controls that.
 
 ## Authority classes, in order
 
@@ -36,7 +36,7 @@ The [successive-sequence policy](successive-sequences.md) separately records ISO
 
 ## Topic documents
 
-- [`assessment-scope.md`](assessment-scope.md): controlling checklist of employer requirements, optional extensions, the owner-selected count policy and dated evaluator clarification.
+- [Assessment interpretation appendix](../assessment-brief.md#appendix-project-interpretation-not-assignment-text): controlling checklist of employer requirements, optional extensions, the owner-selected count policy and dated evaluator clarification.
 - [`mpeg-1-layer-iii.md`](mpeg-1-layer-iii.md): exact header fields, rates, length rules, free-format and test invariants.
 - [`tags-and-encoder-headers.md`](tags-and-encoder-headers.md): ID3 versions, Xing/Info/LAME, VBRI, tag-frame terminology.
 - [`http-api.md`](http-api.md): original endpoint contract vs documented extensions, MIME/form rules, errors and limits.
@@ -44,7 +44,7 @@ The [successive-sequence policy](successive-sequences.md) separately records ISO
 
 ## Input classification evidence
 
-The [supported/unsupported/malformed input matrix](input-classification.md) links
+The [supported/unsupported/malformed input matrix](http-api.md#supported-unsupported-and-malformed-input) links
 MPEG-1 header-field rules in ISO/IEC 11172-3:1993 §§2.4.1.3/2.4.2.3, ID3
 version-byte prohibitions and independent implementation checks to exact parser
 and raw/multipart HTTP tests. It separates format rules from the project's
