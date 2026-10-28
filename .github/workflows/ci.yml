@@ -4,8 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-  merge_group:
-    types: [checks_requested]
   workflow_dispatch:
     inputs:
       full_mutation:
@@ -50,7 +48,7 @@ env:
 # Scheduled/full-manual runs use unique groups: cancel=false alone still replaces pending runs.
 # Release validation is isolated; the separate publisher retains its publication lock.
 concurrency:
-  group: ci-${{ (inputs.ref != '' || inputs.release_tag != '') && format('release-{0}-{1}', inputs.release_tag, inputs.ref) || github.event_name == 'merge_group' && format('queue-{0}', github.sha) || github.event_name == 'schedule' && format('scheduled-{0}', github.run_id) || github.event_name == 'workflow_dispatch' && inputs.full_mutation == true && format('full-{0}', github.run_id) || format('validation-{0}', github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && format('fork-pr-{0}', github.event.pull_request.number) || github.head_ref != '' && format('refs/heads/{0}', github.head_ref) || github.ref) }}
+  group: ci-${{ (inputs.ref != '' || inputs.release_tag != '') && format('release-{0}-{1}', inputs.release_tag, inputs.ref) || github.event_name == 'schedule' && format('scheduled-{0}', github.run_id) || github.event_name == 'workflow_dispatch' && inputs.full_mutation == true && format('full-{0}', github.run_id) || format('validation-{0}', github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && format('fork-pr-{0}', github.event.pull_request.number) || github.head_ref != '' && format('refs/heads/{0}', github.head_ref) || github.ref) }}
   cancel-in-progress: ${{ inputs.ref == '' && inputs.release_tag == '' && github.event_name != 'schedule' && !(github.event_name == 'workflow_dispatch' && inputs.full_mutation == true) }}
 
 jobs:

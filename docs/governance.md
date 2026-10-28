@@ -9,7 +9,6 @@
 | Squash-only merging, read-only workflow token, SHA-pinned selected actions   | Enforced                                                               |
 | `main`: pull request, `All checks` and PR-title checks, up-to-date branch    | Enforced by the `main` ruleset; no bypass                              |
 | `main`: resolved conversations, linear history, no force push                | Enforced by the `main` ruleset; no bypass                              |
-| `main`: native merge queue                                                   | Proposed in Terraform; live activation and acceptance pending          |
 | Release tags cannot move or be deleted                                       | Enforced by the `release-tags` ruleset and immutable releases          |
 | One approval from the release approver before publication                    | Enforced by the `release` environment; administrators cannot bypass it |
 | Build provenance, release attestations, secret scanning with push protection | On                                                                     |
@@ -171,9 +170,9 @@ Neither administrators nor automation can bypass the rulesets. If a broken requi
 The `main` ruleset in [`rulesets.tf`](../governance/rulesets.tf):
 
 - **No routine approving review.** A pull request is required but needs 0 approvals: this repository has one maintainer, who cannot approve their own pull request. Conversations must be resolved; stale approvals are dismissed.
-- **Checks.** `All checks` and `Conventional Commit PR title` must pass, both from the GitHub Actions app (ID 15368). Strict required checks remain enabled; after queue activation GitHub validates the integrated queue candidate against `main` without requiring repeated updates to the PR branch.
+- **Checks.** `All checks` and `Conventional Commit PR title` must pass, both from the GitHub Actions app (ID 15368), against a branch that is up to date with `main`.
 - **History.** Force pushes and deletion are blocked and history must be linear. Squash is the only merge method.
-- **Native merge queue, pending activation.** `SQUASH`, `ALLGREEN`, one entry building and one merging at a time, minimum one entry, no batching wait, and a 180-minute check timeout. Later PRs wait behind the candidate instead of making the maintainer repeatedly update its branch. The timeout accommodates the mutation job and its prerequisites.
+- **No merge queue,** because one maintainer gains nothing from one.
 - **No bypass actors.**
 - GitHub's default "additional approval for unattributed Copilot pull requests" stays on; the provider cannot manage it, and it has no effect while 0 approvals are required.
 
@@ -184,14 +183,11 @@ The `main` ruleset in [`rulesets.tf`](../governance/rulesets.tf):
 - its name is not unique across workflows, including filtered and manually dispatched workflows, or it is a matrix or reusable-workflow job rather than one direct job;
 - it can be skipped, through a condition other than `always()` or through `needs` without `always()`; equivalent whitespace around the expression and its optional `${{ }}` delimiters is accepted;
 - its workflow does not run on `pull_request` or `pull_request_target`;
-- its workflow does not also admit `merge_group` with `checks_requested`;
 - its workflow filters by paths, ignores branches, or has a branch filter other than exactly `[main]`;
 - its event `types` omit `opened`, `synchronize` or `reopened`; the title check must also include `edited` so a title-only change is revalidated;
 - the aggregate is not required or not unique, does not run with `always()`, or does not need every other job in its workflow.
 
 The contract inspects the aggregate's `if` and `needs`; it is not a general Actions expression evaluator and does not prove step behavior. Its step in `ci.yml` fails on any child result other than success, including cancelled and skipped. Positive and negative fixtures exercise the supported forms and rejection rules. Renaming a check requires updating its variables and tests together or the `Governance` workflow fails on that pull request. The standalone `Governance` check is not separately required by name: governance validation is required through the fail-closed `All checks` aggregate, so its failure blocks merging.
-
-Both required workflows handle `merge_group`. CI tests the event's queue SHA in a separate concurrency group; an ordinary PR or `main` run cannot cancel it. The title job uses live GraphQL queue metadata to require exactly one entry whose `headCommit` and `baseCommit` match the event, then validates that entry's PR title. It has no checkout. Missing or changed bindings fail closed. The post-merge audit still checks admission evidence on the original PR head; GitHub's ruleset enforces checks on the integrated queue candidate.
 
 **Release PRs require eligible native events.** A `workflow_dispatch` run, even
 green on the exact head, does **not** satisfy PR ruleset checks. Follow the
@@ -200,14 +196,6 @@ green on the exact head, does **not** satisfy PR ruleset checks. Follow the
 events and workflow-execution approval. Those actions do not authorize publication.
 GitHub documents [token-generated events](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow#triggering-a-workflow-from-a-workflow)
 and [required-check event eligibility](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks#checks-from-some-workflow-jobs-are-not-evaluated).
-
-### Activate and verify the queue
-
-This change does **not** apply live settings. After its PR merges, separately authorize the operator procedure: plan against the existing state, review the addition to `github_repository_ruleset.main[0]` (live ruleset **25840882**), then explicitly approve that plan before applying it. Import that existing ruleset first if it is absent from local state; do not create a second ruleset. Retain strict checks and their app bindings, zero required PR approvals, stale-review dismissal, resolved conversations, history protections, no bypass, tag protections, and the single owner environment approval. The pinned provider 6.13.0 already supports the queue; no provider or credential change is required.
-
-After applying, queue two harmless ordinary PRs in FIFO order, with the second arriving while the first candidate validates. Confirm the first merges without a PR-branch update, both required checks identify its queue SHA, and the second follows. Confirm a failed required check prevents merging, and missing/stale queue metadata fails the title regression. Record the live settings and run evidence; do not use a release PR or publish during this acceptance check. Until activation is verified, the existing strict branch-update behavior remains in force.
-
-This follows GitHub's [native queue model](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue), also used by the pinned Release Please action's own [CI](https://github.com/googleapis/release-please-action/blob/45996ed1f6d02564a971a2fa1b5860e934307cf7/.github/workflows/ci.yaml). A separate stable release branch was considered: Release Please supports it, but it adds another protected branch and backport process and would require changing the publisher's existing `main`-ancestor contract.
 
 ## Release approval
 

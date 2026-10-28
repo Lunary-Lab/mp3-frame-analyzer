@@ -213,30 +213,6 @@ run "spaced_always_expression_is_accepted" {
   variables { workflow_directory = "tests/fixtures/always-spaced" }
 }
 
-run "queue_must_report_the_title_check_too" {
-  command = plan
-  variables { workflow_directory = "tests/fixtures/queue-title-missing" }
-  expect_failures = [output.required_status_checks]
-}
-
-run "queue_must_request_checks" {
-  command = plan
-  variables { workflow_directory = "tests/fixtures/queue-wrong-activity" }
-  expect_failures = [output.required_status_checks]
-}
-
-run "queue_cannot_filter_out_main" {
-  command = plan
-  variables { workflow_directory = "tests/fixtures/queue-wrong-branch" }
-  expect_failures = [output.required_status_checks]
-}
-
-run "queue_cannot_omit_paths" {
-  command = plan
-  variables { workflow_directory = "tests/fixtures/queue-filtered-paths" }
-  expect_failures = [output.required_status_checks]
-}
-
 run "rulesets_can_be_disabled_in_an_emergency" {
   command = plan
 
@@ -286,19 +262,6 @@ run "main_ruleset_requires_checks_not_reviews" {
       github_repository_ruleset.main[0].rules[0].pull_request[0].allowed_merge_methods == tolist(["squash"])
     )
     error_message = "Pull requests must need no approving review, dismiss stale approvals, require resolved conversations, and squash merge."
-  }
-
-  assert {
-    condition = (
-      github_repository_ruleset.main[0].rules[0].merge_queue[0].merge_method == "SQUASH" &&
-      github_repository_ruleset.main[0].rules[0].merge_queue[0].grouping_strategy == "ALLGREEN" &&
-      github_repository_ruleset.main[0].rules[0].merge_queue[0].max_entries_to_build == 1 &&
-      github_repository_ruleset.main[0].rules[0].merge_queue[0].max_entries_to_merge == 1 &&
-      github_repository_ruleset.main[0].rules[0].merge_queue[0].min_entries_to_merge == 1 &&
-      github_repository_ruleset.main[0].rules[0].merge_queue[0].min_entries_to_merge_wait_minutes == 0 &&
-      github_repository_ruleset.main[0].rules[0].merge_queue[0].check_response_timeout_minutes == 180
-    )
-    error_message = "The native queue must validate and squash one candidate at a time with room for the complete CI gate."
   }
 
   assert {

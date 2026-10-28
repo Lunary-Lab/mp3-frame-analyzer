@@ -1,7 +1,5 @@
 name: PR title
 on:
-  merge_group:
-    types: [checks_requested]
   pull_request_target:
     paths: [src/**]
     types: [opened, edited, reopened, synchronize]

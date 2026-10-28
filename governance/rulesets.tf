@@ -32,19 +32,6 @@ resource "github_repository_ruleset" "main" {
       allowed_merge_methods             = ["squash"]
     }
 
-    # Native queue validation owns the changing base. One candidate at a time
-    # avoids speculative full campaigns and lets later PRs wait behind it.
-    merge_queue {
-      merge_method                      = "SQUASH"
-      grouping_strategy                 = "ALLGREEN"
-      max_entries_to_build              = 1
-      max_entries_to_merge              = 1
-      min_entries_to_merge              = 1
-      min_entries_to_merge_wait_minutes = 0
-      # The mutation job alone permits 100 minutes, in addition to its needs.
-      check_response_timeout_minutes = 180
-    }
-
     required_status_checks {
       strict_required_status_checks_policy = true
       do_not_enforce_on_create             = false
