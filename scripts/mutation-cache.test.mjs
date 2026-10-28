@@ -56,6 +56,13 @@ function selectRunnerPolicy(source) {
     ts.isCallExpression(statement.expression.expression) &&
     statement.expression.expression.expression.getText(parsed);
   const guards = statements.filter(ts.isIfStatement);
+  const callsReadCache = (node) =>
+    (ts.isCallExpression(node) && node.expression.getText(parsed) === 'readCache') ||
+    ts.forEachChild(node, callsReadCache);
+  const fallback = guards.filter(callsReadCache);
+  assert.equal(fallback.length, 1, 'Expected one main-baseline fallback guard');
+  assert.ok(admission.at(-1).end < fallback[0].end);
+  admission.push(fallback[0]);
   const promotion = guards.filter(
     (statement) => callName(statement.thenStatement) === 'promoteCache',
   );
@@ -409,13 +416,13 @@ test('the runner admission policy fragment distinguishes full mode, PR hits and 
     MUTATION_PR_CACHE_RESTORED: 'true',
   };
   for (const [delta, args, expected] of [
-    [{}, [], 'pr:42:7'],
-    [{ MUTATION_PR_CACHE_RESTORED: 'false' }, [], commit],
-    [{ MUTATION_PR_CACHE_RESTORED: '' }, [], commit],
-    [{ GITHUB_EVENT_NAME: 'push' }, [], commit],
-    [{ GITHUB_EVENT_NAME: 'pull_request_target' }, [], commit],
-    [{ GITHUB_REF: 'refs/heads/release' }, [], commit],
-    [{}, ['--full'], null],
+    [{}, [], ['pr:42:7', commit]],
+    [{ MUTATION_PR_CACHE_RESTORED: 'false' }, [], [commit]],
+    [{ MUTATION_PR_CACHE_RESTORED: '' }, [], [commit]],
+    [{ GITHUB_EVENT_NAME: 'push' }, [], [commit]],
+    [{ GITHUB_EVENT_NAME: 'pull_request_target' }, [], [commit]],
+    [{ GITHUB_REF: 'refs/heads/release' }, [], [commit]],
+    [{}, ['--full'], []],
   ]) {
     const calls = [];
     await runInNewContext(
@@ -437,7 +444,7 @@ test('the runner admission policy fragment distinguishes full mode, PR hits and 
     );
     assert.deepEqual(
       calls.map((values) => values[2]),
-      expected ? [expected] : [],
+      expected,
     );
   }
 });

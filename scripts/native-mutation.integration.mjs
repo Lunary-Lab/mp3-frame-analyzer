@@ -23,6 +23,11 @@ const files = {
   'package.json': '{"type":"module"}',
   'package-lock.json': '{"lockfileVersion":3}',
   'docs/mutation-review.md': 'Editorial review notes\n',
+  'fuzz/README.md': 'Fuzzing instructions\n',
+  'scripts/schemas/cyclonedx-1.5/README.md': 'Schema provenance notes\n',
+  'scripts/schemas/cyclonedx-1.5/bom-1.5.schema.json': '{"type":"object"}',
+  'fuzz/seeds/raw/example.bin': Buffer.from([0, 1]),
+  'fuzz/regressions/raw/example.bin': Buffer.from([1, 0]),
   'mutation-equivalents.json': '{"approvals":[]}',
   'source.js': 'export const positive = value => value > 0;\n',
   'helper.js': 'export const select = values => values;\n',
@@ -53,8 +58,10 @@ test('boundaries', () => {
 };
 
 async function campaign(root, name, baseline, change = {}, force = false) {
-  for (const [path, value] of Object.entries({ ...files, ...change }))
+  for (const [path, value] of Object.entries({ ...files, ...change })) {
+    await mkdir(dirname(join(root, path)), { recursive: true });
     await writeFile(join(root, path), value);
+  }
   const key = fingerprint(await mutationInputs(root, {}, {}));
   if (baseline) await promoteCache(root, baseline.report, baseline.key, 'local');
   const cached = force ? { report: null } : await readCache(root, key, 'local', () => {});
@@ -98,13 +105,18 @@ test(
     execFileSync('git', ['init', '-q', root]);
     await symlink(join(repo, 'node_modules'), join(root, 'node_modules'));
     await mkdir(join(root, '.cache/mutation'), { recursive: true });
-    await mkdir(join(root, 'docs'), { recursive: true });
     const cold = await campaign(root, 'cold');
+    assert.equal(cold.execution.total, 5);
     assert.ok(cold.execution.executed > 0);
     assert.equal(cold.execution.reused, 0);
     for (const [name, change] of [
       ['unchanged', {}],
       ['review', { 'docs/mutation-review.md': 'Updated editorial review notes\n' }],
+      ['fuzz-readme', { 'fuzz/README.md': 'Updated fuzzing instructions\n' }],
+      [
+        'schema-readme',
+        { 'scripts/schemas/cyclonedx-1.5/README.md': 'Updated schema provenance notes\n' },
+      ],
     ]) {
       const warm = await campaign(root, name, cold, change);
       assert.equal(warm.key, cold.key);
@@ -117,6 +129,9 @@ test(
     assert.deepEqual(outcomes(forced.report), outcomes(cold.report));
     const changes = {
       proof: { 'mutation-equivalents.json': '{"approvals":[{"changed":true}]}' },
+      schema: { 'scripts/schemas/cyclonedx-1.5/bom-1.5.schema.json': '{"type":"array"}' },
+      'fuzz-seed': { 'fuzz/seeds/raw/example.bin': Buffer.from([0, 2]) },
+      'fuzz-regression': { 'fuzz/regressions/raw/example.bin': Buffer.from([2, 0]) },
       source: { 'source.js': files['source.js'] + '// source changed\n' },
       helper: { 'helper.js': 'export const select = values => values.filter(([n]) => n !== 0);' },
       fixture: { 'values.json': '[[-1,false],[1,true]]' },

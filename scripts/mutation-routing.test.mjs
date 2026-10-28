@@ -33,6 +33,8 @@ const report = {
   files: { 'src/mp3/example.ts': { mutants: [{ status: 'Killed', duration: 0 }] } },
   testFiles: {},
 };
+const prReport = { ...report, cacheSource: 'own-pr' };
+const mainReport = { ...report, cacheSource: 'authenticated-main' };
 const summary = {
   rawScore: 100,
   adjustedScore: 100,
@@ -69,18 +71,27 @@ async function fixture(t, options = {}) {
   await writeFile(outputPath, '');
   const env = { ...prEnv, GITHUB_OUTPUT: outputPath, ...options.env };
   const identity = env.MUTATION_PR_CACHE_RESTORED === 'true' ? pullRequestIdentity(env) : commit;
-  const baselinePath = join(root, identity?.startsWith('pr:') ? PR_BASELINE : BASELINE);
-  if (options.cache) {
-    await promoteCache(root, report, key, identity);
+  for (const [cache, cacheIdentity, cachedReport] of [
+    [options.cache, identity, options.cacheReport ?? report],
+    [options.mainCache, options.mainIdentity ?? commit, mainReport],
+  ]) {
+    if (!cache) continue;
+    const baselinePath = join(root, cacheIdentity?.startsWith('pr:') ? PR_BASELINE : BASELINE);
+    await promoteCache(root, cachedReport, key, cacheIdentity);
     const envelope = JSON.parse(await readFile(baselinePath, 'utf8'));
-    if (options.cache === 'incompatible') envelope.key = 'f'.repeat(64);
-    if (options.cache === 'unauditable') envelope.report = { valid: false };
-    await writeFile(
-      baselinePath,
-      options.cache === 'corrupt' ? '{partial' : JSON.stringify(envelope),
-    );
+    if (cache === 'incompatible') envelope.key = 'f'.repeat(64);
+    if (cache === 'unauditable') envelope.report = { valid: false };
+    await writeFile(baselinePath, cache === 'corrupt' ? '{partial' : JSON.stringify(envelope));
   }
-  const calls = { discovery: 0, processes: [], promotions: [], ended: 0 };
+  const calls = {
+    discovery: 0,
+    processes: [],
+    promotions: [],
+    reads: [],
+    audits: [],
+    workingReports: [],
+    ended: 0,
+  };
   const messages = [];
   const processState = {
     argv: ['node', 'run-mutations.mjs', ...(options.args ?? ['--parallel-fallback'])],
@@ -128,10 +139,14 @@ async function fixture(t, options = {}) {
     fingerprint,
     sourceContext,
     pullRequestIdentity,
-    readCache,
+    readCache: async (...values) => {
+      calls.reads.push(values[2]);
+      return readCache(...values);
+    },
     executionSummary,
-    auditMutations: (value) => {
-      if (!value?.valid) throw new Error('audit rejected report');
+    auditMutations: (value, _policy, _sources, auditOptions) => {
+      calls.audits.push({ value, options: auditOptions });
+      if (!value?.valid || options.auditFailure) throw new Error('audit rejected report');
       return summary;
     },
     verifyParserTestDiscovery: async () => {
@@ -141,8 +156,15 @@ async function fixture(t, options = {}) {
     runMutationProcess: async (command, args) => {
       calls.processes.push({ command, args: Array.from(args) });
       if (options.processFailure) throw new Error('native execution failed');
-      if (command.endsWith('stryker.js'))
-        await writeFile(join(root, 'reports/mutation/mutation.json'), JSON.stringify(report));
+      if (command.endsWith('stryker.js')) {
+        if (!args.includes('--force'))
+          calls.workingReports.push(JSON.parse(await readFile(join(root, WORKING_REPORT), 'utf8')));
+        if (options.strykerFailure) throw new Error('native Stryker execution failed');
+        await writeFile(
+          join(root, 'reports/mutation/mutation.json'),
+          JSON.stringify(options.executionReport ?? report),
+        );
+      }
     },
     promoteCache: async (...values) => {
       calls.promotions.push(values[3]);
@@ -241,6 +263,200 @@ for (const restored of ['false', 'true'])
     assert.deepEqual(result.calls.promotions, ['pr:42:7']);
     assert.deepEqual(JSON.parse(await readFile(join(result.root, WORKING_REPORT), 'utf8')), report);
   });
+
+for (const cache of [undefined, 'incompatible', 'corrupt', 'unauditable'])
+  test(`rejected own-PR ${cache ?? 'missing'} cache falls back to authenticated main`, async (t) => {
+    const result = await fixture(t, {
+      cache,
+      cacheReport: prReport,
+      mainCache: 'valid',
+      env: { MUTATION_PR_CACHE_RESTORED: 'true' },
+    });
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.route, 'route=native\n');
+    assert.deepEqual(result.calls.reads, ['pr:42:7', commit]);
+    assert.equal(result.calls.discovery, 1);
+    assert.deepEqual(
+      result.calls.processes.map(({ args }) => args),
+      [['run', '--no-fsModuleCache'], ['run']],
+    );
+    assert.deepEqual(result.calls.workingReports, [mainReport]);
+    assert.deepEqual(
+      JSON.parse(await readFile(join(result.root, WORKING_REPORT), 'utf8')),
+      mainReport,
+    );
+    const audit = JSON.parse(
+      await readFile(join(result.root, 'reports/mutation/audit.json'), 'utf8'),
+    );
+    assert.equal(audit.execution.mode, 'incremental');
+    assert.equal(audit.execution.cacheReason, 'native-same-input-reuse');
+    assert.equal(audit.execution.baselineCommit, commit);
+    assert.equal(audit.execution.baselinePR, null);
+    assert.deepEqual(result.calls.promotions, ['pr:42:7']);
+    const promoted = JSON.parse(await readFile(join(result.root, PR_BASELINE), 'utf8'));
+    assert.deepEqual(promoted.report, report);
+    assert.equal(promoted.prIdentity, 'pr:42:7');
+    await assert.rejects(readFile(join(result.root, BASELINE)), { code: 'ENOENT' });
+  });
+
+test('admitted own-PR cache stays preferred without reading authenticated main', async (t) => {
+  const result = await fixture(t, {
+    cache: 'valid',
+    cacheReport: prReport,
+    mainCache: 'valid',
+    env: { MUTATION_PR_CACHE_RESTORED: 'true' },
+  });
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.route, 'route=native\n');
+  assert.deepEqual(result.calls.reads, ['pr:42:7']);
+  assert.deepEqual(result.calls.workingReports, [prReport]);
+  const audit = JSON.parse(
+    await readFile(join(result.root, 'reports/mutation/audit.json'), 'utf8'),
+  );
+  assert.equal(audit.execution.baselineCommit, null);
+  assert.equal(audit.execution.baselinePR, 'pr:42:7');
+});
+
+for (const mainCache of [undefined, 'incompatible', 'corrupt', 'unauditable'])
+  test(`rejected own-PR and ${mainCache ?? 'missing'} main caches stay cold`, async (t) => {
+    const result = await fixture(t, {
+      cache: 'corrupt',
+      mainCache,
+      env: { MUTATION_PR_CACHE_RESTORED: 'true' },
+    });
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.route, 'route=full-sharded\n');
+    assert.deepEqual(result.calls.reads, ['pr:42:7', commit]);
+    assert.equal(result.calls.discovery, 0);
+    assert.deepEqual(result.calls.processes, []);
+    assert.deepEqual(result.calls.promotions, []);
+    for (const path of [BASELINE, PR_BASELINE, WORKING_REPORT, 'reports/mutation/audit.json'])
+      await assert.rejects(readFile(join(result.root, path)), { code: 'ENOENT' });
+  });
+
+for (const sha of [undefined, '', 'unknown', 'A'.repeat(40), 'local', 'pr:42:7'])
+  test(`own-PR fallback never reads main without a trusted SHA: ${String(sha)}`, async (t) => {
+    const result = await fixture(t, {
+      cache: 'corrupt',
+      mainCache: 'valid',
+      mainIdentity: sha === 'local' ? 'local' : commit,
+      env: { MUTATION_PR_CACHE_RESTORED: 'true', MUTATION_BASELINE_SHA: sha },
+    });
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.route, 'route=full-sharded\n');
+    assert.deepEqual(result.calls.reads, ['pr:42:7']);
+    assert.deepEqual(result.calls.audits, []);
+    assert.deepEqual(result.calls.processes, []);
+    const routing = JSON.parse(
+      await readFile(join(result.root, 'reports/mutation/routing.json'), 'utf8'),
+    );
+    assert.equal(routing.cacheReason, 'native-baseline-corrupt-or-unauditable');
+  });
+
+test('own-PR fallback rejects a main envelope from a different authenticated SHA', async (t) => {
+  const result = await fixture(t, {
+    cache: 'corrupt',
+    mainCache: 'valid',
+    env: { MUTATION_PR_CACHE_RESTORED: 'true', MUTATION_BASELINE_SHA: 'd'.repeat(40) },
+  });
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.route, 'route=full-sharded\n');
+  assert.deepEqual(result.calls.reads, ['pr:42:7', 'd'.repeat(40)]);
+  assert.deepEqual(result.calls.audits, []);
+  assert.deepEqual(result.calls.processes, []);
+  const routing = JSON.parse(
+    await readFile(join(result.root, 'reports/mutation/routing.json'), 'utf8'),
+  );
+  assert.equal(routing.cacheReason, 'native-baseline-incompatible');
+});
+
+test('own-PR fallback rechecks current audit and fails closed for both reports', async (t) => {
+  const result = await fixture(t, {
+    cache: 'valid',
+    cacheReport: prReport,
+    mainCache: 'valid',
+    auditFailure: true,
+    env: { MUTATION_PR_CACHE_RESTORED: 'true' },
+  });
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.route, 'route=full-sharded\n');
+  assert.deepEqual(result.calls.reads, ['pr:42:7', commit]);
+  assert.deepEqual(
+    result.calls.audits.map(({ value }) => value),
+    [prReport, mainReport],
+  );
+  assert.ok(result.calls.audits.every(({ options }) => options.nativeReuse === true));
+  assert.deepEqual(result.calls.processes, []);
+  assert.deepEqual(result.calls.promotions, []);
+  await assert.rejects(readFile(join(result.root, 'reports/mutation/audit.json')), {
+    code: 'ENOENT',
+  });
+});
+
+for (const options of [{ args: ['--full'] }, { nodeOptions: true }, { inputFailure: true }])
+  test(`forced paths never reuse own-PR or main fallback: ${JSON.stringify(options)}`, async (t) => {
+    const result = await fixture(t, {
+      cache: 'corrupt',
+      mainCache: 'valid',
+      env: { MUTATION_PR_CACHE_RESTORED: 'true' },
+      ...options,
+    });
+    assert.equal(result.exitCode, 0);
+    assert.deepEqual(result.calls.reads, []);
+    assert.deepEqual(result.calls.workingReports, []);
+    if (options.args) {
+      assert.equal(result.route, '');
+      assert.deepEqual(result.calls.processes[1].args, ['run', '--force']);
+      const audit = JSON.parse(
+        await readFile(join(result.root, 'reports/mutation/audit.json'), 'utf8'),
+      );
+      assert.equal(audit.execution.mode, 'full');
+      assert.equal(audit.execution.baselineCommit, null);
+      assert.equal(audit.execution.baselinePR, null);
+    } else {
+      assert.equal(result.route, 'route=full-sharded\n');
+      assert.deepEqual(result.calls.processes, []);
+    }
+    assert.deepEqual(result.calls.promotions, []);
+  });
+
+test('native failure after own-PR fallback never launches a second campaign', async (t) => {
+  const result = await fixture(t, {
+    cache: 'corrupt',
+    mainCache: 'valid',
+    strykerFailure: true,
+    env: { MUTATION_PR_CACHE_RESTORED: 'true' },
+  });
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.route, 'route=native\n');
+  assert.deepEqual(result.calls.reads, ['pr:42:7', commit]);
+  assert.equal(result.calls.discovery, 1);
+  assert.deepEqual(
+    result.calls.processes.map(({ args }) => args),
+    [['run', '--no-fsModuleCache'], ['run']],
+  );
+  assert.deepEqual(result.calls.workingReports, [mainReport]);
+  assert.deepEqual(result.calls.promotions, []);
+  for (const path of [BASELINE, PR_BASELINE, 'reports/mutation/audit.json'])
+    await assert.rejects(readFile(join(result.root, path)), { code: 'ENOENT' });
+});
+
+test('current report audit rejection after own-PR fallback prevents promotion', async (t) => {
+  const result = await fixture(t, {
+    cache: 'corrupt',
+    mainCache: 'valid',
+    executionReport: { ...report, valid: false },
+    env: { MUTATION_PR_CACHE_RESTORED: 'true' },
+  });
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.route, 'route=native\n');
+  assert.deepEqual(result.calls.workingReports, [mainReport]);
+  assert.equal(result.calls.processes.length, 2);
+  assert.deepEqual(result.calls.promotions, []);
+  assert.ok(result.messages.some((message) => message.includes('audit rejected report')));
+  for (const path of [BASELINE, PR_BASELINE, 'reports/mutation/audit.json'])
+    await assert.rejects(readFile(join(result.root, path)), { code: 'ENOENT' });
+});
 
 test('cold main push runs native full and promotes the trusted sequential report', async (t) => {
   const result = await fixture(t, {

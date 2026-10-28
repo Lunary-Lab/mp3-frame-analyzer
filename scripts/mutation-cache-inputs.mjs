@@ -16,6 +16,8 @@ export function isMutationInput(path) {
     path === 'node_modules' ||
     passive.test(path) ||
     /^docs\/.*\.md$/.test(path) ||
+    path === 'fuzz/README.md' ||
+    path === 'scripts/schemas/cyclonedx-1.5/README.md' ||
     path.startsWith('governance/') ||
     path.startsWith('tests/runtime-architecture/') ||
     architectureOnly.has(path) ||

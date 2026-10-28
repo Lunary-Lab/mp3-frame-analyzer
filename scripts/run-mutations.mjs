@@ -89,15 +89,25 @@ mutationRun: try {
     const force = args.includes('--full') || Boolean(env.NODE_OPTIONS) || !inputsHash;
     const routingIdentity = pullRequestIdentity(process.env);
     const prIdentity = force ? null : routingIdentity;
-    const sourceIdentity =
+    let sourceIdentity =
       prIdentity && process.env.MUTATION_PR_CACHE_RESTORED === 'true'
         ? prIdentity
         : process.env.GITHUB_ACTIONS === 'true'
           ? process.env.MUTATION_BASELINE_SHA
           : 'local';
-    const cache = force
+    let cache = force
       ? { report: null, reason: 'native-full-required' }
       : await readCache(root, inputsHash, sourceIdentity, audit);
+    if (
+      !force &&
+      !cache.report &&
+      prIdentity &&
+      sourceIdentity === prIdentity &&
+      /^[a-f0-9]{40}$/.test(process.env.MUTATION_BASELINE_SHA ?? '')
+    ) {
+      sourceIdentity = process.env.MUTATION_BASELINE_SHA;
+      cache = await readCache(root, inputsHash, sourceIdentity, audit);
+    }
     await mkdir(dirname(join(root, WORKING_REPORT)), { recursive: true });
     if (cache.report) await writeFile(join(root, WORKING_REPORT), JSON.stringify(cache.report));
     // CI transport files are not proof of successful promotion by this invocation.
