@@ -90,6 +90,9 @@ free-format MPEG frame size within the supported 320 kb/s bitrate envelope".
 This reports failed inference within scope, not a diagnosed exact bitrate.
 Competing eligible layouts retain "Ambiguous free-format MPEG frame layout"
 with the same classification.
+After a free-format span has been acquired, a later physical frame exceeding
+its sample rate's upper envelope raises `invalid-mp3` / HTTP 422 with
+"Free-format frame exceeds the supported 320 kb/s bitrate envelope".
 
 ### First-observable-failure precedence and chunk invariance
 

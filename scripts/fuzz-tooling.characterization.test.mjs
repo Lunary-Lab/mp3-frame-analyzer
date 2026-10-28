@@ -34,7 +34,7 @@ function constructionCorpus() {
 test('structured construction retains all bytes and count/geometry manifests for 2,817 inputs', () => {
   // Covers every placement flag with encoder variants and seeded byte inputs.
   // Independent geometry assertions remain in structured-fuzz.test.mjs;
-  // this digest locks the short-stream, metadata and 7-320 kb/s construction corpus.
+  // This digest includes the 7-320 kb/s corpus and unpadded integer maximum spans.
   const digest = createHash('sha256');
   const inputs = constructionCorpus();
   assert.equal(inputs.length, 2817);
@@ -47,7 +47,7 @@ test('structured construction retains all bytes and count/geometry manifests for
   }
   assert.equal(
     digest.digest('hex'),
-    '0d95bfca00072a88526fa7f5cd30eb4bbeaba8647eeee8de26971ce72859c1a1',
+    '7bfe59d5b85940e044b8f287453a5fc8f91c625237c5b3e507461e26af6f2f97',
   );
 });
 

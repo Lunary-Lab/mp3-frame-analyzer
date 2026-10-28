@@ -133,8 +133,8 @@ describe('free-format MPEG-1 Layer III', () => {
 
   it('accepts the smallest and largest supported spans', async () => {
     await expect(count(mp3(Array.from({ length: 4 }, () => freeFrame(21))))).resolves.toBe(4);
-    // At 32 kHz the inclusive envelope permits base 1,440 plus padding.
-    const largest = mp3(Array.from({ length: 4 }, () => freeFrame(1_440, 1, 2)));
+    // At 32 kHz the inclusive endpoint has a constant 1,440-byte span.
+    const largest = mp3(Array.from({ length: 4 }, () => freeFrame(1_440, 0, 2)));
     await expect(count(largest, 4096)).resolves.toBe(4);
   });
 
@@ -147,7 +147,7 @@ describe('free-format MPEG-1 Layer III', () => {
 
   it('prefers a maximum-size frame chain over a shorter ancillary chain', async () => {
     // The genuine chain has more evidence than the three-header ancillary chain.
-    const frames = Array.from({ length: 5 }, () => freeFrame(1_440, 1, 2));
+    const frames = Array.from({ length: 5 }, () => freeFrame(1_439, 1, 2));
     for (const offset of [500, 1_000]) frames[0]!.set([0xff, 0xfb, 0x0a, 0xc4], offset);
     await expect(count(mp3(frames), 4096)).resolves.toBe(5);
   });

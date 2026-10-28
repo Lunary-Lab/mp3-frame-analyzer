@@ -22,7 +22,7 @@ test('sequence construction varies rates and modes while retaining independent g
       fixture.frameOffsets.forEach((offset, i) => {
         assert.equal(fixture.bytes[offset], 255);
         assert.equal(fixture.bytes[offset + 1] & 254, 250);
-        assert.ok(fixture.frameLengths[i] >= 21 && fixture.frameLengths[i] <= 1441);
+        assert.ok(fixture.frameLengths[i] >= 21 && fixture.frameLengths[i] <= 1440);
         assert.ok(offset + fixture.frameLengths[i] <= fixture.bytes.length);
       });
     }
@@ -49,8 +49,25 @@ test('exact-count sequence rates stay within independently tabulated free-format
         input[20] = padding;
         const fixture = createSequenceMp3(input);
         assert.equal(fixture.expectation.kind, 'count');
-        assert.equal(fixture.frameLengths[0], base + padding);
+        const physicalMaximum = [1045, 960, 1440][rate];
+        const expectedLength = Math.min(base + padding, physicalMaximum);
+        assert.equal(fixture.frameLengths[0], expectedLength);
+        assert.equal((fixture.bytes[fixture.frameOffsets[0] + 2] >> 1) & 1, expectedLength - base);
       }
+    }
+  }
+});
+
+test('indexed sequence frames retain requested padding at every sample rate', () => {
+  for (const [rate, base] of [417, 384, 576].entries()) {
+    for (const padding of [0, 1]) {
+      const input = Buffer.alloc(160);
+      input[3] = rate;
+      input[6] = 4; // Free-rate selection must not affect an indexed configuration.
+      input[20] = padding;
+      const fixture = createSequenceMp3(input);
+      assert.equal(fixture.frameLengths[0], base + padding);
+      assert.equal((fixture.bytes[fixture.frameOffsets[0] + 2] >> 1) & 1, padding);
     }
   }
 });

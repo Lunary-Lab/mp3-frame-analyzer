@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { countMp3Frames } from '../../src/mp3/count-frames.js';
-import { chunks } from '../helpers/mp3-fixtures.js';
+import { chunks, id3v2 } from '../helpers/mp3-fixtures.js';
 
 // Independent byte-spacing oracle. Zero side information declares no reservoir
 // or audio bits, so bytes after each mandatory prefix are ancillary data.
@@ -30,6 +30,39 @@ function writeBits(bytes: Buffer, start: number, width: number, value: number): 
 }
 
 describe('free-format bitrate candidate eligibility', () => {
+  it('does not let impossible maximum-rate padding veto an in-scope ancillary layout', async () => {
+    const original = freeFrames(899, 9, 1, 3, false, [1]);
+    const altered = Buffer.from(original);
+    for (const offset of [961, 1922]) altered.set([255, 251, 6, 192], offset);
+    for (let offset = 2883; offset < 8067; offset += 576)
+      altered.set([255, 251, 0x98, 192], offset);
+    altered.set(id3v2(Buffer.alloc(13), 4, true), 8067);
+    for (let offset = 0; offset < altered.length; offset += 900)
+      expect(altered.subarray(offset, offset + 21)).toEqual(original.subarray(offset, offset + 21));
+    for (const size of [1, 7, 4096, altered.length])
+      await expect(countMp3Frames(chunks(altered, [size]))).resolves.toBe(9);
+  });
+
+  it.each([
+    { rate: 1, base: 960 },
+    { rate: 2, base: 1440 },
+  ])(
+    'rejects maximum-base padding at rate $rate during acquisition and after locking',
+    async ({ rate, base }) => {
+      for (const pads of [[1], [0, 1]]) {
+        await expect(
+          countMp3Frames(chunks(freeFrames(base, 4, rate, 3, false, pads), [7])),
+        ).rejects.toMatchObject({ kind: 'unsupported-format' });
+      }
+      const prefix = freeFrames(base, 12, rate);
+      const bytes = Buffer.concat([prefix, freeFrames(base, 1, rate, 3, false, [1])]);
+      await expect(countMp3Frames(chunks(bytes, [1, 4096]))).rejects.toMatchObject({
+        kind: 'invalid-mp3',
+        offset: prefix.length,
+        message: 'Free-format frame exceeds the supported 320 kb/s bitrate envelope',
+      });
+    },
+  );
   it.each([1, 7, 4096, 7200])(
     'does not let an extension-only ancillary layout veto 300 kb/s frames (chunks %i)',
     async (chunkSize) => {
@@ -79,13 +112,14 @@ describe('free-format bitrate candidate eligibility', () => {
   );
 
   it.each([1044, 960, 1440])(
-    'retains a changed-rate successor needing all %i base bytes plus padding',
+    'retains a changed-rate successor filling the %i-byte base envelope',
     async (maximum) => {
       const rateIndex = [1044, 960, 1440].indexOf(maximum);
       for (const crc of [false, true])
         for (const padding of [0, 1]) {
           for (const extra of [0, 1]) {
-            const suffix = freeFrames(maximum, 1, rateIndex, 0, crc, [padding]);
+            const base = rateIndex === 0 ? maximum : maximum - padding;
+            const suffix = freeFrames(base, 1, rateIndex, 0, crc, [padding]);
             const prefix = crc ? 38 : 36;
             let remaining = (suffix.length - prefix + extra) * 8;
             // Four independent stereo part2_3_length records; this tests necessary
@@ -120,7 +154,10 @@ describe('free-format bitrate candidate eligibility', () => {
             for (const count of [1, 2, 4]) {
               for (const base of [maximum - 1, maximum]) {
                 const bytes = freeFrames(base, count, rateIndex, mode, crc, pads);
-                await expect(countMp3Frames(chunks(bytes, [1, 7, 4096]))).resolves.toBe(count);
+                const result = countMp3Frames(chunks(bytes, [1, 7, 4096]));
+                if (rateIndex !== 0 && base === maximum && pads.includes(1))
+                  await expect(result).rejects.toMatchObject({ kind: 'unsupported-format' });
+                else await expect(result).resolves.toBe(count);
               }
               const bytes = freeFrames(maximum + 1, count, rateIndex, mode, crc, pads);
               await expect(countMp3Frames(chunks(bytes, [1, 7, 4096]))).rejects.toMatchObject({

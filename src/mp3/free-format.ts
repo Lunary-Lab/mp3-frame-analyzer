@@ -15,6 +15,9 @@ import {
 // The inclusive endpoint interpretation is documented in the MPEG contract;
 // extension-only rates must never contribute root or successor evidence.
 const MAX_FREE_FORMAT_BASE_BYTES = [1_044, 960, 1_440] as const;
+// ceil(144 * 320000 / sampleRate): at the integer 32/48 kHz endpoints
+// another padding byte cannot belong to a fixed rate within the envelope.
+export const MAX_FREE_FORMAT_PHYSICAL_BYTES = [1_045, 960, 1_440] as const;
 // The smallest physical prefix is 21 bytes; one padding byte can make base 20 fit.
 const MIN_FREE_FORMAT_FRAME_BYTES = 20;
 // Preserve the fixed observation budget independently of candidate eligibility.
@@ -91,6 +94,13 @@ function candidateIsEligible(
   candidate: Candidate,
   capacityRequired: boolean,
 ): boolean {
+  if (
+    candidate.frames.some(
+      (frame) =>
+        frame.end - frame.start > MAX_FREE_FORMAT_PHYSICAL_BYTES[frame.header.sampleRateIndex]!,
+    )
+  )
+    return false;
   if (candidate.matches < 3 && (!candidate.anchored || !probe.shortIsUnambiguous(candidate)))
     return false;
   if (
@@ -113,7 +123,10 @@ function* selectCandidate(
   capacityRequired = false,
 ): Generator<ProbeWork, Selection> {
   const selected = new RankedCandidates();
-  const maximumBase = MAX_FREE_FORMAT_BASE_BYTES[first.sampleRateIndex]!;
+  const maximumBase = Math.min(
+    MAX_FREE_FORMAT_BASE_BYTES[first.sampleRateIndex]!,
+    MAX_FREE_FORMAT_PHYSICAL_BYTES[first.sampleRateIndex]! - first.padding,
+  );
   // A suffix whose prefix cannot fit even the largest admitted span cannot
   // contribute evidence. This also rejects impossible side fields once.
   if (capacityRequired && !probe.frameMayFit(start, start + maximumBase + first.padding, first)) {

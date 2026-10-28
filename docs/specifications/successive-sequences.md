@@ -33,10 +33,12 @@ decision. Metadata alone is not treated as an ISO reset marker.
 
 1. Search remains one 8,647-byte probe plus one unsearched EOF-witness byte.
    Every root and successor candidate uses its own sample rate's upper unpadded
-   span: 1,044 / 960 / 1,440 bytes at 44.1 / 48 / 32 kHz. These follow the
+   span: 1,044 / 960 / 1,440 bytes at 44.1 / 48 / 32 kHz. Its physical span,
+   including padding, must fit 1,045 / 960 / 1,440 bytes. These follow the
    [documented inclusive 320 kbps interpretation](mpeg-1-layer-iii.md#4-free-format-layer-iii-bitrate-index-zero),
-   whose exact endpoint remains pending independent normative review. Padding
-   adds one physical byte; extension-only spans cannot supply competing evidence.
+   based on the detailed maximum-rate rule and fixed-rate arithmetic. Maximum-base
+   padding at 32/48 kHz exceeds that envelope; it fits at 44.1 kHz. Check every
+   candidate frame so extension-only spans cannot supply competing evidence.
 2. Within a free configuration, compatible-header count ranks first, then
    validated metadata evidence. This existing strongest-chain preference remains
    a **heuristic**, not proof of universal mathematical uniqueness.
@@ -58,7 +60,8 @@ decision. Metadata alone is not treated as an ISO reset marker.
 7. Once established, a span is skipped without scanning payload. No new sequence
    causes another encoder-header subtraction: HTTP omitted/false excludes at most
    the upload's initial recognized Xing/Info/VBRI frame; true and the direct parser
-   default count physical frames.
+   default count physical frames. Every later free-format physical span still
+   must fit its rate's envelope; an overrun raises `invalid-mp3` / HTTP 422.
 
 ## Necessary side-information bounds, not decoding
 

@@ -43,3 +43,40 @@ it('counts in-scope ancillary decoys and rejects extension-only rates through bo
     await app.close();
   }
 });
+
+it.each([false, true])(
+  'reports impossible upper-bound padding after locking=%s through both upload modes',
+  async (locked) => {
+    const bytes = Buffer.concat(
+      Array.from({ length: locked ? 13 : 4 }, (_, index) => {
+        const padding = !locked || index === 12;
+        const frame = Buffer.alloc(960 + Number(padding));
+        frame.set([255, 251, padding ? 6 : 4, 192]);
+        return frame;
+      }),
+    );
+    const app = await buildApp();
+    try {
+      for (const { contentType, payload } of [
+        { contentType: 'audio/mpeg', payload: bytes },
+        multipartBody(bytes),
+      ]) {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/file-upload',
+          headers: { 'content-type': contentType },
+          payload,
+        });
+        expect(response.statusCode).toBe(locked ? 422 : 415);
+        expect(response.json()).toEqual({
+          error: locked ? 'invalid-mp3' : 'unsupported-format',
+          message: locked
+            ? 'Free-format frame exceeds the supported 320 kb/s bitrate envelope'
+            : 'Cannot infer a unique free-format MPEG frame size within the supported 320 kb/s bitrate envelope',
+        });
+      }
+    } finally {
+      await app.close();
+    }
+  },
+);

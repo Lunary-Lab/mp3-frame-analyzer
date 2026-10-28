@@ -59,6 +59,57 @@ test('small free-format spans retain a fixed base with per-frame padding and CRC
   }
 });
 
+test('free-format upper padding stays within physical bounds without changing indexed padding', () => {
+  // Independent [unpadded, requested-padded] spans at 44.1, 48 and 32 kHz.
+  for (const { flags, bitrate, spans } of [
+    {
+      flags: 8,
+      bitrate: 5,
+      spans: [
+        [1044, 1045],
+        [960, 960],
+        [1440, 1440],
+      ],
+    }, // Free 320.
+    {
+      flags: 8,
+      bitrate: 8,
+      spans: [
+        [1041, 1042],
+        [957, 958],
+        [1435, 1436],
+      ],
+    }, // Free 319.
+    {
+      flags: 0,
+      bitrate: 13,
+      spans: [
+        [1044, 1045],
+        [960, 961],
+        [1440, 1441],
+      ],
+    }, // Indexed 320.
+  ]) {
+    for (const [rate, lengths] of spans.entries()) {
+      for (const padding of [0, 1]) {
+        const input = seed(flags);
+        input[4] = bitrate;
+        input[5] = rate;
+        for (let frame = 0; frame < 3; frame++) {
+          input[9 + 5 * frame] = bitrate;
+          input[10 + 5 * frame] = rate;
+          input[11 + 5 * frame] = padding;
+        }
+        const fixture = createStructuredMp3(input);
+        for (const [frame, offset] of fixture.frameOffsets.entries()) {
+          assert.equal(fixture.frameLengths[frame], lengths[padding]);
+          assert.equal((fixture.bytes[offset + 2] >> 1) & 1, lengths[padding] - lengths[0]);
+        }
+      }
+    }
+  }
+});
+
 test('frame offsets exclude surrounding tags and never trust declared VBR counts', () => {
   for (const kind of [0, 1, 2]) {
     const input = seed(31);
