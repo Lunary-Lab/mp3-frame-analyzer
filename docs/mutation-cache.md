@@ -95,8 +95,8 @@ runner image, the bounded child environment, and any explicitly supplied
 exact lockfile with `npm ci --ignore-scripts`; we do not recursively hash
 `node_modules`.
 
-The only noninputs are named root documentation files, Markdown under `docs/`
-(except `docs/mutation-review.md`), governance files, the four named runtime
+The only noninputs are named root documentation files, Markdown under `docs/`,
+governance files, the four named runtime
 architecture scanner/test scripts and `tests/runtime-architecture/` fixtures,
 the Copilot instructions, and the parent `ci.yml`. These SAST-only files are not
 inputs to the parser mutation tests; other scripts remain keyed. The parent's exact
@@ -105,6 +105,10 @@ mutation job is checked against `scripts/mutation-job-contract.json`, which
 Thus changing an unrelated CI job does not invalidate results, but changing the
 mutation checkout, runner, setup, permissions or invocation contract does.
 The actual bounded child environment remains keyed independently.
+
+`docs/mutation-review.md` is explanatory prose. Executable equivalence assumptions
+remain in the keyed `mutation-equivalents.json`; admitted reports are still audited
+against the current policy and parser sources.
 
 All parser and nonparser source, selected tests, helpers, imported modules,
 resources (including Markdown fixtures), configuration, plugins and lockfile
