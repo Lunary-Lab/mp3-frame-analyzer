@@ -49,6 +49,11 @@ The matrix distinguishes encoder-produced fixtures from header-only probes;
 rejection does not validate another codec's payload or frame geometry.
 
 Free-format envelope regressions are in `tests/mp3/free-format-rate-bound.test.ts`;
+`tests/mp3/short-free-format-dead-end.test.ts` covers the EOF-only, single-configuration
+root fallback for dead-end ancillary headers, impossible alternate side fields,
+exact alternate main-data capacity, crossing complete layouts and
+unchanged metadata/changed-rate/indexed-header conservatism. A complete layout remains subject
+to the documented inference limits; this is not a full conformance proof.
 `tests/free-format-rate-upload.test.ts` verifies the same count/error contract in
 both upload modes and every count-option setting.
 

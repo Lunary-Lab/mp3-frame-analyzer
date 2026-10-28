@@ -4,6 +4,7 @@ import { Mp3ParseError } from './errors.js';
 import type { FreeFormatFrameHeader } from './frame-header.js';
 import {
   Probe,
+  ClosedShortCandidates,
   type Candidate,
   type ProbeWork,
   type SuffixEvidence,
@@ -93,6 +94,7 @@ function candidateIsEligible(
   probe: Probe,
   candidate: Candidate,
   successorEvidenceOnly: boolean,
+  shorts: ClosedShortCandidates,
 ): boolean {
   if (
     candidate.frames.some(
@@ -101,6 +103,8 @@ function candidateIsEligible(
     )
   )
     return false;
+  // Physical eligibility precedes all evidence collection, including fallback.
+  shorts.observe(candidate);
   if (candidate.matches < 3 && (!candidate.anchored || !probe.shortIsUnambiguous(candidate)))
     return false;
   if (
@@ -123,6 +127,7 @@ function* selectCandidate(
   successorEvidenceOnly = false,
 ): Generator<ProbeWork, Selection> {
   const selected = new RankedCandidates();
+  const shorts = new ClosedShortCandidates(probe, first, !successorEvidenceOnly);
   const maximumBase = MAX_FREE_FORMAT_BASE_BYTES[first.sampleRateIndex]!;
   // A suffix whose prefix cannot fit even the largest candidate span cannot
   // contribute evidence. This also rejects impossible side fields once.
@@ -139,13 +144,13 @@ function* selectCandidate(
     if (base > maximumBase) break;
     probe.visitCandidate();
     const candidate = followCandidate(probe, start, first, base);
-    if (!candidateIsEligible(probe, candidate, successorEvidenceOnly)) continue;
+    if (!candidateIsEligible(probe, candidate, successorEvidenceOnly, shorts)) continue;
     // Suffix consumers need existence, not ranking or path enumeration.
     if (successorEvidenceOnly)
       return { bestBase: base, bestMatches: candidate.matches, tied: false };
     selected.consider(candidate);
   }
-  return selected.result();
+  return selected.withShortFallback(shorts);
 }
 
 class RankedCandidates {
@@ -154,6 +159,15 @@ class RankedCandidates {
   private bestMetadata = 0;
   private tied = false;
   private readonly transitions: number[] = [];
+
+  withShortFallback(shorts: ClosedShortCandidates): Selection {
+    // Preserve every existing successful selection, tie and >=3-header policy.
+    // Only proved EOF closure can replace raw sync sightings with complete walks.
+    // New suffix/changed-rate evidence retains its existing conservative policy.
+    if (this.bestMatches === 0)
+      for (const candidate of shorts.candidates()) this.consider(candidate);
+    return this.result();
+  }
 
   consider(candidate: Candidate): void {
     if (candidate.transition) this.transitions.push(candidate.base);

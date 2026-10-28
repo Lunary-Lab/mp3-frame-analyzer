@@ -86,6 +86,7 @@ describe('genuine normally flushed short free-format files', () => {
     const badFooter = metadataTag(4, { footer: true });
     badFooter[badFooter.length - 1] = 9;
     for (const decoy of [
+      [255, 251, 0, 192], // Same-rate free header whose inferred span cannot close.
       badFooter,
       [73, 68, 51, 5, 0, 0, 0, 0, 0, 0],
       [73, 68, 51, 4, 255, 0, 0, 0, 0, 0],
