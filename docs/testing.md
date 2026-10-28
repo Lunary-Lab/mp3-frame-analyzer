@@ -333,13 +333,14 @@ At that time, the focused two-decoder mutation score was **98.27%** (164 kills, 
 
 ## Full-parser mutation analysis
 
-On the local and ordinary CI path, the wrapper bounds each validation child,
+On the local and native CI paths, the wrapper bounds each validation child,
 including the complete native parser campaign, at 90 minutes; the enclosing
 ordinary parser-mutation CI job has a 100-minute limit for setup, cleanup and
 evidence upload. On interruption or the child deadline, the wrapper kills the
 process group and fails closed. The separate
-[fresh full CI matrix](mutation-cache.md#what-runs) produces a collected audit and
-preserves separate raw shard reports. A failed or incomplete campaign never supplies
+[fresh full CI matrix](mutation-cache.md#what-runs) for cold ordinary PRs and
+explicitly full CI produces a collected audit and preserves separate raw shard
+reports. A failed or incomplete campaign never supplies
 reusable audited results.
 
 This finite budget follows PR #2's exact-head run
@@ -352,10 +353,11 @@ both raw and adjusted outcomes. This budget is not a CI-duration guarantee.
 
 The mutation scope covers all files in `src/mp3/**/*.ts`, including the
 streaming reader, frame traversal and errors. The native Vitest runner uses
-per-test mutation coverage over the same parser test selection. Every invocation
-also runs the normal full Vitest suite and a fresh Stryker coverage dry run.
+per-test mutation coverage over the same parser test selection. Each executing
+shard or native campaign also runs the normal full Vitest suite and a fresh
+Stryker coverage dry run.
 The gate audits every mutant, labels any validated result reuse, preserves the
-raw report, and fails
+raw reports, and fails
 on every unexplained survivor or stale exact equivalence approval; documentation
 is in [the audit](mutation-review.md). See [cache safety](mutation-cache.md) for
 exact invalidation rules, forced-full verification and measured results.

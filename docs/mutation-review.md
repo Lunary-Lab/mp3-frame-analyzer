@@ -34,12 +34,12 @@ replacement**. No neighboring mutation is exempted.
 hash** also binds proofs that depend on another module's invariants. Any parser
 change requires re-reviewing those assumptions before updating that hash.
 
-For local and ordinary CI execution, `scripts/run-mutations.mjs` deletes previous
-output reports, runs the normal Vitest suite and Stryker, and audits the newly
+For local execution and CI's native route, `scripts/run-mutations.mjs` deletes
+previous output reports, runs the normal Vitest suite and Stryker, and audits the newly
 generated complete report with `scripts/mutation-policy.mjs`. A new report may
 include explicitly accounted-for validated reused outcomes; it is not represented
-as all-fresh execution. Fresh full CI uses a matrix with separate unchanged raw
-shard reports and a collected audit; it does not merge the raw Stryker reports.
+as all-fresh execution. Cold ordinary PRs and explicitly full CI use a matrix with
+separate unchanged raw shard reports and a collected audit; it does not merge the raw Stryker reports.
 [Execution paths and cache safety](mutation-cache.md#what-runs) document that
 distinction, the trust boundary and conservative invalidation rules. CI fails for:
 
@@ -63,13 +63,13 @@ incomplete or erroneous outcomes remain failures.
 
 The native Stryker `thresholds.break` is deliberately **0** so Stryker can emit
 its unfiltered report. It is **not the acceptance threshold**. The mandatory
-auditor then requires exactly 100%, with no rounding tolerance. Local and ordinary
-CI execution invoke the wrapper; fresh full CI requires its collected audit.
+auditor then requires exactly 100%, with no rounding tolerance. Native execution
+invokes the wrapper audit; matrix execution requires its collected audit.
 Running bare `stryker run` is diagnostic only.
 
-The local and ordinary CI path produces `reports/mutation/mutation.json` (raw) and
+The native execution path produces `reports/mutation/mutation.json` (raw) and
 `reports/mutation/audit.json` (adjusted, with explicit counts, exception IDs,
-and executed/reused accounting); ordinary CI uploads both with test-process logs
+and executed/reused accounting); native CI uploads both with test-process logs
 and input fingerprints. The [fresh full matrix](mutation-cache.md#what-runs)
 retains each shard's raw report alongside its collected audit, with no merged
 Stryker report. The unmodified Stryker schema stays at 1.0 and the
