@@ -5,20 +5,41 @@ import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { parse } from 'yaml';
 
 const workflow = readFileSync(
   new URL('../.github/workflows/governance.yml', import.meta.url),
   'utf8',
 );
-function stepScript(name) {
-  const block = workflow.split(`      - name: ${name}\n`)[1]?.split('\n      - ')[0];
-  assert.ok(block?.includes('        run: |\n'), `Missing shell step: ${name}`);
-  const lines = block.split('        run: |\n')[1].trimEnd().split('\n');
-  assert.ok(lines.length > 0 && lines.every((line) => line.startsWith('          ')));
-  return lines.map((line) => line.slice(10)).join('\n');
+function stepScript(name, source = workflow) {
+  const steps = parse(source).jobs.terraform.steps.filter((step) => step.name === name);
+  assert.equal(steps.length, 1, `Expected one shell step: ${name}`);
+  assert.equal(typeof steps[0].run, 'string', `Missing shell script: ${name}`);
+  return steps[0].run.trimEnd();
 }
 
 const script = stepScript('Install the pinned Terraform release');
+
+test('shell-step selection accepts equivalent YAML indentation and block chomping', () => {
+  for (const source of [
+    `jobs:
+  terraform:
+    steps:
+      - name: Fixture shell step
+        run: |
+          printf fixture
+`,
+    `jobs:
+    terraform:
+        steps:
+            - run: |-
+                printf fixture
+              name: Fixture shell step
+`,
+  ]) {
+    assert.equal(stepScript('Fixture shell step', source), 'printf fixture');
+  }
+});
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'terraform-bootstrap-'));

@@ -301,7 +301,7 @@ describe('bounded free-format metadata acquisition', () => {
   });
 
   it('rejects equally supported candidates that imply different physical counts', async () => {
-    // Two complete structural partitions share EOF: 36×2800 and 35×2880.
+    // Two complete structural partitions share EOF: 36×700 and 35×720.
     // The bounded probe contains thirteen headers from each, with equal evidence.
     // These are alternative header partitions, not asserted decodable audio.
     const bytes = Buffer.alloc(25200, 0x11);

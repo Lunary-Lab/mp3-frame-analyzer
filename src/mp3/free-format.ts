@@ -92,7 +92,7 @@ function isSupportedTransition(
 function candidateIsEligible(
   probe: Probe,
   candidate: Candidate,
-  capacityRequired: boolean,
+  successorEvidenceOnly: boolean,
 ): boolean {
   if (
     candidate.frames.some(
@@ -104,11 +104,11 @@ function candidateIsEligible(
   if (candidate.matches < 3 && (!candidate.anchored || !probe.shortIsUnambiguous(candidate)))
     return false;
   if (
-    (capacityRequired || candidate.transition) &&
+    (successorEvidenceOnly || candidate.transition) &&
     candidate.frames.some((frame) => !probe.frameMayFit(frame.start, frame.end, frame.header))
   )
     return false;
-  return !(capacityRequired && probe.ended && !candidate.closed);
+  return !(successorEvidenceOnly && probe.ended && !candidate.closed);
 }
 
 /**
@@ -120,13 +120,16 @@ function* selectCandidate(
   probe: Probe,
   start: number,
   first: FreeFormatFrameHeader,
-  capacityRequired = false,
+  successorEvidenceOnly = false,
 ): Generator<ProbeWork, Selection> {
   const selected = new RankedCandidates();
   const maximumBase = MAX_FREE_FORMAT_BASE_BYTES[first.sampleRateIndex]!;
   // A suffix whose prefix cannot fit even the largest candidate span cannot
   // contribute evidence. This also rejects impossible side fields once.
-  if (capacityRequired && !probe.frameMayFit(start, start + maximumBase + first.padding, first)) {
+  if (
+    successorEvidenceOnly &&
+    !probe.frameMayFit(start, start + maximumBase + first.padding, first)
+  ) {
     return selected.result();
   }
   const begin = probe.landmarkStart(start + first.padding + MIN_FREE_FORMAT_FRAME_BYTES);
@@ -136,9 +139,10 @@ function* selectCandidate(
     if (base > maximumBase) break;
     probe.visitCandidate();
     const candidate = followCandidate(probe, start, first, base);
-    if (!candidateIsEligible(probe, candidate, capacityRequired)) continue;
+    if (!candidateIsEligible(probe, candidate, successorEvidenceOnly)) continue;
     // Suffix consumers need existence, not ranking or path enumeration.
-    if (capacityRequired) return { bestBase: base, bestMatches: candidate.matches, tied: false };
+    if (successorEvidenceOnly)
+      return { bestBase: base, bestMatches: candidate.matches, tied: false };
     selected.consider(candidate);
   }
   return selected.result();
