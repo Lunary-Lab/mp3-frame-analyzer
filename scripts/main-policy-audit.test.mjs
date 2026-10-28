@@ -216,6 +216,50 @@ test('commit audit needs no approval; unavailable optional history is explicit a
   assert.notEqual(auditCommit(commit, repo, completeApi({ checks: [] })).failures.length, 0);
 });
 
+test('PR admission evidence stays bound to its head when main advances during validation', () => {
+  // A merge queue validates a separate integration candidate. This detective
+  // audit retains the PR admission checks; the native ruleset enforces the
+  // additional queue checks. This fixture does not simulate GitHub's queue.
+  const advancedMain = 'd'.repeat(40);
+  const landed = { ...commit, parents: [{ sha: advancedMain }] };
+  const paths = [];
+  const original = completeApi();
+  const api = {
+    ...original,
+    list(path, field) {
+      paths.push(path);
+      return original.list(path, field);
+    },
+  };
+  const result = auditCommit(landed, repo, api);
+  assert.deepEqual(result.failures, []);
+  assert.equal(result.head, head);
+  assert.deepEqual(
+    paths.filter((path) => path.endsWith('/check-suites')),
+    [`repos/${repo}/commits/${head}/check-suites`],
+  );
+  // Green evidence from main or a queue candidate cannot replace a missing or
+  // failed check on the admitted PR head, nor can a later rerun cure it.
+  for (const replacement of [
+    checks().map((run) => ({ ...run, head_sha: advancedMain })),
+    checks().map((run) => ({ ...run, head_sha: sha })),
+    [
+      ...checks().map((run) => ({ ...run, conclusion: 'failure' })),
+      ...checks().map((run) => ({
+        ...run,
+        id: run.id + 10,
+        started_at: late,
+        completed_at: late,
+      })),
+    ],
+  ]) {
+    assert.notEqual(
+      auditCommit(landed, repo, completeApi({ checks: replacement })).failures.length,
+      0,
+    );
+  }
+});
+
 test('push audit rejects forced, direct and non-squash history without logging untrusted subjects', () => {
   assert.notEqual(
     auditPush({ repo, before, after: sha, forced: true }, completeApi()).failures.length,

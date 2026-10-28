@@ -1,0 +1,12 @@
+name: PR title
+on:
+  merge_group:
+    types: [destroyed]
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+jobs:
+  title:
+    name: Conventional Commit PR title
+    runs-on: ubuntu-latest
+    steps:
+      - run: 'true'
