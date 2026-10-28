@@ -16,10 +16,12 @@ A compatible completed baseline is supplied unchanged through Stryker's native
 narrow `--mutate` on this ordinary path or preserve an old inventory in place of
 current discovery. `npm run mutation:full` remains a single fresh local campaign.
 
-Scheduled CI, full manual CI and exact-source release validation instead use the
-native GitHub matrix in `.github/workflows/mutation.yml`. Node's filesystem glob
-discovers every parser source; sorted whole files are assigned round-robin to at
-most 11 nonempty parser jobs. The existing pure-runtime campaign occupies the
+Cold ordinary PRs, scheduled CI, full manual CI and exact-source release validation
+use the native GitHub matrix in `.github/workflows/mutation.yml`. Node's filesystem glob
+discovers every parser source. The pinned Stryker instrumenter generates the
+complete current mutant inventory without running tests. A small planner joins
+overlapping mutant spans into indivisible components and assigns larger components
+first to the least-populated of at most 11 nonempty parser jobs. The existing pure-runtime campaign occupies the
 twelfth mutation slot. This ceiling is not a measured optimum or a cap on other
 CI jobs. Each parser job retains two Stryker workers, the ordinary full Vitest
 suite, native parser-test discovery and a fresh Stryker coverage dry run.
@@ -31,8 +33,12 @@ event SHA. Caller inputs cannot select other code within the event's cache scope
 
 Fresh jobs remove native working state before `--force --mutate`, because force
 alone can retain out-of-scope results from an old incremental report. They never
-restore or publish mutation-result caches. The collector checks every assigned
-file exactly once, current source/test bytes, common configuration and declared
+restore or publish mutation-result caches. Stryker has no distributed mutant-ID
+selector: jobs use its native line/column ranges. A range must fully contain a
+mutated AST node, so arbitrary adjacent line splits are unsafe. The planner
+re-instruments each assignment and requires its exact mutant identities to match
+the complete inventory, with no missing, extra or duplicate ownership. The
+collector repeats this check against the unchanged raw reports, current source/test bytes, common configuration and declared
 inputs, clean process completion, run/attempt/commit identity and artifact/report
 digests. It applies the existing source-bound equivalent proofs and 100% adjusted
 policy across unchanged raw reports, resolving test IDs within each report.
@@ -51,10 +57,26 @@ then uses Vitest's runnable-test discovery for report file coverage. This permit
 native all-skipped suites (such as an absent optional external sample) without a
 filename exception; every runnable suite must appear consistently in every shard.
 
-Ordinary PR/main runs, including cache misses, retain the single-runner path.
-File workloads may be uneven; runner count alone does not establish a latency
-guarantee. The short native regression in `scripts/full-mutations.integration.test.mjs`
+Ordinary hosted PR runs invoke `--parallel-fallback`, which performs the same
+baseline admission as the ordinary runner. A PR with a compatible baseline emits
+`route=native` through `GITHUB_OUTPUT` and continues on the single-runner path.
+A cold PR emits `route=full-sharded` and returns before test discovery, the ordinary
+suite or Stryker execution; the workflow then requires the full matrix and its
+collector. Main pushes keep the ordinary native command; the action reports
+`route=native`, including cache misses, so a successful cold main run can publish
+the native baseline needed by later runs.
+The route changes scheduling only: input classification, complete scope, fresh
+coverage, source-bound proofs and the 100% adjusted gate remain the same.
+
+Mutant counts are only a scheduling heuristic: individual tests and timeouts vary
+widely, and a method-spanning mutant prevents further safe subdivision. The
+planner uses no historical timing store, result cache, dependency graph or report
+rewrite. Planning now installs the locked native instrumenter; each shard still
+pays for its own ordinary suite and coverage dry run. The short native regression in `scripts/full-mutations.integration.test.mjs`
 checks the real runner/collector, fresh state, changed inputs and failed evidence.
+It also verifies a file split across jobs and rejects a missing mutant even when
+the altered report's digest is updated. Ordinary incremental execution remains
+whole-scope. See the pinned native [range containment implementation](https://github.com/stryker-mutator/stryker-js/blob/959127763e5bbe2eb65f5341a8161780d6d8a476/packages/instrumenter/src/transformers/babel-transformer.ts).
 
 Native reuse includes killed, timeout and reviewed-equivalent outcomes. It is
 not fresh execution: reused native records omit `duration`. The audit permits an
@@ -134,11 +156,19 @@ accepted. The entire producing CI run must be completed successfully.
 
 Pinned official `actions/download-artifact` downloads the selected immutable
 artifact ID from that repository/run with digest mismatch set to `error`.
-Transport failure falls back to native full execution. The envelope's commit and
+Transport failure is a cache miss: ordinary PRs use the full matrix, while main
+and local invocations execute the full native campaign. The envelope's commit and
 key must match, and its native report must pass the independent score audit.
 Only ordinary main pushes upload an audited baseline; official
 `actions/upload-artifact` publishes one unzipped JSON file. No custom archive
 parser or artifact authentication client is maintained.
+
+Admission diagnostics distinguish `native-baseline-missing`,
+`native-baseline-incompatible`, `native-baseline-corrupt-or-unauditable`, and
+`native-baseline-unreadable`. All four mean no admitted report and require fresh
+full execution through the applicable route; none bypasses the gate. A compatible
+report is logged as `native-same-input-reuse`. Explicit full mode, an unavailable
+input fingerprint, or a supplied `NODE_OPTIONS` is logged as `native-full-required`.
 
 ### Optional own-PR cache (lower trust)
 
@@ -157,6 +187,12 @@ never presented as the producer of a PR-cache report. Saving occurs only after
 mutation and encoder checks, not after all sibling CI jobs. Main and release
 runs never read this file; forced-full mode bypasses both result sources.
 `pull_request_target`, dispatches and non-merge refs cannot save or consume it.
+
+Cold PR matrix runs do not publish either native baseline envelope. Their raw
+shard reports are not merged into an incremental report, so repeated runs of a
+cold PR can remain cold until a compatible main baseline becomes available.
+With hosted routing enabled, an own-PR cache can be saved after a successful native
+run that admitted a compatible baseline; the matrix does not seed it.
 
 Restore/save failures, eviction, partial/corrupt files or incompatible reports
 fall back to full execution. Native caches are immutable: an unusable exact-key
@@ -202,6 +238,8 @@ makes no whole-parser speedup claim. Survivors still require all selected tests.
 `npm run test:mutation-cache:integration` is a short real Stryker/Vitest toy:
 unchanged/docs reuse, forced-full parity and source/helper/fixture/config/lock
 invalidation. Weakening the helper or fixture must expose an actual survivor.
+It exercises native execution and admission helpers, not the hosted CLI routing
+or matrix handoff; focused routing and workflow tests cover those contracts.
 The existing required cache-regression check name is retained, but the former
 large custom-framework campaign is removed with that framework.
 

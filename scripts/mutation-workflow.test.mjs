@@ -21,12 +21,19 @@ test('ordinary mutation keeps the existing native action and environment without
   assert.equal(ordinary.strategy, undefined);
   assert.equal(ordinary['runs-on'], 'ubuntu-24.04');
   assert.equal(ordinary['timeout-minutes'], 100);
+  assert.deepEqual(ordinary.outputs, { route: '${{ steps.mutation.outputs.route }}' });
   assert.deepEqual(ordinary.steps.slice(1), [
     { uses: checkout, with: { ref: '${{ github.sha }}', 'persist-credentials': false } },
     { uses: './.github/actions/setup-project' },
     {
       uses: './.github/actions/test-mutations',
-      with: { base: '${{ inputs.base }}', full: 'false', publish: '${{ inputs.publish }}' },
+      id: 'mutation',
+      with: {
+        base: '${{ inputs.base }}',
+        full: 'false',
+        publish: '${{ inputs.publish }}',
+        'parallel-fallback': "${{ github.event_name == 'pull_request' }}",
+      },
     },
   ]);
 });
@@ -61,8 +68,12 @@ test('entry jobs reject source drift before checkout or repository code runs', (
 });
 
 test('full partitions use a native dynamic matrix capped at eleven beside the pure campaign', () => {
-  assert.equal(plan.if, 'inputs.full');
-  assert.equal(shard.if, 'inputs.full');
+  assert.equal(
+    plan.if,
+    "${{ !cancelled() && (inputs.full || (needs.ordinary.result == 'success' && needs.ordinary.outputs.route == 'full-sharded')) }}",
+  );
+  assert.equal(plan.needs, 'ordinary');
+  assert.equal(shard.if, "${{ !cancelled() && needs.plan.result == 'success' }}");
   assert.equal(shard.needs, 'plan');
   assert.deepEqual(shard.strategy, {
     'fail-fast': false,
@@ -71,10 +82,8 @@ test('full partitions use a native dynamic matrix capped at eleven beside the pu
   });
   assert.deepEqual(plan.outputs, { matrix: '${{ steps.plan.outputs.matrix }}' });
   assert.deepEqual(
-    plan.steps.find((step) => step.uses === './.github/actions/setup-project').with,
-    {
-      install: 'false',
-    },
+    plan.steps.find((step) => step.uses === './.github/actions/setup-project'),
+    { uses: './.github/actions/setup-project' },
   );
   const planning = plan.steps.find((step) => step.id === 'plan').run;
   assert.ok(planning.startsWith('matrix=$(node scripts/full-mutations.mjs plan)\n'));
@@ -114,7 +123,7 @@ test('all branches check out the exact caller source and keep pinned read-only d
 });
 
 test('collection requires successful dependencies before downloading current-attempt evidence', () => {
-  assert.equal(collect.if, 'always() && inputs.full');
+  assert.equal(collect.if, "always() && needs.plan.result != 'skipped'");
   assert.deepEqual(collect.needs, ['plan', 'shard']);
   const guard = collect.steps[0];
   assert.deepEqual(guard.env, { RESULTS: '${{ toJSON(needs) }}' });

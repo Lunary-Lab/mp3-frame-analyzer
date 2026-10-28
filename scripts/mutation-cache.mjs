@@ -6,6 +6,7 @@ export const WORKING_REPORT = '.cache/mutation/working.json';
 export const BASELINE = '.cache/mutation/native-baseline.json';
 export const PR_BASELINE = '.cache/mutation/pr-baseline.json';
 const sourceIdentity = /^(?:[a-f0-9]{40}|local|pr:[1-9]\d*:[1-9]\d*)$/;
+class IncompatibleCacheError extends Error {}
 
 export function pullRequestIdentity(env) {
   const ref = /^refs\/pull\/([1-9]\d*)\/merge$/.exec(env.GITHUB_REF ?? '');
@@ -29,22 +30,38 @@ export function validateCache(baseline, key, identity, audit) {
     baseline.key !== key ||
     baseline[identity.startsWith('pr:') ? 'prIdentity' : 'sourceCommit'] !== identity
   )
-    throw new Error('No compatible native baseline for this scope');
+    throw new IncompatibleCacheError('No compatible native baseline for this scope');
   audit(baseline.report, { nativeReuse: true });
   return baseline.report;
 }
 
 export async function readCache(root, key, identity, audit) {
+  let bytes;
   try {
-    const baseline = JSON.parse(
-      await readFile(join(root, identity?.startsWith('pr:') ? PR_BASELINE : BASELINE), 'utf8'),
+    bytes = await readFile(
+      join(root, identity?.startsWith('pr:') ? PR_BASELINE : BASELINE),
+      'utf8',
     );
+  } catch (error) {
+    return {
+      report: null,
+      reason: error.code === 'ENOENT' ? 'native-baseline-missing' : 'native-baseline-unreadable',
+    };
+  }
+  try {
+    const baseline = JSON.parse(bytes);
     return {
       report: validateCache(baseline, key, identity, audit),
       reason: 'native-same-input-reuse',
     };
-  } catch {
-    return { report: null, reason: 'native-baseline-missing-or-incompatible' };
+  } catch (error) {
+    return {
+      report: null,
+      reason:
+        error instanceof IncompatibleCacheError
+          ? 'native-baseline-incompatible'
+          : 'native-baseline-corrupt-or-unauditable',
+    };
   }
 }
 

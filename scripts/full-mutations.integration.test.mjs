@@ -4,7 +4,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/pr
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { currentSources, runShard, collectShards } from './full-mutations.mjs';
-import { sourceContext } from './mutation-policy.mjs';
+import { sha256, sourceContext } from './mutation-policy.mjs';
 import { ENCODER_TEST_NAMES } from './verify-encoder-discovery.mjs';
 import { repositoryRoot } from './release-utils.mjs';
 
@@ -18,8 +18,8 @@ async function fixture() {
   const files = {
     '.gitignore': 'node_modules/\n.cache/\nreports/\n.stryker-tmp/\n',
     'package.json': '{"type":"module"}',
-    'src/mp3/a.ts': 'export const positive = (n: number) => n > 0;\n',
-    'src/mp3/b.ts': 'export const negative = (n: number) => n < 0;\n',
+    'src/mp3/a.ts':
+      'export const positive = (n: number) => n > 0;\nexport const negative = (n: number) => n < 0;\n',
     'vitest.config.ts':
       "export default { test: { include: ['tests/**/*.test.ts'], maxWorkers: 1 } };",
     'vitest.mutation.config.ts':
@@ -27,8 +27,7 @@ async function fixture() {
     'stryker.config.json': JSON.stringify(config),
     'tests/mp3/optional.test.ts': "import {it} from 'vitest'; it.skip('optional sample',()=>{});",
     'tests/mp3/free-format-real.test.ts': `import {test,expect} from 'vitest';
-      import {positive} from '../../src/mp3/a';
-      import {negative} from '../../src/mp3/b';
+      import {positive,negative} from '../../src/mp3/a';
       for(const name of ${JSON.stringify(ENCODER_TEST_NAMES)}) test(name,()=>{
         for(const n of [-1,0,1]) {
           expect(positive(n)).toBe(n===1);
@@ -68,7 +67,7 @@ async function fixture() {
 }
 
 test(
-  'native whole-file shards remain fresh and collection fails closed',
+  'native complete ranges split one file, remain fresh and collection fails closed',
   { timeout: 90000 },
   async () => {
     const root = await fixture();
@@ -90,10 +89,27 @@ test(
       assert.equal(summary.adjustedScore, 100);
       assert.equal(summary.execution.reused, 0);
       assert.equal(summary.execution.shards, 2);
+      assert.equal(summary.perFile['src/mp3/a.ts'].total, 10);
       const native = JSON.parse(
         await readFile(join(directory, `full-parser-shard-${attempt}-0/mutation.json`), 'utf8'),
       );
       assert.equal(Object.hasOwn(native.testFiles, 'tests/mp3/optional.test.ts'), false);
+      const shardDirectory = join(directory, `full-parser-shard-${attempt}-0`);
+      const reportPath = join(shardDirectory, 'mutation.json');
+      const manifestPath = join(shardDirectory, 'complete.json');
+      const reportBytes = await readFile(reportPath);
+      const manifestBytes = await readFile(manifestPath);
+      const manifest = JSON.parse(manifestBytes);
+      native.files['src/mp3/a.ts'].mutants.pop();
+      const incomplete = JSON.stringify(native);
+      await writeFile(reportPath, incomplete);
+      await writeFile(
+        manifestPath,
+        JSON.stringify({ ...manifest, reportSha256: sha256(incomplete) }),
+      );
+      await assert.rejects(collectShards(root, directory), /native partition mutant/);
+      await writeFile(reportPath, reportBytes);
+      await writeFile(manifestPath, manifestBytes);
       await assert.rejects(readFile(join(root, '.cache/mutation/native-baseline.json')), {
         code: 'ENOENT',
       });
