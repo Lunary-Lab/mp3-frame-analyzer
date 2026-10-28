@@ -22,6 +22,8 @@ const files = {
   '.gitignore': 'node_modules/\n.cache/\nreports/\n.stryker-tmp/\n',
   'package.json': '{"type":"module"}',
   'package-lock.json': '{"lockfileVersion":3}',
+  'docs/mutation-review.md': 'Editorial review notes\n',
+  'mutation-equivalents.json': '{"approvals":[]}',
   'source.js': 'export const positive = value => value > 0;\n',
   'helper.js': 'export const select = values => values;\n',
   'values.json': '[[-1,false],[0,false],[1,true]]',
@@ -96,14 +98,16 @@ test(
     execFileSync('git', ['init', '-q', root]);
     await symlink(join(repo, 'node_modules'), join(root, 'node_modules'));
     await mkdir(join(root, '.cache/mutation'), { recursive: true });
+    await mkdir(join(root, 'docs'), { recursive: true });
     const cold = await campaign(root, 'cold');
     assert.ok(cold.execution.executed > 0);
     assert.equal(cold.execution.reused, 0);
     for (const [name, change] of [
       ['unchanged', {}],
-      ['docs', { 'README.md': 'documentation' }],
+      ['review', { 'docs/mutation-review.md': 'Updated editorial review notes\n' }],
     ]) {
       const warm = await campaign(root, name, cold, change);
+      assert.equal(warm.key, cold.key);
       assert.equal(warm.execution.executed, 0);
       assert.equal(warm.execution.reused, cold.execution.total);
       assert.deepEqual(outcomes(warm.report), outcomes(cold.report));
@@ -112,6 +116,7 @@ test(
     assert.equal(forced.execution.reused, 0);
     assert.deepEqual(outcomes(forced.report), outcomes(cold.report));
     const changes = {
+      proof: { 'mutation-equivalents.json': '{"approvals":[{"changed":true}]}' },
       source: { 'source.js': files['source.js'] + '// source changed\n' },
       helper: { 'helper.js': 'export const select = values => values.filter(([n]) => n !== 0);' },
       fixture: { 'values.json': '[[-1,false],[1,true]]' },
