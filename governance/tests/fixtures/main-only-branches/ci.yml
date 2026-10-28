@@ -1,8 +1,5 @@
 name: CI
 on:
-  merge_group:
-    branches: [main]
-    types: [checks_requested]
   push:
     branches: [main]
   pull_request:

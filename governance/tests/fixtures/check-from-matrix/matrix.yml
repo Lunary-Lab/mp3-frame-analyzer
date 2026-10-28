@@ -1,5 +1,5 @@
 name: Matrix
-on: [pull_request, merge_group]
+on: pull_request
 jobs:
   test:
     name: Matrix check
