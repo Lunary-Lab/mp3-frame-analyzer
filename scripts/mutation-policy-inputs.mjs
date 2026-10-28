@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 
 export const PARSER_GLOB = 'src/mp3/**/*.ts';
 export const VITEST_CONFIG = 'vitest.mutation.config.ts';
@@ -59,4 +60,33 @@ export function validateSourceInventory(inventory, policy, sources) {
     'Parser context changed: re-review equivalence proofs before updating the context hash',
   );
   return paths;
+}
+
+export function validatePartitionInventory(reports, inventories) {
+  requireThat(inventories.length === reports.length, 'Missing native partition inventory');
+  const key = (file, { location: { start, end }, mutatorName, replacement }) =>
+    JSON.stringify([
+      file,
+      start.line,
+      start.column,
+      end.line,
+      end.column,
+      mutatorName,
+      replacement,
+    ]);
+  const seen = new Set();
+  for (const [index, expected] of inventories.entries()) {
+    const expectedKeys = expected.map(({ fileName, ...mutant }) => key(fileName, mutant));
+    for (const identity of expectedKeys) {
+      requireThat(!seen.has(identity), 'Duplicate native partition ownership');
+      seen.add(identity);
+    }
+    const actual = Object.entries(reports[index].files).flatMap(([file, record]) =>
+      record.mutants.map((mutant) => key(file, mutant)),
+    );
+    requireThat(
+      isDeepStrictEqual(actual.sort(), expectedKeys.sort()),
+      'Missing, extra or duplicate native partition mutant',
+    );
+  }
 }

@@ -68,6 +68,7 @@
     "@jazzer.js/core": "4.0.0",
     "@typescript/native": "npm:typescript@7.0.2",
     "@stryker-mutator/core": "10.1.1",
+    "@stryker-mutator/instrumenter": "10.1.1",
     "eslint-plugin-security": "4.2.0",
     "globals": "17.13.0",
     "@stryker-mutator/vitest-runner": "10.1.1",
