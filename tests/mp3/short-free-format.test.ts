@@ -24,8 +24,13 @@ const count = (bytes: Uint8Array, sizes: number[] = [1, 3, 7, 128]) =>
 
 // Committed fixtures are normal encoder output, not trimmed longer MP3 files.
 describe('genuine normally flushed short free-format files', () => {
-  it.each(manifest.fixtures)(
-    '$rate Hz, $channels channel(s), CRC=$crc, $kbps kbps, $pcmSamples PCM samples',
+  it.each(
+    manifest.fixtures.map((fixture) => ({
+      ...fixture,
+      outcome: fixture.kbps > 320 ? 'rejects extension' : 'counts',
+    })),
+  )(
+    '$outcome $rate Hz, $channels channel(s), CRC=$crc, $kbps kbps, $pcmSamples PCM samples',
     async (fixture) => {
       const bytes = Buffer.from(fixture.base64, 'base64');
       expect(createHash('sha256').update(bytes).digest('hex')).toBe(fixture.sha256);
@@ -39,7 +44,9 @@ describe('genuine normally flushed short free-format files', () => {
       }
       expect(end).toBe(bytes.length);
       for (const sizes of [[1], [2, 3, 5, 11], [bytes.length]]) {
-        expect(await count(bytes, sizes)).toBe(fixture.frames);
+        if (fixture.kbps > 320)
+          await expect(count(bytes, sizes)).rejects.toMatchObject({ kind: 'unsupported-format' });
+        else expect(await count(bytes, sizes)).toBe(fixture.frames);
       }
       const tagged = Buffer.concat([
         metadataTag(4, { seek: bytes.length }),
@@ -47,7 +54,9 @@ describe('genuine normally flushed short free-format files', () => {
         metadataTag(4, { footer: true }),
         metadataV1(1),
       ]);
-      expect(await count(tagged)).toBe(fixture.frames);
+      if (fixture.kbps > 320)
+        await expect(count(tagged)).rejects.toMatchObject({ kind: 'unsupported-format' });
+      else expect(await count(tagged)).toBe(fixture.frames);
     },
   );
 

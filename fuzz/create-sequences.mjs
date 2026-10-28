@@ -1,6 +1,6 @@
 /** Original bounded sequence constructions, independent of the parser under test. */
 const RATES = [44_100, 48_000, 32_000];
-const FREE_KBPS = [7, 72, 128, 137, 320, 640];
+const FREE_KBPS = [7, 72, 128, 137, 320, 300];
 
 function tag(body = Buffer.alloc(0), footer = false) {
   const header = Buffer.from([
@@ -148,7 +148,7 @@ function denseAncillary() {
 /**
  * Four explicit domains: metadata-anchored counts; arbitrary payload/layout
  * chunk invariance (no guessed count); proven ambiguity; dense ancillary control.
- * At most 28 frames of 2881 bytes, plus bounded tags. No source/parser imports.
+ * At most 28 frames of 1441 bytes, plus bounded tags. No source/parser imports.
  */
 export function createSequenceMp3(input) {
   const data = Buffer.from(input);

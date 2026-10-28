@@ -33,9 +33,9 @@ describe('free-format MPEG-1 Layer III', () => {
     }
   });
 
-  it('recognizes a real-sized 400 kbps free-format frame sequence', async () => {
+  it('rejects a 400 kbps free-format extension sequence', async () => {
     const bytes = mp3(Array.from({ length: 7 }, (_, i) => freeFrame(1306, i % 3 === 0 ? 1 : 0)));
-    await expect(count(bytes, 127)).resolves.toBe(7);
+    await expect(count(bytes, 127)).rejects.toMatchObject({ kind: 'unsupported-format' });
   });
 
   it('includes an initial free-format Info frame by default and excludes it on request', async () => {
@@ -133,23 +133,22 @@ describe('free-format MPEG-1 Layer III', () => {
 
   it('accepts the smallest and largest supported spans', async () => {
     await expect(count(mp3(Array.from({ length: 4 }, () => freeFrame(21))))).resolves.toBe(4);
-    // A padded 2,881-byte first frame puts the second header at the last candidate offset.
-    const largest = mp3(Array.from({ length: 4 }, () => freeFrame(2_880, 1)));
+    // At 32 kHz the inclusive envelope permits base 1,440 plus padding.
+    const largest = mp3(Array.from({ length: 4 }, () => freeFrame(1_440, 1, 2)));
     await expect(count(largest, 4096)).resolves.toBe(4);
   });
 
   it('rejects spans just outside the supported range despite consecutive headers', async () => {
     const belowMinimum = mp3([freeFrame(19, 1), freeFrame(19), freeFrame(19)]);
     await expect(count(belowMinimum)).rejects.toMatchObject({ kind: 'unsupported-format' });
-    const aboveMaximum = mp3(Array.from({ length: 3 }, () => freeFrame(2_881)));
+    const aboveMaximum = mp3(Array.from({ length: 3 }, () => freeFrame(1_045)));
     await expect(count(aboveMaximum, 4096)).rejects.toMatchObject({ kind: 'unsupported-format' });
   });
 
-  it('sees the fourth maximum-size header at the probe edge over a shorter payload chain', async () => {
-    // The probe holds three maximum frames plus one header. The genuine chain
-    // then has four headers, outweighing a three-header decoy chain in frame 0.
-    const frames = Array.from({ length: 5 }, () => freeFrame(2_880, 1));
-    for (const offset of [1_000, 2_000]) frames[0]!.set([0xff, 0xfb, 0x02, 0xc4], offset);
+  it('prefers a maximum-size frame chain over a shorter ancillary chain', async () => {
+    // The genuine chain has more evidence than the three-header ancillary chain.
+    const frames = Array.from({ length: 5 }, () => freeFrame(1_440, 1, 2));
+    for (const offset of [500, 1_000]) frames[0]!.set([0xff, 0xfb, 0x0a, 0xc4], offset);
     await expect(count(mp3(frames), 4096)).resolves.toBe(5);
   });
 
@@ -159,14 +158,14 @@ describe('free-format MPEG-1 Layer III', () => {
     await expect(count(input)).rejects.toMatchObject({ kind: 'invalid-mp3' });
   });
   it('reports ambiguous one-frame rate changes after successful frame inference', async () => {
-    const blocks = Array.from({ length: 7 }, () => freeFrame(730));
+    const blocks = Array.from({ length: 7 }, () => freeFrame(400));
     // The changed-rate alternative must have possible side information;
     // the generic 0x11 filler transmits a reserved switched block type zero.
     for (const block of blocks) block.fill(0, 4, 21);
     blocks[5]![2] = 4; // Beyond the initial three-header acquisition chain.
     await expect(count(mp3(blocks), 1)).rejects.toMatchObject({
       kind: 'unsupported-format',
-      offset: 5 * 730,
+      offset: 5 * 400,
       message: 'Ambiguous free-format MPEG frame layout',
     });
   });
@@ -205,9 +204,9 @@ describe('free-format MPEG-1 Layer III', () => {
     tooShort.set([0xff, 0xfb, 0, 0xc4], 20);
     await expect(count(tooShort)).rejects.toMatchObject({ kind: 'unsupported-format' });
 
-    const tooLong = Buffer.alloc(2_885, 0x11);
+    const tooLong = Buffer.alloc(1_049, 0x11);
     tooLong.set([0xff, 0xfb, 0, 0xc4], 0);
-    tooLong.set([0xff, 0xfb, 0, 0xc4], 2_881); // Base 2881 exceeds bound.
+    tooLong.set([0xff, 0xfb, 0, 0xc4], 1_045); // Base 1045 exceeds the 44.1 kHz bound.
     await expect(count(tooLong)).rejects.toMatchObject({ kind: 'unsupported-format' });
   });
 

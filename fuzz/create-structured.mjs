@@ -9,7 +9,9 @@
  */
 const BITRATE_KBPS = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0];
 const SAMPLE_RATE_HZ = [44_100, 48_000, 32_000];
-const FREE_BITRATE_KBPS = [8, 32, 128, 137, 256, 320, 384, 400, 500, 640, 7];
+// The positive-count domain stays inside the parser's 320 kb/s envelope.
+// Preserve low, non-table rates: the indexed table does not set a free-format minimum.
+const FREE_BITRATE_KBPS = [8, 32, 128, 137, 256, 320, 288, 300, 319, 72, 7];
 
 function synchsafe(value) {
   return Buffer.from([

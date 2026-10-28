@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "strykerVersion": "10.1.1",
   "target": 100,
-  "contextSha256": "24f2d8f730a26a550a969d5708a8f7488dc6b0aba9660f13244d3931ff1af4ea",
+  "contextSha256": "f9fab284b127f15b65ed77c0fa5878b8ae64c6abc4b9e9f5ef3fcecfe328689f",
   "equivalents": [
     {
       "id": "EQ-COPY-OR",
@@ -587,17 +587,17 @@
     {
       "id": "EQ-FREE-KNOWN-SUFFIX-ACCESS",
       "file": "src/mp3/free-format.ts",
-      "sourceSha256": "a824d37c8c8ffa62f47f963006c32a4d40af59b187e628f5d03304d0ccf6367c",
+      "sourceSha256": "54c31d2783a22c154b91b91883c530c88f32e6417d905c22a24816c755eee3b6",
       "mutatorName": "OptionalChaining",
       "original": "probe.suffixes.get(offset)?.credible",
       "replacement": "probe.suffixes.get(offset).credible",
       "location": {
         "start": {
-          "line": 82,
+          "line": 85,
           "column": 5
         },
         "end": {
-          "line": 82,
+          "line": 85,
           "column": 41
         }
       },
@@ -607,17 +607,17 @@
     {
       "id": "EQ-FREE-UNOBSERVED-SUFFIX-TIE",
       "file": "src/mp3/free-format.ts",
-      "sourceSha256": "a824d37c8c8ffa62f47f963006c32a4d40af59b187e628f5d03304d0ccf6367c",
+      "sourceSha256": "54c31d2783a22c154b91b91883c530c88f32e6417d905c22a24816c755eee3b6",
       "mutatorName": "BooleanLiteral",
       "original": "false",
       "replacement": "true",
       "location": {
         "start": {
-          "line": 127,
+          "line": 131,
           "column": 90
         },
         "end": {
-          "line": 127,
+          "line": 131,
           "column": 95
         }
       },

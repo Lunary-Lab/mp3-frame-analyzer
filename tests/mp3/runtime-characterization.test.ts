@@ -179,11 +179,11 @@ describe('free-format candidate characterization', () => {
   it.each([8648, 9000])(
     'stops discovery after the bounded probe and EOF witness within a %i-byte input chunk',
     async (size) => {
-      const bytes = headerWindow(size, [0, 2881, 5762, 8643]);
-      for (const offset of [0, 2881, 5762, 8643]) bytes[offset + 2] = 2;
+      const bytes = headerWindow(size, [0, 1001, 2002, 3003]);
+      for (const offset of [0, 1001, 2002, 3003]) bytes[offset + 2] = 2;
       const { input, events } = trackedInput([bytes], new Error('must not request another chunk'));
       const reader = new AsyncByteReader(input);
-      await expect(infer(reader)).resolves.toBe(2880);
+      await expect(infer(reader)).resolves.toBe(1000);
       expect(reader.offset).toBe(0);
       expect(reader.bufferedLength).toBe(size);
       expect(reader.peek(size)).toEqual(bytes);
@@ -194,11 +194,11 @@ describe('free-format candidate characterization', () => {
   );
 
   it('requests EOF once when the input exactly fills the searched window', async () => {
-    const bytes = headerWindow(8647, [0, 2881, 5762, 8643]);
-    for (const offset of [0, 2881, 5762, 8643]) bytes[offset + 2] = 2;
+    const bytes = headerWindow(8647, [0, 1001, 2002, 3003]);
+    for (const offset of [0, 1001, 2002, 3003]) bytes[offset + 2] = 2;
     const { input, events } = trackedInput([bytes]);
     const reader = new AsyncByteReader(input);
-    await expect(infer(reader)).resolves.toBe(2880);
+    await expect(infer(reader)).resolves.toBe(1000);
     expect(reader.offset).toBe(0);
     expect(reader.bufferedLength).toBe(8647);
     expect(reader.peek(8647)).toEqual(bytes);

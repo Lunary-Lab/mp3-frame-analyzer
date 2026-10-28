@@ -10,7 +10,9 @@ MPEG parser directly. There are three targets:
 - `structured.fuzz.mjs`: mutation bytes construct independently known frame
   boundaries for indexed and free-format MPEG-1 Layer III streams. Free-format
   uses one fixed bitrate and sample rate per stream, variable per-frame padding,
-  CRC/channel flags, and 7–640 kbps cases at all three MPEG-1 sample rates.
+  CRC/channel flags, and selected 7–320 kbps cases at all three MPEG-1 sample rates.
+  This positive-count domain follows the [documented candidate envelope](../docs/specifications/mpeg-1-layer-iii.md#4-free-format-layer-iii-bitrate-index-zero);
+  it does not impose a 7 kbps format minimum or certify the exact 320 kbps endpoint.
   Optional ID3 and initial Xing/Info/VBRI metadata never supply the expected
   count. The generator records frame offsets and lengths during construction;
   its known physical-frame count makes **incorrect positive counts** detectable. It also
@@ -22,8 +24,9 @@ MPEG parser directly. There are three targets:
 
 - `sequences.fuzz.mjs`: two to four changed-rate configurations with independently
   generated indexed/free modes, CRC/channel/padding variations, boundary metadata
-  and ancillary patterns. The exact-count domain uses short metadata-anchored
-  runs and only provably impossible ancillary continuation headers. Arbitrary
+  and ancillary patterns. The exact-count domain uses free rates within the same
+  320 kbps envelope, short metadata-anchored runs and only provably impossible
+  ancillary continuation headers. Arbitrary
   payload/layout cases assert chunk-invariant success or typed failure without
   assuming a construction count. Separate 864-byte and 3,780-byte seeds require
   explicit ambiguity; a dense 2,700-byte ancillary control must retain count 3.
@@ -42,12 +45,24 @@ rejected successful counts on shorter free-format frames. The fuzzer-found
 `regressions/raw/free-format-three-short-frames.bin` contains three 55-byte frames;
 the independently constructed 72-byte `regressions/raw/free-format-minimum.bin`
 contains three 24-byte frames. Original prefix-only and protected regressions contain three 21-byte and three 23-byte silent frames respectively, including a checked CRC in the protected fixture. All are replayed through that oracle. Structured
-seeds cover 21-byte, 24-byte and 2,880-byte base spans, including padding, and the
+seeds cover 21-byte, 24-byte and 1,440-byte base spans, including padding, and the
 encoder-frame policy: an initial Xing frame, a lone VBRI frame (zero audio
 frames), Info shifted past a CRC, the same shift without a CRC (not metadata)
 and a valid Xing signature in a later frame (still counted).
 `scripts/structured-fuzz.test.mjs` independently checks the generated geometry
 and metadata policy as part of `npm run test:tooling`. The sequence generator has separate geometry/domain tooling tests and a fast-check property suite; known alternative layouts are recorded independently.
+
+Rates formerly included in the positive domain, 384/400/500/640 kbps, now have
+explicit rejection regressions in `tests/mp3/free-format-rate-bound.test.ts`,
+alongside 882/960 kbps cases exposed by the former global byte limit. That suite
+also tests each sample rate's maximum base, its first excluded base, padding,
+channel/CRC combinations, short streams and extension-only ancillary decoys.
+`tests/mp3/free-format-real.test.ts` and `tests/mp3/short-free-format.test.ts`
+retain genuine 400 kbps encoder bytes as rejection fixtures and keep their
+in-scope acceptance controls. `tests/free-format-rate-upload.test.ts` verifies
+the count and typed rejection over raw/multipart uploads and all three count
+option settings. These fixed negative regressions are separate from the
+generators' independent positive-count oracles.
 
 ## Commands
 

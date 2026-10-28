@@ -18,10 +18,10 @@ test('free-format manifests match independently tabulated bitrate/sample-rate sp
     [447, 411, 616],
     [835, 768, 1152],
     [1044, 960, 1440],
-    [1253, 1152, 1728],
-    [1306, 1200, 1800],
-    [1632, 1500, 2250],
-    [2089, 1920, 2880],
+    [940, 864, 1296],
+    [979, 900, 1350],
+    [1041, 957, 1435],
+    [235, 216, 324],
     [22, 21, 31],
   ];
   for (const [bitrate, rates] of spans.entries()) {
@@ -87,7 +87,7 @@ test('curated structured seeds exercise mandatory-prefix and upper free-format b
   for (const [name, count, base] of [
     ['free-format-minimum.bin', 3, 24],
     ['free-format-seven-kbps.bin', 3, 21],
-    ['free-format-maximum.bin', 7, 2880],
+    ['free-format-maximum.bin', 7, 1440],
   ]) {
     const input = await readFile(new URL(`../fuzz/seeds/structured/${name}`, import.meta.url));
     const fixture = createStructuredMp3(input);

@@ -6,6 +6,7 @@ import { chunks } from '../helpers/mp3-fixtures.js';
 
 interface EncoderFixture {
   name: string;
+  bitrate: number;
   base64: string;
   sha256: string;
   bytes: number;
@@ -28,15 +29,39 @@ expect(manifest.records.map((record) => record.name)).toEqual([
   '32000-2-192-false',
 ]);
 
-it.each(manifest.records)('counts fixed genuine LAME free-format $name', async (record) => {
+function verifiedBytes(record: EncoderFixture): Buffer {
   const bytes = Buffer.from(record.base64, 'base64');
   expect(bytes.length).toBe(record.bytes);
   expect(createHash('sha256').update(bytes).digest('hex')).toBe(record.sha256);
   expect(record.physicalFrames).toBe(record.audioFrames + 1);
-  for (const sizes of [[3, 47, 8192], [1]]) {
-    expect(await countMp3Frames(chunks(bytes, sizes))).toBe(record.physicalFrames);
-    expect(await countMp3Frames(chunks(bytes, sizes), { includeVbrHeaderFrame: false })).toBe(
-      record.audioFrames,
-    );
-  }
-});
+  return bytes;
+}
+
+it.each(manifest.records.filter((record) => record.bitrate <= 320))(
+  'counts fixed genuine LAME free-format $name',
+  async (record) => {
+    const bytes = verifiedBytes(record);
+    for (const sizes of [[3, 47, 8192], [1]]) {
+      expect(await countMp3Frames(chunks(bytes, sizes))).toBe(record.physicalFrames);
+      expect(await countMp3Frames(chunks(bytes, sizes), { includeVbrHeaderFrame: false })).toBe(
+        record.audioFrames,
+      );
+    }
+  },
+);
+
+// LAME can encode/decode its extensions; that does not make their rates part
+// of the MPEG-1 Layer III candidate envelope used by this parser.
+it.each(manifest.records.filter((record) => record.bitrate > 320))(
+  'rejects fixed genuine LAME extension $name',
+  async (record) => {
+    const bytes = verifiedBytes(record);
+    for (const sizes of [[3, 47, 8192], [1]]) {
+      for (const includeVbrHeaderFrame of [true, false]) {
+        await expect(
+          countMp3Frames(chunks(bytes, sizes), { includeVbrHeaderFrame }),
+        ).rejects.toMatchObject({ kind: 'unsupported-format' });
+      }
+    }
+  },
+);
