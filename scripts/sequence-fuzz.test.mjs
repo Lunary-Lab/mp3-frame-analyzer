@@ -22,11 +22,54 @@ test('sequence construction varies rates and modes while retaining independent g
       fixture.frameOffsets.forEach((offset, i) => {
         assert.equal(fixture.bytes[offset], 255);
         assert.equal(fixture.bytes[offset + 1] & 254, 250);
-        assert.ok(fixture.frameLengths[i] >= 21 && fixture.frameLengths[i] <= 2881);
+        assert.ok(fixture.frameLengths[i] >= 21 && fixture.frameLengths[i] <= 1440);
         assert.ok(offset + fixture.frameLengths[i] <= fixture.bytes.length);
       });
     }
   assert.equal(covered.size, 12);
+});
+
+test('exact-count sequence rates stay within independently tabulated free-format spans', () => {
+  // Rows are 7, 72, 128, 137, 320 and 300 kb/s; columns are 44.1, 48 and 32 kHz.
+  const spans = [
+    [22, 21, 31],
+    [235, 216, 324],
+    [417, 384, 576],
+    [447, 411, 616],
+    [1044, 960, 1440],
+    [979, 900, 1350],
+  ];
+  for (const [bitrate, rates] of spans.entries()) {
+    for (const [rate, base] of rates.entries()) {
+      for (const padding of [0, 1]) {
+        const input = Buffer.alloc(160);
+        input[3] = rate;
+        input[5] = 1;
+        input[6] = bitrate;
+        input[20] = padding;
+        const fixture = createSequenceMp3(input);
+        assert.equal(fixture.expectation.kind, 'count');
+        const physicalMaximum = [1045, 960, 1440][rate];
+        const expectedLength = Math.min(base + padding, physicalMaximum);
+        assert.equal(fixture.frameLengths[0], expectedLength);
+        assert.equal((fixture.bytes[fixture.frameOffsets[0] + 2] >> 1) & 1, expectedLength - base);
+      }
+    }
+  }
+});
+
+test('indexed sequence frames retain requested padding at every sample rate', () => {
+  for (const [rate, base] of [417, 384, 576].entries()) {
+    for (const padding of [0, 1]) {
+      const input = Buffer.alloc(160);
+      input[3] = rate;
+      input[6] = 4; // Free-rate selection must not affect an indexed configuration.
+      input[20] = padding;
+      const fixture = createSequenceMp3(input);
+      assert.equal(fixture.frameLengths[0], base + padding);
+      assert.equal((fixture.bytes[fixture.frameOffsets[0] + 2] >> 1) & 1, padding);
+    }
+  }
 });
 
 test('ambiguous constructions expose two complete independent boundary layouts', () => {

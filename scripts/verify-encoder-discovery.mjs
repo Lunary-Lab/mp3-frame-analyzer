@@ -2,15 +2,13 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { isMain } from './release-utils.mjs';
 
-export const ENCODER_TEST_NAMES = Object.freeze(
-  [
-    '44100-1-400-false',
-    '48000-2-320-false',
-    '32000-1-400-true',
-    '48000-2-128-false',
-    '32000-2-192-false',
-  ].map((name) => `counts fixed genuine LAME free-format ${name}`),
-);
+export const ENCODER_TEST_NAMES = Object.freeze([
+  'rejects fixed genuine LAME extension 44100-1-400-false',
+  'counts fixed genuine LAME free-format 48000-2-320-false',
+  'rejects fixed genuine LAME extension 32000-1-400-true',
+  'counts fixed genuine LAME free-format 48000-2-128-false',
+  'counts fixed genuine LAME free-format 32000-2-192-false',
+]);
 
 export function assertEncoderDiscovery(report) {
   return assertEncoderShardDiscovery([report]);

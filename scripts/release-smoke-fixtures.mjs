@@ -9,6 +9,10 @@ export function decodeFixtureManifest(manifest) {
   assert.equal(manifest.encoder, 'LAME 3.100');
   assert.ok(Array.isArray(manifest.records) && manifest.records.length > 0);
   return manifest.records.map((record) => {
+    assert.ok(
+      Number.isSafeInteger(record.bitrate) && record.bitrate > 0,
+      'Known fixture bitrate is required',
+    );
     const bytes = Buffer.from(record.base64, 'base64');
     assert.ok(bytes.length > 0 && bytes.length <= 1024 * 1024, 'Fixture size must stay bounded');
     assert.equal(bytes.length, record.bytes, 'Fixture byte length changed');
@@ -30,6 +34,7 @@ export function decodeFixtureManifest(manifest) {
     );
     return {
       name: `free-format-${record.name}`,
+      bitrate: record.bitrate,
       bytes,
       audioFrames: record.audioFrames,
       physicalFrames: record.physicalFrames,

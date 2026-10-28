@@ -79,13 +79,32 @@ requests, pushes to `main`, manual dispatches, and a weekly forced-full run.
 Compatible PRs can reuse native outcomes from an authenticated exact-base or
 verified ancestor main baseline with the same declared inputs. Releases and weekly verification always execute all mutants.
 
+## Short free-format evidence follow-up
+
+The current policy contains **32** exact proofs: all 31 existing identities,
+with reviewed source bindings, plus `EQ-SHORT-PREFIX-INERT-END-INDEX`.
+Changing the short prefix-sum loop from `< length` to `<= length` adds one
+ignored out-of-range typed-array write. Valid cells, allocations, work metrics
+and cooperative checkpoints remain unchanged. Its exact source-bound proof was
+independently reviewed; no neighboring mutation is exempted.
+
+The other observed short-fallback survivors prompted code or test changes.
+Alternative header evidence now uses the same necessary frame-validity check
+as rescued candidates, removing duplicate prefix arithmetic and a redundant
+metadata precheck. Regressions cover impossible alternate side fields, exact
+main-data capacity, the two-frame deferred-candidate bound, and crossing layouts
+whose second headers are five bytes apart. The empty-deferred guard remains:
+removing it allocates extra prefix arrays for failed suffixes, which violates
+the root-only allocation contract and is caught by an instrumented normal probe.
+These focused checks are not a full final-source mutation acceptance run.
+
 ## Cooperative sequence source binding
 
-The current eleven-module parser policy retains the original **24** exact single-mutant
+The eleven-module sequence policy retained the original **24** exact single-mutant
 proofs. Each was independently re-reviewed against the reader scheduler,
 sequence inference, necessary side-information filter and caller/cleanup paths
 before its context binding changed. Existing proof text and assumptions are
-unchanged. Seven additional source-bound proofs bring the current policy to **31**:
+unchanged. Seven additional source-bound proofs brought that policy to **31**:
 an inert leading landmark, one inert final indexing iteration, two redundant
 prefix-range guards, a duplicate sync-byte guard, a known-present suffix access,
 and an unread suffix-only tie flag. Their explicit production-domain assumptions

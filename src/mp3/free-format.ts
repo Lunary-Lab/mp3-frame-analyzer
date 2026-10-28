@@ -4,6 +4,7 @@ import { Mp3ParseError } from './errors.js';
 import type { FreeFormatFrameHeader } from './frame-header.js';
 import {
   Probe,
+  ClosedShortCandidates,
   type Candidate,
   type ProbeWork,
   type SuffixEvidence,
@@ -11,11 +12,17 @@ import {
   type Metadata,
 } from './free-format-probe.js';
 
-/** LAME's interoperability ceiling, not an ISO maximum or a decoded-audio guarantee. */
-export const MAX_FREE_FORMAT_FRAME_BYTES = 2_881;
+// floor(144 * 320000 / sampleRate) for 44.1, 48 and 32 kHz, before padding.
+// The inclusive endpoint interpretation is documented in the MPEG contract;
+// extension-only rates must never contribute root or successor evidence.
+const MAX_FREE_FORMAT_BASE_BYTES = [1_044, 960, 1_440] as const;
+// ceil(144 * 320000 / sampleRate): at the integer 32/48 kHz endpoints
+// another padding byte cannot belong to a fixed rate within the envelope.
+export const MAX_FREE_FORMAT_PHYSICAL_BYTES = [1_045, 960, 1_440] as const;
 // The smallest physical prefix is 21 bytes; one padding byte can make base 20 fit.
 const MIN_FREE_FORMAT_FRAME_BYTES = 20;
-const MAX_PROBE_BYTES = MAX_FREE_FORMAT_FRAME_BYTES * 3 + 4;
+// Preserve the fixed observation budget independently of candidate eligibility.
+const MAX_PROBE_BYTES = 8_647;
 
 interface Selection {
   readonly bestBase: number;
@@ -87,7 +94,17 @@ function candidateIsEligible(
   probe: Probe,
   candidate: Candidate,
   successorEvidenceOnly: boolean,
+  shorts: ClosedShortCandidates,
 ): boolean {
+  if (
+    candidate.frames.some(
+      (frame) =>
+        frame.end - frame.start > MAX_FREE_FORMAT_PHYSICAL_BYTES[frame.header.sampleRateIndex]!,
+    )
+  )
+    return false;
+  // Physical eligibility precedes all evidence collection, including fallback.
+  shorts.observe(candidate);
   if (candidate.matches < 3 && (!candidate.anchored || !probe.shortIsUnambiguous(candidate)))
     return false;
   if (
@@ -110,11 +127,13 @@ function* selectCandidate(
   successorEvidenceOnly = false,
 ): Generator<ProbeWork, Selection> {
   const selected = new RankedCandidates();
-  // A suffix whose prefix cannot fit even the largest admitted span cannot
+  const shorts = new ClosedShortCandidates(probe, first, !successorEvidenceOnly);
+  const maximumBase = MAX_FREE_FORMAT_BASE_BYTES[first.sampleRateIndex]!;
+  // A suffix whose prefix cannot fit even the largest candidate span cannot
   // contribute evidence. This also rejects impossible side fields once.
   if (
     successorEvidenceOnly &&
-    !probe.frameMayFit(start, start + MAX_FREE_FORMAT_FRAME_BYTES, first)
+    !probe.frameMayFit(start, start + maximumBase + first.padding, first)
   ) {
     return selected.result();
   }
@@ -122,16 +141,16 @@ function* selectCandidate(
   for (let index = begin; index < probe.landmarks.length; index++) {
     if (probe.shouldYield()) yield { ...probe.work };
     const base = probe.landmarks[index]! - start - first.padding;
-    if (base >= MAX_FREE_FORMAT_FRAME_BYTES) break;
+    if (base > maximumBase) break;
     probe.visitCandidate();
     const candidate = followCandidate(probe, start, first, base);
-    if (!candidateIsEligible(probe, candidate, successorEvidenceOnly)) continue;
+    if (!candidateIsEligible(probe, candidate, successorEvidenceOnly, shorts)) continue;
     // Suffix consumers need existence, not ranking or path enumeration.
     if (successorEvidenceOnly)
       return { bestBase: base, bestMatches: candidate.matches, tied: false };
     selected.consider(candidate);
   }
-  return selected.result();
+  return selected.withShortFallback(shorts);
 }
 
 class RankedCandidates {
@@ -140,6 +159,15 @@ class RankedCandidates {
   private bestMetadata = 0;
   private tied = false;
   private readonly transitions: number[] = [];
+
+  withShortFallback(shorts: ClosedShortCandidates): Selection {
+    // Preserve every existing successful selection, tie and >=3-header policy.
+    // Only proved EOF closure can replace raw sync sightings with complete walks.
+    // New suffix/changed-rate evidence retains its existing conservative policy.
+    if (this.bestMatches === 0)
+      for (const candidate of shorts.candidates()) this.consider(candidate);
+    return this.result();
+  }
 
   consider(candidate: Candidate): void {
     if (candidate.transition) this.transitions.push(candidate.base);
@@ -305,7 +333,7 @@ export async function inferFreeFormatBaseLength(
       start,
       evidence.tied
         ? 'Ambiguous free-format MPEG frame layout'
-        : 'Cannot infer a unique free-format MPEG frame size from consecutive headers',
+        : 'Cannot infer a unique free-format MPEG frame size within the supported 320 kb/s bitrate envelope',
     );
   }
   return evidence.bestBase;

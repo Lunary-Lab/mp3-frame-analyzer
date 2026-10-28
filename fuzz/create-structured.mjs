@@ -9,7 +9,9 @@
  */
 const BITRATE_KBPS = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0];
 const SAMPLE_RATE_HZ = [44_100, 48_000, 32_000];
-const FREE_BITRATE_KBPS = [8, 32, 128, 137, 256, 320, 384, 400, 500, 640, 7];
+// The positive-count domain stays inside the parser's 320 kb/s envelope.
+// Preserve low, non-table rates: the indexed table does not set a free-format minimum.
+const FREE_BITRATE_KBPS = [8, 32, 128, 137, 256, 320, 288, 300, 319, 72, 7];
 
 function synchsafe(value) {
   return Buffer.from([
@@ -75,9 +77,9 @@ function constructionParameters(at, flags) {
   const minimumFrames = freeFormat && (at(2) & 64) === 0 ? 3 : 1;
   const frameCount = minimumFrames + (at(0) % 24);
   const freeSampleRateIndex = at(5) % 3;
+  const freeBitrateKbps = FREE_BITRATE_KBPS[at(4) % FREE_BITRATE_KBPS.length];
   const freeBaseLength = Math.floor(
-    (144000 * FREE_BITRATE_KBPS[at(4) % FREE_BITRATE_KBPS.length]) /
-      SAMPLE_RATE_HZ[freeSampleRateIndex],
+    (144000 * freeBitrateKbps) / SAMPLE_RATE_HZ[freeSampleRateIndex],
   );
   const metadataKind = flags & 16 ? at(6) % 3 : undefined;
   const metadataShifted = Boolean(at(6) & 4);
@@ -87,6 +89,7 @@ function constructionParameters(at, flags) {
     freeFormat,
     frameCount,
     freeSampleRateIndex,
+    freeBitrateKbps,
     freeBaseLength,
     metadataKind,
     metadataShifted,
@@ -109,13 +112,18 @@ function leadingTags(at, flags) {
   return intro;
 }
 
-function createFrame(at, i, { freeFormat, freeSampleRateIndex, freeBaseLength }) {
+function framePadding(requested, freeFormat, freeBitrateKbps, sampleRate) {
+  // At the maximum fixed rate, integral 32/48 kHz spans have no padding room.
+  return freeFormat && freeBitrateKbps === 320 && sampleRate !== 44100 ? 0 : requested;
+}
+
+function createFrame(at, i, { freeFormat, freeSampleRateIndex, freeBitrateKbps, freeBaseLength }) {
   const bits = at(9 + 5 * i);
   const bitrateIndex = freeFormat ? 0 : 1 + (bits % 14);
   const sampleRateIndex = freeFormat ? freeSampleRateIndex : at(10 + 5 * i) % 3;
-  const padding = at(11 + 5 * i) & 1;
   const bitrate = BITRATE_KBPS[bitrateIndex];
   const sampleRate = SAMPLE_RATE_HZ[sampleRateIndex];
+  const padding = framePadding(at(11 + 5 * i) & 1, freeFormat, freeBitrateKbps, sampleRate);
   const length =
     (freeFormat ? freeBaseLength : Math.floor((144000 * bitrate) / sampleRate)) + padding;
   const hasCrc = length >= 23 && Boolean(at(12 + 5 * i) & 1);

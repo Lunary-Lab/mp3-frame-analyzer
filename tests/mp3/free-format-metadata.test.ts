@@ -301,16 +301,20 @@ describe('bounded free-format metadata acquisition', () => {
   });
 
   it('rejects equally supported candidates that imply different physical counts', async () => {
-    // Two complete structural partitions share EOF: 36×2800 and 35×2880.
-    // The bounded probe contains four headers from each, with equal evidence.
+    // Two complete structural partitions share EOF: 36×700 and 35×720.
+    // The bounded probe contains thirteen headers from each, with equal evidence.
     // These are alternative header partitions, not asserted decodable audio.
-    const bytes = Buffer.alloc(100800, 0x11);
-    for (const span of [2800, 2880]) {
+    const bytes = Buffer.alloc(25200, 0x11);
+    for (const span of [700, 720]) {
       for (let offset = 0; offset < bytes.length; offset += span) {
         bytes.set([255, 251, 0, 192], offset);
       }
     }
-    await expect(count([bytes])).rejects.toMatchObject({ kind: 'unsupported-format', offset: 0 });
+    await expect(count([bytes])).rejects.toMatchObject({
+      kind: 'unsupported-format',
+      offset: 0,
+      message: 'Ambiguous free-format MPEG frame layout',
+    });
   });
 
   it('preserves known final-frame truncation once at least three headers establish a span', async () => {

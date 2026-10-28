@@ -78,7 +78,8 @@ it('distinguishes absence of any candidate from an actual ambiguous candidate se
   await expect(countMp3Frames(chunks(headerOnly, [1]))).rejects.toMatchObject({
     kind: 'unsupported-format',
     offset: 0,
-    message: 'Cannot infer a unique free-format MPEG frame size from consecutive headers',
+    message:
+      'Cannot infer a unique free-format MPEG frame size within the supported 320 kb/s bitrate envelope',
   });
 });
 

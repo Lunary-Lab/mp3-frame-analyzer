@@ -207,8 +207,12 @@ the policy, its change from the earlier HTTP default and verification evidence.
 
 The brief does not prescribe a multipart field name, raw uploads, MIME aliases,
 query options, exact error statuses/schema, upload caps, libraries or deployment
-infrastructure. LAME free-format 321-640 kbps interoperability, arbitrary embedded
-ID3, APEv2/Lyrics3 and decoder-style recovery are optional compatibility choices.
+infrastructure. LAME extensions beyond the [documented 320 kbps candidate envelope](specifications/mpeg-1-layer-iii.md#4-free-format-layer-iii-bitrate-index-zero)
+are outside the supported scope and must not compete with supported layouts.
+The inclusive endpoint follows the detailed maximum-rate rule and fixed-rate
+arithmetic; the definition's wording distinction remains documented.
+Arbitrary embedded ID3, APEv2/Lyrics3 and decoder-style recovery
+are optional compatibility choices.
 Fuzzing, mutation testing, 100% coverage, SBOMs, release automation, formal security
 audits and production auth/rate limiting are likewise not evaluator mandates.
 

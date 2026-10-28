@@ -141,13 +141,17 @@ export class Probe {
     return required === undefined ? !this.ended : end - start >= required;
   }
 
-  /** Match the established short-candidate policy without scanning each payload again. */
-  shortIsUnambiguous(candidate: Candidate): boolean {
+  /** Use complete-walk header evidence when supplied; metadata checks remain unchanged. */
+  shortIsUnambiguous(candidate: Candidate, freeHeaderEvidence?: Uint16Array): boolean {
     for (const { start, end, header } of candidate.frames) {
       const minimum = 4 + (header.hasCrc ? 2 : 0) + (header.mono ? 17 : 32);
       if (end - start < minimum) return false;
       if (
-        this.any(this.freePrefixes[header.sampleRateIndex]!, start + 4, end - 4) ||
+        this.any(
+          freeHeaderEvidence ?? this.freePrefixes[header.sampleRateIndex]!,
+          start + 4,
+          end - 4,
+        ) ||
         this.any(this.id3Prefixes, start + 4, end - 3) ||
         this.any(
           this.tailPrefixes,
@@ -163,6 +167,49 @@ export class Probe {
   private any(prefix: Uint16Array, from: number, through: number): boolean {
     const stop = Math.min(through + 1, this.window.length);
     return from < stop && prefix[stop]! > prefix[from]!;
+  }
+}
+
+/** One root's EOF-only fallback; retains at most two frames per deferred candidate. */
+export class ClosedShortCandidates {
+  private readonly headers = new Set<number>();
+  private readonly deferred: Candidate[] = [];
+  private readonly probe: Probe;
+  private readonly enabled: boolean;
+
+  constructor(probe: Probe, first: FreeFormatFrameHeader, root: boolean) {
+    this.probe = probe;
+    this.enabled =
+      root &&
+      ![...probe.headers.values()].some(
+        (header) =>
+          header.kind !== 'free-format' || header.sampleRateIndex !== first.sampleRateIndex,
+      );
+  }
+
+  observe(candidate: Candidate): void {
+    if (
+      !this.enabled ||
+      !candidate.closed ||
+      !candidate.frames.every(({ start, end, header }) =>
+        this.probe.frameMayFit(start, end, header),
+      )
+    )
+      return;
+    // A plausible metadata marker is uncertainty, not proof a complete walk
+    // is impossible. Preserve its header evidence even when it cannot win.
+    for (const frame of candidate.frames) this.headers.add(frame.start);
+    if (candidate.matches < 3) this.deferred.push(candidate);
+  }
+
+  *candidates(): Generator<Candidate> {
+    if (this.deferred.length === 0) return;
+    // Construct once at the root, never for each suffix or each candidate.
+    const prefix = new Uint16Array(this.probe.window.length);
+    for (const offset of this.headers) prefix[offset + 1] = 1;
+    for (let index = 1; index < prefix.length; index++) prefix[index]! += prefix[index - 1]!;
+    for (const candidate of this.deferred)
+      if (this.probe.shortIsUnambiguous(candidate, prefix)) yield candidate;
   }
 }
 

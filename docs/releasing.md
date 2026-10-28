@@ -165,15 +165,55 @@ rechecking boundary and composition behavior, not assuming it is unchanged.
 
 ## Automated path
 
-1. A merge to `main` runs `release-please.yml`. Its metadata-only job creates or updates the release PR; it does not check out project code.
-2. The workflow reports the generated **release PR and current head** in its job summary without launching duplicate checks. GitHub queues `GITHUB_TOKEN`-generated `pull_request` CI for workflow-execution approval, but does not trigger the metadata-only `pull_request_target` title workflow. Moreover, dispatched workflow checks [do not satisfy PR rulesets](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks#checks-from-some-workflow-jobs-are-not-evaluated), even when green on that head. After the intended main-branch changes are complete, review the finalized release PR; a maintainer can **close and reopen** it to trigger native CI and title validation, or **Update branch** if it is behind `main`. Review any **Approve workflows to run** prompt and confirm **All checks** and **Conventional Commit PR title** pass in the PR checks. Recheck the head after any update; earlier-head or manual-dispatch success is not admission evidence. Workflow execution approval neither merges the PR nor publishes a release.
-3. Review and squash merge the release PR. Release Please creates a **draft release** and, with `force-tag-creation`, creates its `vX.Y.Z` tag while it is still a draft.
+1. Explicitly run **Release Please** on `main` (`gh workflow run release-please.yml --repo Lunary-Lab/mp3-frame-analyzer --ref main`) to prepare or refresh a release PR. This metadata-only job does not check out project code. Ordinary `main` pushes set `skip-github-pull-request: true`: they process merged release PRs but cannot create or rewrite an open candidate. Dispatch is an intentional refresh, not a read-only preview; it can also recover tags/drafts for already merged release PRs.
+2. The workflow reports the generated **release PR and current head** in its job summary. After preparation, a maintainer must **close and reopen** the PR to trigger native CI and metadata-only title validation. GitHub queues `GITHUB_TOKEN`-generated `pull_request` CI for workflow-execution approval, but still suppresses `pull_request_target`; approving that CI alone does not start the title workflow. Review any **Approve workflows to run** prompt and confirm **All checks** and **Conventional Commit PR title** pass on the current head. Earlier-head success and dispatched checks [do not satisfy PR rulesets](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks#checks-from-some-workflow-jobs-are-not-evaluated). Workflow execution approval neither merges the PR nor publishes a release.
+3. Review and squash merge the release PR during the merge window below. The resulting `main` push creates a **draft release** and, with `force-tag-creation`, its `vX.Y.Z` tag at the release PR's merge commit. A later `main` commit does not move this release source.
 4. The workflow dispatches `publish-release.yml` **at that exact tag**, passing its full commit SHA. Preflight requires a matching draft, a matching tag commit already reachable from `main`, and `GITHUB_SHA` equal to the declared source commit. Dispatching from `main` is rejected.
 5. The reusable, read-only CI validates that commit. It checks Node 24 and 26, npm compatibility, formatting, lint, both TypeScript compilers, coverage, tooling, mutation testing, fuzzing, dependency audits, static analysis, secrets, and measured memory/HTTP behavior. The Node 24 release lane packages the existing compiled output and tests the unpacked artifact; the publisher never rebuilds it.
 6. Native notes preparation independently verifies the same release range. The candidate job seals the tested runtime and both notes views, with immutable input identities and checksums, into one artifact. Build provenance attests every sealed file.
 7. The `publish` job waits in the `release` environment for one approval from the release approver ([Release approval](governance.md#release-approval)). After approval it authenticates and downloads the same sealed artifact, verifies its complete checksum/identity ledger, rechecks the owner decision, draft and tag, attaches the files and combined notes, and only then publishes the draft. A validation, attestation or approval that does not succeed leaves it unpublished.
 
 The version verifier requires agreement between `package.json`, both lockfile root versions, the release manifest, and the supplied release tag. In CI, the recorded source commit must equal the checked-out Git HEAD. Tag-based invocation also keeps the standard attestation's workflow commit aligned with the actual build source.
+
+### Finishing a candidate while development continues
+
+Freezing automatic proposal updates stops Release Please from invalidating a
+reviewed head after every merge. It does **not** freeze a historical source tree
+or remove strict up-to-date checks. With the merge queue disabled, another merge
+to `main` can still require bringing the candidate current and validating it again.
+No workflow-only change can guarantee admission while `main` changes continuously
+under that rule.
+
+Give the release PR a short merge window: pause other merges into `main`, run the
+explicit preparation once, trigger native checks as above, then squash merge it
+when both required checks pass. Work on development branches can continue during
+this window. Resume ordinary merges immediately after the release PR merges;
+the exact-tag publication checks and owner approval can finish independently.
+If `main` advances before the release PR merges, prepare again and review the
+new version, changelog and head. Bringing a candidate current includes newer
+code; merely updating its branch can leave the prepared notes or version stale,
+especially after a breaking change. Every intentional refresh needs fresh
+current-head checks.
+
+The pinned action independently calls release creation and PR preparation
+([action source](https://github.com/googleapis/release-please-action/blob/45996ed1f6d02564a971a2fa1b5860e934307cf7/src/index.ts#L136-L152)).
+Release Please 17.6.0 derives the release SHA from the merged PR
+([release construction](https://github.com/googleapis/release-please/blob/712fcf01effd08d7b0e7b1fd3861f2cb388bc8d1/src/strategies/base.ts#L713-L718))
+and uses it for the tag and draft
+([GitHub adapter](https://github.com/googleapis/release-please/blob/712fcf01effd08d7b0e7b1fd3861f2cb388bc8d1/src/github-api.ts#L667-L695)).
+GitHub documents the remaining
+[strict-check requirement](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets#require-status-checks-to-pass-before-merging)
+and [bot-event behavior](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request).
+
+For comparison, the action's own
+[release workflow](https://github.com/googleapis/release-please-action/blob/45996ed1f6d02564a971a2fa1b5860e934307cf7/.github/workflows/release-please.yaml)
+separates release creation from proposal updates but runs both on every main
+push; separation alone does not freeze a candidate. Node.js instead explicitly
+[prepares from a release staging branch](https://github.com/nodejs/node/blob/ec7a28f2e074f0ea16ecd4d2a3511b334fa4b0de/.github/workflows/create-release-proposal.yml)
+and [targets its release line](https://github.com/nodejs/node/blob/ec7a28f2e074f0ea16ecd4d2a3511b334fa4b0de/doc/contributing/releases.md#L585-L613),
+isolating release integration from `main` with a separate branch/backport process.
+This repository keeps its existing main-branch release path and uses the bounded
+merge window instead.
 
 ## Published files
 
@@ -273,8 +313,8 @@ dependencies, upload an MP3, and stop the server with `SIGTERM`.
 
 ## Recover from a failed release
 
-- **Release PR validation failed or required checks are absent:** fix any source defect in an ordinary PR and finish the intended main-branch batch before validating the release PR again. Review its current head, then close and reopen it as a maintainer to trigger both native CI and metadata-only title validation; **Update branch** is another option when it is behind `main`. Review any workflow-execution approval prompt and verify both required checks in the PR, not a separate manual dispatch. A GitHub App installation token can automate eligible events without recurring prompts, but configuring one is optional and requires separate credential/permission approval; it is not required for this maintainer path. Publication still revalidates the exact tag and waits for separate final owner approval.
-- **Publication failed after the draft and tag were created:** a retry runs the workflows and source from the tag, so changes merged to `main` cannot repair it. Retry the draft as shown below for transient failures, such as a runner or network error. If the tagged source or its workflows are defective, leave the draft unpublished, merge the fix, and let Release Please propose the next version. Never move or recreate a release tag.
+- **Release PR validation failed or required checks are absent:** fix any source defect in an ordinary PR, then use the [merge window](#finishing-a-candidate-while-development-continues) to explicitly prepare the candidate again. Review its current version, notes and head, then close and reopen it as a maintainer to trigger both native CI and metadata-only title validation. Review any workflow-execution approval prompt and verify both required checks in the PR, not a separate manual dispatch. CI approval alone does not start the title workflow. A GitHub App installation token can automate eligible events without recurring prompts, but configuring one is optional and requires separate credential/permission approval; it is not required for this maintainer path. Publication still revalidates the exact tag and waits for separate final owner approval.
+- **Publication failed after the draft and tag were created:** a retry runs the workflows and source from the tag, so changes merged to `main` cannot repair it. Retry the draft as shown below for transient failures, such as a runner or network error. If the tagged source or its workflows are defective, leave the draft unpublished, merge the fix, and explicitly run Release Please on `main` to prepare the next version. Never move or recreate a release tag.
 - **A published release is defective:** published releases are immutable. Merge a correction and release a new version.
 
 ## Retry an unpublished draft

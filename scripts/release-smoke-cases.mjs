@@ -49,7 +49,7 @@ function multipart(id, bytes, expected, path = '/file-upload', options = {}) {
   };
 }
 
-function successfulUploads(fixtures) {
+function fixtureUploads(fixtures) {
   const cases = [];
   for (const fixture of fixtures) {
     for (const [form, create] of [
@@ -58,7 +58,11 @@ function successfulUploads(fixtures) {
     ]) {
       for (const policy of ['default', 'false', 'true']) {
         const query = policy === 'default' ? '' : `?includeVbrHeaderFrame=${policy}`;
-        const expected = success(policy === 'true' ? fixture.physicalFrames : fixture.audioFrames);
+        // Preserve the genuine higher-rate LAME bytes as explicit rejection controls.
+        const expected =
+          fixture.bitrate > 320
+            ? failure(415, 'unsupported-format')
+            : success(policy === 'true' ? fixture.physicalFrames : fixture.audioFrames);
         cases.push(
           create(
             `${fixture.name}/${form}/${policy}`,
@@ -232,7 +236,7 @@ function limitUploads() {
 export function buildScenarios(fixtures) {
   assert.ok(fixtures.length > 0, 'Known fixtures are required');
   return [
-    ...successfulUploads(fixtures),
+    ...fixtureUploads(fixtures),
     ...malformedUploads(fixtures[0]),
     ...mimeUploads(fixtures[0]),
     ...multipartFaults(fixtures[0]),

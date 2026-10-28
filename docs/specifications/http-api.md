@@ -84,6 +84,16 @@ fields and the implementation's eleven-bit sync/two-bit version view. The
 forbid `0xff` in either version byte; that rule is distinct from an unknown major
 version. Accepted MIME, filename or sync alone never establishes supported audio.
 
+With no eligible free-format candidate within the per-sample-rate envelope,
+the parser reports `unsupported-format` / HTTP 415 with "Cannot infer a unique
+free-format MPEG frame size within the supported 320 kb/s bitrate envelope".
+This reports failed inference within scope, not a diagnosed exact bitrate.
+Competing eligible layouts retain "Ambiguous free-format MPEG frame layout"
+with the same classification.
+After a free-format span has been acquired, a later physical frame exceeding
+its sample rate's upper envelope raises `invalid-mp3` / HTTP 422 with
+"Free-format frame exceeds the supported 320 kb/s bitrate envelope".
+
 ### First-observable-failure precedence and chunk invariance
 
 Classification follows validated boundaries and the failure observable at that
