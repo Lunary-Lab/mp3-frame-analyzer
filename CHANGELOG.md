@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.2.1](https://github.com/Lunary-Lab/mp3-frame-analyzer/compare/v2.2.0...v2.2.1) (2026-10-28)
+
+
+### Fixes
+
+* **ci:** retain mutation cache across editorial review edits ([#59](https://github.com/Lunary-Lab/mp3-frame-analyzer/issues/59)) ([a7dbf07](https://github.com/Lunary-Lab/mp3-frame-analyzer/commit/a7dbf07c807cf46c6427b39d3bee827921d3d837))
+* exclude out-of-range free-format candidates ([#57](https://github.com/Lunary-Lab/mp3-frame-analyzer/issues/57)) ([2e4b81c](https://github.com/Lunary-Lab/mp3-frame-analyzer/commit/2e4b81cdea219a32e2cc966897f2c7fddc694a15))
+* ignore dead-end ancillary headers in short free-format streams ([#58](https://github.com/Lunary-Lab/mp3-frame-analyzer/issues/58)) ([e8b2dd3](https://github.com/Lunary-Lab/mp3-frame-analyzer/commit/e8b2dd30eb1197fa6f9ad49019a69f9a549938bc))
+* **parser:** distinguish malformed identifiers from unsupported formats ([#46](https://github.com/Lunary-Lab/mp3-frame-analyzer/issues/46)) ([a3ce8c4](https://github.com/Lunary-Lab/mp3-frame-analyzer/commit/a3ce8c42007464b2869a7a6faa91524966ea5da7))
+* **release:** accept exact native draft representations ([#48](https://github.com/Lunary-Lab/mp3-frame-analyzer/issues/48)) ([49eadb7](https://github.com/Lunary-Lab/mp3-frame-analyzer/commit/49eadb78f792300d4babd04166eb092e9f6158ea))
+* **release:** validate stable integration through native merge queue ([846146a](https://github.com/Lunary-Lab/mp3-frame-analyzer/commit/846146a3d2dff77e6f4c51e03f81546523398a74))
+
+
+### Reverts
+
+* remove native merge queue integration ([68cb260](https://github.com/Lunary-Lab/mp3-frame-analyzer/commit/68cb2607613b9498150db4380cafa4f31d57a227))
+
 ## [2.2.0](https://github.com/Lunary-Lab/mp3-frame-analyzer/compare/v2.1.1...v2.2.0) (2026-10-27)
 
 
